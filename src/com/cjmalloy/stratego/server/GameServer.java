@@ -21,7 +21,6 @@ import java.util.ArrayList;
 
 import com.cjmalloy.stratego.server.shared.Message;
 
-
 public class GameServer extends Server
 {
 	private ArrayList<Game> games = new ArrayList<Game>();

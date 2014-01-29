@@ -17,7 +17,6 @@
 
 package com.cjmalloy.stratego;
 
-
 public abstract class Engine
 {
 	protected Board board = null;
@@ -26,7 +25,7 @@ public abstract class Engine
 
 	public Piece getBoardPiece(int x, int y)
 	{
-		return board.getPiece(new Spot(x, y));
+		return board.getPiece(x, y);
 	}
 	
 	public Piece getTrayPiece(int i)
@@ -48,11 +47,26 @@ public abstract class Engine
 	{
 		if (status == Status.PLAYING)
 		{
-			if (m.getFrom().equals(Board.IN_TRAY))
+			if (m.getFrom() == 0)	// Board.IN_TRAY
 				return false;
-			if (m.getTo().equals(Board.IN_TRAY))
+			if (m.getTo() == 0) 	// Board.IN_TRAY
 				return false;
-			
+
+			Piece fp = m.getPiece();
+			Piece tp = board.getPiece(m.getTo());
+			if (tp != null && fp.getColor() == Settings.topColor && !fp.isShown()) {
+				fp.setShown(true);
+				update();
+				try {
+					Thread.sleep(1000);
+				}
+				catch (InterruptedException e)
+				{
+					e.printStackTrace();
+				}
+			}
+
+
 			if (board.attack(m))
 				return true;
 	
@@ -86,6 +100,8 @@ public abstract class Engine
 
 	protected boolean requestMove(Move m)
 	{
+		int t = turn;
+
 		if (m == null || !move(m))
 			return false;
 		

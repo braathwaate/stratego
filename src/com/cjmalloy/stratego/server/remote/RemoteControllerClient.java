@@ -27,7 +27,6 @@ import com.cjmalloy.stratego.server.shared.Message;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
 
-
 public class RemoteControllerClient implements MessageHandler
 {
 	ClientConnection conn = ClientConnection.getInstance();

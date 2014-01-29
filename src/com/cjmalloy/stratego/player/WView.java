@@ -47,7 +47,6 @@ import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
 
 
-
 public class WView implements MoveListener
 {
 	private JFrame jFrame = null;  //  @jve:decl-index=0:visual-constraint="10,10"
@@ -198,10 +197,10 @@ public class WView implements MoveListener
 		{
 			if (m.getPiece().getColor() == Settings.bottomColor)
 			{
-				if (m.getFrom() == Board.IN_TRAY)
-					engine.setupPlacePiece(m.getPiece(), m.getTo());
-				else if (m.getTo() == Board.IN_TRAY)
-					engine.setupRemovePiece(m.getFrom());
+				if (m.getFrom() == 0) // Board.IN_TRAY
+					engine.setupPlacePiece(m.getPiece(), new Spot(m.getToX(), m.getToY()));
+				else if (m.getTo() ==  0) // Board.IN_TRAY
+					engine.setupRemovePiece(new Spot(m.getFromX(), m.getFromY()));
 				else
 					engine.requestUserMove(m);
 			}		

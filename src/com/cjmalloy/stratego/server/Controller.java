@@ -32,7 +32,6 @@ import com.cjmalloy.stratego.server.shared.Message;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
 
-
 public class Controller implements MessageHandler
 {
 	private static ReentrantLock serverLock = new ReentrantLock();

@@ -31,7 +31,6 @@ import com.cjmalloy.stratego.server.shared.Message;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
 
-
 public class Client implements MessageHandler
 {
 	private WView view = null;
@@ -113,10 +112,10 @@ public class Client implements MessageHandler
 		try
 		{
 			conn.writeInt(Message.MOVE.ordinal());
-			conn.writeInt(m.getFrom().getX());
-			conn.writeInt(m.getFrom().getY());
-			conn.writeInt(m.getTo().getX());
-			conn.writeInt(m.getTo().getY());
+			conn.writeInt(m.getFromX());
+			conn.writeInt(m.getFromY());
+			conn.writeInt(m.getToX());
+			conn.writeInt(m.getToY());
 			conn.writeInt(m.getPiece().getRank().ordinal());
 		}
 		finally

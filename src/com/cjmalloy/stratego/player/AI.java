@@ -17,6 +17,8 @@
 
 package com.cjmalloy.stratego.player;
 
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -29,6 +31,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import javax.swing.JOptionPane;
 
 import com.cjmalloy.stratego.Board;
+import com.cjmalloy.stratego.BMove;
 import com.cjmalloy.stratego.Move;
 import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Rank;
@@ -37,11 +40,8 @@ import com.cjmalloy.stratego.Spot;
 
 
 
-
 public class AI implements Runnable
 {
-	private static final double ALPHA = 1;
-	private static final int MAX_GUESSES = 3;
 	public static ReentrantLock aiLock = new ReentrantLock();
 	
 	private Board board = null;
@@ -50,11 +50,13 @@ public class AI implements Runnable
 	private ReentrantLock tLock = new ReentrantLock();
 	private Semaphore bLock = new Semaphore(1);
 	private static int value = -1;
-	private static Move move = null;
 	private static TestingBoard tmpB = null;
-	private static Move tmpM = null;
 	private int turnF = 0;
-	
+	private static int[] dir = { -12, -1,  1, 12 };
+
+	private Thread threads[] = new Thread[160];
+	private int threadc = 0;
+		
 
 	public AI(Board b, CompControls u) 
 	{
@@ -70,8 +72,14 @@ public class AI implements Runnable
 	public void getBoardSetup() throws IOException
 	{
 		File f = new File("ai.cfg");
-	    if(!f.exists()) f.createNewFile();
-		BufferedReader cfg = new BufferedReader(new FileReader(f));
+		BufferedReader cfg;
+		if(!f.exists()) {
+			// f.createNewFile();
+			InputStream is = Class.class.getResourceAsStream("/com/cjmalloy/stratego/resource/ai.cfg");
+			InputStreamReader isr = new InputStreamReader(is);
+			cfg = new BufferedReader(isr);
+		} else
+			cfg = new BufferedReader(new FileReader(f));
 		ArrayList<String> setup = new ArrayList<String>();
 
 		String fn;
@@ -87,7 +95,12 @@ public class AI implements Runnable
 			BufferedReader in;
 			try
 			{
-				in = new BufferedReader(new FileReader(fn));
+				if(!f.exists()) {
+					InputStream is = Class.class.getResourceAsStream(fn);
+					InputStreamReader isr = new InputStreamReader(is);
+					in = new BufferedReader(isr);
+				} else
+					in = new BufferedReader(new FileReader(fn));
 			}
 			catch (Exception e)
 			{
@@ -156,16 +169,12 @@ public class AI implements Runnable
 		for (int i=0;i<10;i++)
 		for (int j=6;j<10;j++)
 		{
-			Piece p = null;
-			for (int k=0;k<board.getTraySize();k++)
-				if (board.getTrayPiece(k).getColor() != Settings.topColor)
-				{
-					p = board.getTrayPiece(k);
-					break;
-				}
-
-			if (p==null)
+			Random rnd = new Random();
+			int s = board.getTraySize();
+			if (s == 0)
 				break;
+			Piece p = board.getTrayPiece(rnd.nextInt(s));
+			assert p != null : "getBoardSetup";
 				
 			engine.aiReturnPlace(p, new Spot(i, j));
 		}
@@ -180,26 +189,54 @@ public class AI implements Runnable
 		aiLock.lock();
 		try
 		{
-			TestingBoard c = new TestingBoard(board);
-			bestMove = getBestMove(c, Settings.aiLevel);
+			bestMove = getBestMove(board, Settings.aiLevel);
 		}
 		finally
 		{
 			aiLock.unlock();
 		}
 		
-		move = null;
 		tmpB = null;
-		tmpM = null;
 		System.runFinalization();
 		System.gc(); 
 		
 		engine.aiReturnMove(bestMove);
 	}
-	
-	private Move getBestMove(TestingBoard b, int n)
+
+/*	
+	The AI algorithm is the usual minimax with alpha-beta pruning.
+	The search depth is adjustable with the Settings menu.
+
+	At the default depth (5 ticks = 6 plys = 3 ai + 3 opponent moves),
+	it completes within a second on a modern desktop.  It completes within
+	a couple of seconds at 7 ticks.
+
+	Evaluation heuristic is based on material gained versus lost.
+	Collisions between unknown pieces usually result in both pieces removed
+	from the move tree, unless it sure that one or the other will win because
+	of invincible rank.  Unknown unmoved pieces that are removed have a specified
+	value, which is about equal to a Six.  This results in an eagerness
+	to use pieces of ranks Seven through Nine to discover opponent's pieces.
+
+	This simple algorithm results in a basic level of play.  
+
+	Areas for improvements are:
+	1. Regression testing.  Design an automatic way to allow further
+		improvements to be tested, such as allowing ai v. ai
+		play.
+	2. Improving the search tree.  Extreme pruning will be required to
+		get to deeper levels.
+	3. Adding probability to collisions with unknown pieces.  This would
+		lead to the computer choosing which pieces to target,
+		and ultimately the flag and its defences.
+*/
+
+	private Move getBestMove(Board b, int n)
 	{
-		final int n1 = n-1;
+		BMove move = null;
+		BMove tmpM = null;
+		ArrayList<BMove> moveList = new ArrayList<BMove>();
+		ArrayList<TestingBoard> boardList = new ArrayList<TestingBoard>();
 		
 		if (n%2==0)
 			turnF = 0;
@@ -207,80 +244,70 @@ public class AI implements Runnable
 			turnF = 1;
 
 		value = Rank.aiTotalValue() * -3;
-		
-		Thread threads[] = new Thread[160];
-		int threadc = 0;
-		
-		for (int i=0;i<10;i++)
-		for (int j=0;j<10;j++)
+		int alpha = -9999;
+		int beta = 9999;
+
+		for (int j=13;j<=131;j++)
 		{
-			Spot f = new Spot(i, j);
-			Spot t = null;
-			if (b.getPiece(f) == null)
+			// order the move evaluation to consider
+			// the pieces furthest down the board first because
+			// already moved pieces have the highest scores.
+			// This results in the most alpha-beta pruning.
+			int i = 144 - j;
+
+			Piece fp = b.getPiece(i);
+			if (fp == null)
 				continue;
-			if (b.getPiece(f).getColor() != Settings.topColor)
+			if (fp.getColor() != Settings.topColor)
 				continue;
-				
+			if (fp.getRank() == Rank.BOMB ||
+				fp.getRank() == Rank.FLAG)
+				continue;
 			for (int k=0;k<4;k++)
 			{
-				switch (k)
-				{
-				case 0:
-					if (i==0)
-						continue;
-					t = new Spot(i-1, j);
-					break;
-				case 1:
-					if (j==0)
-						continue;
-					t = new Spot(i, j-1);
-					break;
-				case 2:
-					if (i==9)
-						continue;
-					t = new Spot(i+1, j);
-					break;
-				case 3:
-					if (j==9)
-						continue;
-					t = new Spot(i, j+1);
-					break;
-				}
-				if (b.validMove(f, t))
-				{
-					tmpM = new Move(b.getPiece(f), f, t);
+				int d = dir[k];
+				int t = i + d;
+				boolean scoutFarMove = false;
+				for ( ;b.isValid(t); t+=d, scoutFarMove = true) {
+					Piece tp = b.getPiece(t);
+					if (tp != null && tp.getColor() == fp.getColor())
+						break;
+					
+					tmpM = new BMove(i, t);
+					if (b.isRecentMove(tmpM))
+						break;
+
+					// a new TestingBoard is required for each move
+					// because evaluation changes piece data
 					tmpB = new TestingBoard(b);
-					tmpB.move(tmpM);
-					threads[threadc] = new Thread()
+					tmpB.move(tmpM, 0, scoutFarMove);
+
+					moveList.add(tmpM);
+					// store the board pointer rather
+					// than the value because we might
+					// be using threads to eval values.
+					boardList.add(tmpB);
+
+					// do not access tmpB after this point
+					// if we are using threads
+
+					// threaded
+					// threadValueNMoves(tmpB, n-1, alpha, beta); 
+					// end of threaded
+
+					// not threaded
+					valueNMoves(tmpB, n-1, alpha, beta); 
+System.out.println(n + " (" + b.getPiece(tmpM.getFrom()).getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + tmpB.getValue());
+					if (tmpB.getValue() > alpha)
 					{
-						public void run()
-						{
-							TestingBoard mytmpB = tmpB;
-							Move mytmpM = tmpM;
-							bLock.release();
-							int tmpV = valueNMoves(mytmpB, n1, 0);
-							tLock.lock();
-							try
-							{
-								if (tmpV > value)
-								{
-									value = tmpV;
-									move = mytmpM;
-								}
-							}
-							finally
-							{
-								tLock.unlock();
-							}
-						}
-					};
-					bLock.acquireUninterruptibly();
-					threads[threadc].start();
-					threadc++;
-					bLock.acquireUninterruptibly();
-					bLock.release();
-				}
-			}
+						alpha = tmpB.getValue();
+					}
+					// end of not threaded
+
+					if (fp.getRank() != Rank.NINE || tp != null)
+						break;
+				} // for
+			} // k
 		}
 
 		for (int i=0;i<160;i++)
@@ -294,121 +321,129 @@ public class AI implements Runnable
 				{
 					e.printStackTrace();
 				}
+
+
+		for (int i = 0; i < moveList.size(); i++) {
+			tmpM = moveList.get(i);
+			boardList.get(i).getValue();
+			int vm = boardList.get(i).getValue();
+
+			if (vm > value)
+			{
+				value = vm;
+				move = tmpM;
+			}
+
+		}
+System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY() + " " + value);
+System.out.println("----");
+
 		
-		return move;
+		return new Move(b.getPiece(move.getFrom()), move);
 	}
-	
-	private int valueNMoves(TestingBoard b, int n, int guesses)
+
+
+	// Evaluation of the first ply of moves using threads
+	// could be useful on parallel hardware, but it may be
+	// faster to use a single thread so that each successive
+	// move evaluation can rely on alpha-beta updates of the prior move.
+	private void threadValueNMoves(final TestingBoard b, final int n, final int alpha, final int beta)
+	{
+		threads[threadc] = new Thread()
+		{
+			public void run()
+			{
+				valueNMoves(b, n, alpha, beta);
+			}
+		};
+
+		bLock.acquireUninterruptibly();
+		threads[threadc].start();
+		threadc++;
+		bLock.release();
+	}
+
+	private void valueNMoves(TestingBoard b, int n, int alpha, int beta)
 	{
 		if (n<1)
-			return valueBoard(b);
+			return;
 
-		boolean hasMove = false;
-		
 		int turn;
-		if ((turnF + n) % 2 == 0)
+		int v;
+		if ((turnF + n) % 2 == 0) {
+			v = alpha;
 			turn = Settings.topColor;
-		else
+		} else {
+			v = beta;
 			turn = Settings.bottomColor;
-				
-			
-		int value = Rank.aiTotalValue();
-		if (turn==Settings.topColor)
-			value *= -3;
+		}
+
+		int depth = Settings.aiLevel - n;
 		
-		for (int i=0;i<10;i++)
-		for (int j=0;j<10;j++)
+		for (int j=13;j<=131;j++)
 		{
-			Spot f = new Spot(i, j);
-			Spot t = null;
-			if (b.getPiece(f) == null)
+			// order the move evaluation to consider
+			// the pieces furthest down the board first because
+			// already moved pieces have the highest scores.
+			// This results in the most alpha-beta pruning.
+			int i;
+			if (turn == Settings.topColor)
+				i = 144 - j;
+			else
+				i = j;
+
+			Piece fp = b.getPiece(i);
+			if (fp == null)
 				continue;
-			if (b.getPiece(f).getColor() != turn)
+			if (fp.getColor() != turn)
+				continue;
+			if (fp.getRank() == Rank.BOMB ||
+				fp.getRank() == Rank.FLAG)
 				continue;
 				
 			for (int k=0;k<4;k++)
 			{
-				switch (k)
+				int t = i + dir[k];
+				if  (!b.isValid(t))
+					continue;
+				Piece tp = b.getPiece(t);
+				if (tp != null && tp.getColor() == fp.getColor())
+					continue;
+
+				BMove tmpM = new BMove(i, t);
+				if (b.isRecentMove(tmpM))
+					continue;
+
+				int valueB = b.getValue();
+				b.move(tmpM, depth, false);
+				valueNMoves(b, n-1, alpha, beta);
+
+				int vm = b.getValue();
+
+				b.undo(fp, i, tp, t, valueB);
+
+/*
+for (int ii=5; ii >= n; ii--)
+	System.out.print("  ");
+System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
+*/
+
+				if (vm > alpha && turn == Settings.topColor)
 				{
-				case 0:
-					if (j==9)
-						continue;
-					t = new Spot(i, j+1);
-					break;
-				case 1:
-					if (i==9)
-						continue;
-					t = new Spot(i+1, j);
-					break;
-				case 2:
-					if (i==0)
-						continue;
-					t = new Spot(i-1, j);
-					break;
-				case 3:
-					if (j==0)
-						continue;
-					t = new Spot(i, j-1);
-					break;
+					v = alpha = vm;
 				}
-				if (b.validMove(f, t))
+				if (vm < beta && turn == Settings.bottomColor)
 				{
-					hasMove = true;
-					
-					Move tmpM = new Move(b.getPiece(f), f, t);
-					Piece fp = b.getPiece(f);
-					Piece tp = b.getPiece(t);
-					b.move(tmpM);
-					//int tmpV = valueBoard(b) + (int)(valueNMoves(b, n-1) * ALPHA);
-					int tmpV = valueBoard(b);
-					if (tp == null ||
-						(fp.isKnown() && turn == Settings.bottomColor) ||
-						(tp.isKnown() && turn == Settings.topColor))
-						tmpV += valueNMoves(b, n-1, guesses);
-					else if (guesses <= MAX_GUESSES)
-						tmpV += (int) (ALPHA * valueNMoves(b, n-1, guesses+1));
-						
-					b.undo(fp, f, tp, t);
-					if (tmpV > value && turn == Settings.topColor)
-					{
-						value = tmpV;
-						if (value > Rank.FLAG.aiValue()/2)
-							//trim branches
-							return value;
-					}
-					if (tmpV < value && turn == Settings.bottomColor)
-					{
-						value = tmpV;
-						if (value < (Rank.FLAG.aiValue() * -1)/2)
-							//trim branches
-							return value;
-					}
+					v = beta = vm;
 				}
-			}
-		}
-		if (hasMove)
-			return value;
-		else
-		{
-			if (turn == Settings.topColor)
-				return Rank.aiTotalValue();
-			else 
-				return -Rank.aiTotalValue();
-		}
-	}
-	
-	private int valueBoard(TestingBoard b)
-	{
-		int value = 0;
-		
-		for (int i=0;i<b.getTraySize();i++)
-		{
-			if (b.getTrayPiece(i).getColor() == Settings.bottomColor)
-				value += b.getTrayPiece(i).getRank().aiValue();	
-			else
-				value -= b.getTrayPiece(i).getRank().aiValue();
-		}
-		
-		return value;
+
+				if (beta <= alpha) {
+					b.setValue(v);
+					return;
+				}
+			} // k
+		} // 
+		b.setValue(v);
+		return;
 	}
 }

@@ -39,7 +39,6 @@ import com.cjmalloy.stratego.player.PieceButton;
 import com.cjmalloy.stratego.player.WView;
 
 
-
 public class WEditor extends WView
 {
 	private EditorControls board = null;  //  @jve:decl-index=0:

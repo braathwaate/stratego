@@ -22,14 +22,36 @@ public class Piece implements Comparable<Piece>
 	private int uniqueID = 0;
 	private int color = 0;
 	private Rank rank = null;
-	private boolean shown = false;
-	private boolean known = false;
+
+	private boolean shown = false;	// visible on screen
+	private boolean known = false;	// known to players
+	// a known piece can be not shown
+	// a shown piece can be unknown to the computer
+	private boolean moved = false;	// used by screen view thread so
+					// do not update by ai
+	public int moves = 0;	// times piece has moved
 
 	public Piece(int id, int c, Rank r) 
 	{
 		uniqueID = id;
 		color = c;
 		rank = r;
+	}
+
+	public Piece(int id, Piece p) 
+	{
+		uniqueID = id;
+		color = p.color;
+		moved = p.moved;
+		moves = p.moves;
+		rank = p.rank;
+		known = p.known;
+		shown = p.shown;
+	}
+
+	public void setUnknownRank()
+	{
+		rank = Rank.UNKNOWN;
 	}
 
 	public int getColor() 
@@ -55,8 +77,6 @@ public class Piece implements Comparable<Piece>
 	public void setShown(boolean b)
 	{
 		shown = b;
-		if (shown == true)
-			known = true;
 	}	
 	
 	public boolean isKnown()
@@ -67,8 +87,16 @@ public class Piece implements Comparable<Piece>
 	public void setKnown(boolean b)
 	{
 		known = b;
-		if (known == false)
-			shown = false;
+	}
+
+	public boolean hasMoved()
+	{
+		return moved;
+	}
+	
+	public void setMoved(boolean m)
+	{
+		moved = m;
 	}
 
 	public int compareTo(Piece p)

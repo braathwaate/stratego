@@ -27,7 +27,6 @@ import com.cjmalloy.stratego.Spot;
 
 
 
-
 public class EditorBoard extends Board implements EditorControls
 {
 	public EditorBoard()

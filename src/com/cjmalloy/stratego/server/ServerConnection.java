@@ -26,7 +26,6 @@ import com.cjmalloy.stratego.server.shared.Connection;
 import com.cjmalloy.stratego.server.shared.Hash;
 import com.cjmalloy.stratego.server.shared.Message;
 
-
 public class ServerConnection extends Connection
 {
 	public String alias;

@@ -17,8 +17,10 @@
 
 package com.cjmalloy.stratego;
 
+
 public enum Rank
 {
+
 	WATER,
 	ONE,
 	TWO,
@@ -57,6 +59,8 @@ public enum Rank
 			return 8;
 		case NINE:
 			return 9;
+		case SPY:
+			return 10;
 		default:
 			return 0;
 		}
@@ -82,6 +86,8 @@ public enum Rank
 			return 80;//3
 		case FIVE:
 			return 45;//4
+		case UNKNOWN:	// TBD: unknown value changes during game
+			return 35;//4
 		case SIX:
 			return 30;//4
 		case SEVEN:
@@ -94,7 +100,14 @@ public enum Rank
 			return 0;
 		}
 	}
-	
+
+	public static int getRanks(int i)
+	{	
+		int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1};
+
+		return ranks[i];
+	}
+
 	public static int aiTotalValue()
 	{
 		return 9000-4;

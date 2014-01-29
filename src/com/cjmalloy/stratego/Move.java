@@ -17,18 +17,28 @@
 
 package com.cjmalloy.stratego;
 
-public class Move
-{
+import com.cjmalloy.stratego.BMove;
 
+public class Move extends BMove
+{
 	private Piece piece = null;
-	private Spot from = null;
-	private Spot to = null;
+
+	public Move(Piece p, int f, int t)
+	{
+		super(f,t);
+		piece = p;
+	}
 
 	public Move(Piece p, Spot f, Spot t)
 	{
+		super(f, t);
 		piece = p;
-		from = f;
-		to = t;
+	}
+
+	public Move(Piece p, BMove bm)
+	{
+		super(bm.from, bm.to);
+		piece = p;
 	}
 
 	public Piece getPiece()
@@ -36,23 +46,8 @@ public class Move
 		return piece;
 	}
 
-	public Spot getFrom()
-	{
-		return from;
-	}
-
-	public Spot getTo()
-	{
-		return to;
-	}
-	
 	public boolean equals(Object m)
 	{
-		if (m==null) return false;
-		if (piece==((Move)m).piece)
-		if (from.equals(((Move)m).from))
-		if (to.equals(((Move)m).to))
-			return true;
-		return false;
+		return super.equals(m) && piece==((Move)m).piece;
 	}
 }

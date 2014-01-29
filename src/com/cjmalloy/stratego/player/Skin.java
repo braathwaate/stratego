@@ -46,6 +46,8 @@ public class Skin
 	private static final String SKIN_B  = "#6060FF";
 	private static final String SKIN_RA = "#FF8080";
 	private static final String SKIN_BA = "#A0A0FF";
+	private static final String SKIN_RAA = "#FF4040";
+	private static final String SKIN_BAA = "#8080FF";
 	public Color bgColor    = Color.decode(SKIN_BG);
 	public Color mapColor   = Color.decode(SKIN_G);
 	public Color waterColor = Color.decode(SKIN_W);
@@ -53,6 +55,8 @@ public class Skin
 	public Color blueColor  = Color.decode(SKIN_B);
 	public Color redAColor  = Color.decode(SKIN_RA);
 	public Color blueAColor = Color.decode(SKIN_BA);
+	public Color redAAColor  = Color.decode(SKIN_RAA);
+	public Color blueAAColor = Color.decode(SKIN_BAA);
 	
 	private Image splash = null;
 	public Image scaledSplash = null;
@@ -64,10 +68,14 @@ public class Skin
 	public ImageIcon gridBG[][] = new ImageIcon[10][10];
 	public ImageIcon redASkins[] = new ImageIcon[13];
 	public ImageIcon blueASkins[] = new ImageIcon[13];
+	public ImageIcon redAASkins[] = new ImageIcon[13];
+	public ImageIcon blueAASkins[] = new ImageIcon[13];
 	public ImageIcon redSkins[] = new ImageIcon[13];
 	public ImageIcon blueSkins[] = new ImageIcon[13];
 	public ImageIcon redBack = null;
 	public ImageIcon blueBack = null;
+	public ImageIcon redABack = null;
+	public ImageIcon blueABack = null;
 	public Image bg = null;
 	
 	private Image newGameIcon = null;
@@ -200,6 +208,14 @@ public class Skin
 				g.clearRect(0, 0, img.getWidth(null), img.getHeight(null));
 				blueBack = new ImageIcon(op.filter(bi, null));
 
+				g.setBackground(redAColor);
+				g.clearRect(0, 0, img.getWidth(null), img.getHeight(null));
+				redABack = new ImageIcon(op.filter(bi, null));
+				
+				g.setBackground(blueAColor);
+				g.clearRect(0, 0, img.getWidth(null), img.getHeight(null));
+				blueABack = new ImageIcon(op.filter(bi, null));
+
 				g.dispose();
 				break;
 			}
@@ -253,6 +269,16 @@ public class Skin
 				g.drawImage(img, 0, 0, img.getWidth(null), img.getHeight(null), null);
 				blueASkins[i] = new ImageIcon(op.filter(bi, null));
 
+				g.setBackground(redAAColor);
+				g.clearRect(0, 0, img.getWidth(null), img.getHeight(null));
+				g.drawImage(img, 0, 0, img.getWidth(null), img.getHeight(null), null);
+				redAASkins[i] = new ImageIcon(op.filter(bi, null));
+
+				g.setBackground(blueAAColor);
+				g.clearRect(0, 0, img.getWidth(null), img.getHeight(null));
+				g.drawImage(img, 0, 0, img.getWidth(null), img.getHeight(null), null);
+				blueAASkins[i] = new ImageIcon(op.filter(bi, null));
+
 				g.dispose();
 			}
 			else
@@ -262,6 +288,8 @@ public class Skin
 				blueSkins[i] = null;
 				redASkins[i] = null;
 				blueASkins[i] = null;
+				redAASkins[i] = null;
+				blueAASkins[i] = null;
 			}
 		}
 	}

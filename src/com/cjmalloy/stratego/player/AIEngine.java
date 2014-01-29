@@ -31,7 +31,6 @@ import com.cjmalloy.stratego.Status;
 
 
 
-
 public class AIEngine extends Engine implements CompControls, UserControls
 {
 	private WView view = null;
@@ -81,8 +80,8 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		
 		if (status == Status.SETUP)
 		{
-			if (setupRemovePiece(m.getFrom()))
-					setupPlacePiece(m.getPiece(), m.getTo());
+			if (setupRemovePiece(new Spot(m.getFromX(), m.getToY())))
+					setupPlacePiece(m.getPiece(), new Spot(m.getToX(), m.getToY()));
 		}
 		else
 		{
@@ -108,10 +107,11 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	{
 		if (turn == Settings.bottomColor)
 			return;
+
 		if (m.getPiece().getColor() == Settings.bottomColor)
 			return; // shoulden't happen anyway
 		
-		if (m==null || m.getPiece()==null || m.getFrom()==null || m.getTo()==null)
+		if (m==null || m.getPiece()==null)
 		{
 			//AI trapped
 			status = Status.STOPPED;
@@ -121,9 +121,11 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		}
 
 		requestMove(m);
-		if (turn != Settings.bottomColor)
+
+		if (turn != Settings.bottomColor) {
 			JOptionPane.showMessageDialog(null,
-					"AI error" , "Critical Error", JOptionPane.ERROR_MESSAGE);
+					"AI turn error " + turn + " " + Settings.bottomColor , "Critical Error", JOptionPane.ERROR_MESSAGE);
+		}
 	}
 	
 	public void aiReturnPlace(Piece p, Spot s)

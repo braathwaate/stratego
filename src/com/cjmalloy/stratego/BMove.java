@@ -17,9 +17,60 @@
 
 package com.cjmalloy.stratego;
 
-public enum Status
+public class BMove
 {
-	SETUP,
-	PLAYING,
-	STOPPED
+
+	protected int from;
+	protected int to;
+
+	public BMove(int f, int t)
+	{
+		from = f;
+		to = t;
+	}
+
+	public BMove(Spot f, Spot t)
+	{
+		from = f.getX() + 1 + (f.getY() + 1) * 12 ;
+		to = t.getX() + 1 + (t.getY() + 1) * 12 ;
+	}
+
+	public int getFrom()
+	{
+		return from;
+	}
+
+	public int getTo()
+	{
+		return to;
+	}
+
+	public int getFromX()
+	{
+		return from % 12 - 1;
+	}
+
+	public int getFromY()
+	{
+		return from / 12 - 1;
+	}
+	
+	public int getToX()
+	{
+		return to % 12 - 1;
+	}
+
+	public int getToY()
+	{
+		return to / 12 - 1;
+	}
+
+	public boolean equals(Object m)
+        {
+                if (m==null) return false;
+                return from==((BMove)m).from &&  to==((BMove)m).to;
+	 }
+
 }
+
+

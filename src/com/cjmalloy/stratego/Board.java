@@ -20,6 +20,7 @@ package com.cjmalloy.stratego;
 import java.util.ArrayList;
 import java.util.Collections;
 
+
 public class Board
 {
 	protected static class UniqueID
@@ -36,57 +37,72 @@ public class Board
 	public static final int RED  = 0;
 	public static final int BLUE = 1;
 	public static final Spot IN_TRAY = new Spot(-1, -1);
-	public static final Piece INVALID = new Piece(-1, -1, Rank.WATER);
 	
-	protected Piece[][] grid = new Piece[10][10];
+	protected Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
-	protected ArrayList<Move> recentMoves = new ArrayList<Move>();
+	protected ArrayList<Piece> red = new ArrayList<Piece>();
+	protected ArrayList<Piece> blue = new ArrayList<Piece>();
+	protected ArrayList<BMove> recentMoves = new ArrayList<BMove>();
 	
 	public Board()
 	{
-		//create lakes
-		grid[2][4] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[3][4] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[2][5] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[3][5] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[6][4] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[7][4] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[6][5] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		grid[7][5] = new Piece(UniqueID.get(), -1, Rank.WATER);
-		
+
 		//create pieces
-		for (int i=RED;i<=BLUE;i++)
-		{
-			tray.add(new Piece(UniqueID.get(), i, Rank.FLAG));
-			tray.add(new Piece(UniqueID.get(), i, Rank.SPY));
-			tray.add(new Piece(UniqueID.get(), i, Rank.ONE));
-			tray.add(new Piece(UniqueID.get(), i, Rank.TWO));
-			for (int j=0;j<2;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.THREE));
-			for (int j=0;j<3;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.FOUR));
-			for (int j=0;j<4;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.FIVE));
-			for (int j=0;j<4;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.SIX));
-			for (int j=0;j<4;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.SEVEN));
-			for (int j=0;j<5;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.EIGHT));
-			for (int j=0;j<8;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.NINE));
-			for (int j=0;j<6;j++)
-				tray.add(new Piece(UniqueID.get(), i, Rank.BOMB));
-		}
+		red.add(new Piece(UniqueID.get(), RED, Rank.FLAG));
+		red.add(new Piece(UniqueID.get(), RED, Rank.SPY));
+		red.add(new Piece(UniqueID.get(), RED, Rank.ONE));
+		red.add(new Piece(UniqueID.get(), RED, Rank.TWO));
+		for (int j=0;j<2;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.THREE));
+		for (int j=0;j<3;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.FOUR));
+		for (int j=0;j<4;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.FIVE));
+		for (int j=0;j<4;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.SIX));
+		for (int j=0;j<4;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.SEVEN));
+		for (int j=0;j<5;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.EIGHT));
+		for (int j=0;j<8;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.NINE));
+		for (int j=0;j<6;j++)
+			red.add(new Piece(UniqueID.get(), RED, Rank.BOMB));
+
+		//create pieces
+		blue.add(new Piece(UniqueID.get(), BLUE, Rank.FLAG));
+		blue.add(new Piece(UniqueID.get(), BLUE, Rank.SPY));
+		blue.add(new Piece(UniqueID.get(), BLUE, Rank.ONE));
+		blue.add(new Piece(UniqueID.get(), BLUE, Rank.TWO));
+		for (int j=0;j<2;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.THREE));
+		for (int j=0;j<3;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.FOUR));
+		for (int j=0;j<4;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.FIVE));
+		for (int j=0;j<4;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.SIX));
+		for (int j=0;j<4;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.SEVEN));
+		for (int j=0;j<5;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.EIGHT));
+		for (int j=0;j<8;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.NINE));
+		for (int j=0;j<6;j++)
+			blue.add(new Piece(UniqueID.get(), BLUE, Rank.BOMB));
+
+		tray.addAll(red);
+		tray.addAll(blue);
+
 		Collections.sort(tray);
 	}
-	
+
 	public Board(Board b)
 	{
-		for (int i=0;i<10;i++)
-		for (int j=0;j<10;j++)
-			grid[i][j] = b.getPiece(i, j);
-			
+                for (int i=0;i<10;i++)
+                for (int j=0;j<10;j++)
+                        grid.setPiece(i, j, b.getPiece(i, j));
+				
 		tray.addAll(b.tray);
 		recentMoves.addAll(b.recentMoves);
 	}
@@ -106,27 +122,32 @@ public class Board
 			
 		if (getPiece(s) == null)
 		{
-			setKnown(p, false);
-			grid[s.getX()][s.getY()] = p;
+			grid.setPiece(s.getX(), s.getY(), p);
 			tray.remove(p);
 			return true;
 		}
 		return false;
 	}
-	
-	public boolean attack(Move m)
+
+	// TRUE if valid attack
+	public boolean attack(BMove m)
 	{
 		if (validAttack(m))
 		{
-			setShown(m.getPiece(), true);
-			if (!Settings.bNoShowDefender || m.getPiece().getRank().equals(Rank.NINE))
-				setShown(getPiece(m.getTo()), true);
+			Piece fp = getPiece(m.getFrom());
+			Piece tp = getPiece(m.getTo());
+			setShown(fp, true);
+			fp.setKnown(true);
+			tp.setKnown(true);
+			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
+				setShown(tp, true);
+			}
 			
-			int result = winFight(m.getPiece(), getPiece(m.getTo()));
+			int result = winFight(fp, tp);
 			if (result == 1)
 			{
 				remove(m.getTo());
-				setPiece(m.getPiece(), m.getTo());
+				setPiece(fp, m.getTo());
 				setPiece(null, m.getFrom());
 			}
 			else if (result == -1)
@@ -136,17 +157,15 @@ public class Board
 			}
 			else 
 			{
-				clearRecentMoves(getPiece(m.getTo()));
-				
 				if (Settings.bNoMoveDefender ||
-						getPiece(m.getTo()).getRank().equals(Rank.BOMB))
+						tp.getRank() == Rank.BOMB)
 					remove(m.getFrom());
-				else if (m.getPiece().getRank().equals(Rank.NINE))
+				else if (fp.getRank() == Rank.NINE)
 					scoutLose(m);
 				else
 				{
 					remove(m.getFrom());
-					setPiece(getPiece(m.getTo()), m.getFrom());
+					setPiece(tp, m.getFrom());
 					setPiece(null, m.getTo());
 				}
 			}
@@ -164,7 +183,7 @@ public class Board
 			if (getPiece(i, j) != null)
 			if (getPiece(i, j).getRank().equals(Rank.FLAG))
 			{
-				flagColor = grid[i][j].getColor();
+				flagColor = grid.getPiece(i,j).getColor();
 				flags++;
 			}
 		if (flags!=2)
@@ -201,43 +220,39 @@ public class Board
 	
 	public void clear()
 	{
-		for (int i=0;i<10;i++)
-		for (int j=0;j<10;j++)
-			if (grid[i][j] != null)
-			if (!grid[i][j].getRank().equals(Rank.WATER))
-			{
-				tray.add(grid[i][j]);
-				grid[i][j] = null;
-			}
-		
+		grid.clear();
+
+		tray.clear();
+		tray.addAll(red);
+		tray.addAll(blue);
+
 		Collections.sort(tray);
 		
-		for (Piece p: tray)
-			setKnown(p, false);
+		for (Piece p: tray) {
+			p.setShown(false);
+			p.setKnown(false);
+			p.setMoved(false);
+		}
 	}
 	
-	private void clearRecentMoves(Piece p)
-	{
-		for (int i=0;i<recentMoves.size();i++)
-			if (recentMoves.get(i).getPiece() == p)
-				recentMoves.remove(i);
-				
-	}
-
 	public Piece getPiece(int x, int y)
 	{
-		if (x<0||x>9||
-			y<0||y>9)
-			return INVALID;
-		return grid[x][y];
+		return grid.getPiece(x, y);
+	}
+	
+	public boolean isValid(int i)
+	{
+		return grid.isValid(i);
+	}
+	
+	public Piece getPiece(int i)
+	{
+		return grid.getPiece(i);
 	}
 	
 	public Piece getPiece(Spot s)
 	{
-		if (s.getX()<0||s.getX()>9||
-			s.getY()<0||s.getY()>9)
-			return INVALID;
-		return grid[s.getX()][s.getY()];
+		return grid.getPiece(s.getX(),s.getY());
 	}
 
 	
@@ -255,8 +270,8 @@ public class Board
 	{
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
-			if (grid[i][j] != null)
-				setShown(grid[i][j], true);
+			if (grid.getPiece(i, j) != null)
+				setShown(grid.getPiece(i,j), true);
 		for (Piece p: tray)
 			setShown(p, true);
 	}
@@ -265,8 +280,8 @@ public class Board
 	{
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
-			if (grid[i][j] != null)
-				setShown(grid[i][j], false);
+			if (grid.getPiece(i, j) != null)
+				setShown(grid.getPiece(i,j), false);
 
 		hideTray();
 	}
@@ -277,52 +292,68 @@ public class Board
 			setShown(p, false);
 	}
 	
-	protected void setKnown(Piece p, boolean b)
-	{
-		p.setKnown(b);
-	}
-	
 	protected void setPiece(Piece p, Spot s)
 	{
-		grid[s.getX()][s.getY()] = p;
+		grid.setPiece(s.getX(),s.getY(),p);
+	}
+	
+	protected void setPiece(Piece p, int i)
+	{
+		grid.setPiece(i, p);
 	}
 	
 	protected void setShown(Piece p, boolean b)
 	{
-		p.setShown(b);
+		p.setShown(b);	// make piece visible
 	}
 	
-	public boolean move(Move m)
+	public boolean move(BMove m)
 	{
 		if (validMove(m))
 		{
+			Piece fp = getPiece(m.getFrom());
 			recentMoves.add(m);
-			if (recentMoves.size() > 4)
-				recentMoves.remove(0);
 			
-			setPiece(m.getPiece(), m.getTo());
+			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
+			fp.setMoved(true);
+			fp.moves++;
+			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
+				Math.abs(m.getToY() - m.getFromY()) > 1)
+				setShown(fp, true);
+
 			return true;
 		}
 		
 		return false;
 	}
 	
-	public boolean remove(Spot s)
+	public boolean remove(int i)
 	{
-		if (getPiece(s) == null)
-			return false;
-		if (getPiece(s) == INVALID)
+		if (getPiece(i) == null)
 			return false;
 		
-		setShown(getPiece(s), true);
-		tray.add(getPiece(s));
-		setPiece(null, s);
+		getPiece(i).setShown(true);
+		tray.add(getPiece(i));
+		setPiece(null, i);
 		Collections.sort(tray);
 		return true;
 	}
+
+	public boolean remove(Spot s)
+	{
+		return remove(grid.getIndex(s.getX(), s.getY()));
+	}
+
+	public boolean isRecentMove(BMove m)
+	{
+		int size = recentMoves.size();
+		if (size < 4)
+			return false;
+		return m.equals(recentMoves.get(size-4));
+	}
 	
-	private void scoutLose(Move m)
+	private void scoutLose(BMove m)
 	{
 		Spot tmp = getScoutLooseFrom(m);
 
@@ -331,39 +362,34 @@ public class Board
 		setPiece(null, m.getTo());
 	}
 	
-	private Spot getScoutLooseFrom(Move m)
+	private Spot getScoutLooseFrom(BMove m)
 	{
-		if (m.getFrom().getX() == m.getTo().getX())
+		if (m.getFromX() == m.getToX())
 		{
-			if (m.getFrom().getY() < m.getTo().getY())
-				return new Spot(m.getTo().getX(), m.getTo().getY() - 1);
+			if (m.getFromY() < m.getToY())
+				return new Spot(m.getToX(), m.getToY() - 1);
 			else
-				return new Spot(m.getTo().getX(), m.getTo().getY() + 1);
+				return new Spot(m.getToX(), m.getToY() + 1);
 		}
-		else //if (m.getFrom().getY() == m.getTo().getY())
+		else //if (m.getFromY() == m.getToY())
 		{
-			if (m.getFrom().getX() < m.getTo().getX())
-				return new Spot(m.getTo().getX() - 1, m.getTo().getY());
+			if (m.getFromX() < m.getToX())
+				return new Spot(m.getToX() - 1, m.getToY());
 			else
-				return new Spot(m.getTo().getX() + 1, m.getTo().getY());
+				return new Spot(m.getToX() + 1, m.getToY());
 		}
 	}
 	
-	protected boolean validAttack(Move m)
+	protected boolean validAttack(BMove m)
 	{
-		if (m.getTo() != IN_TRAY)
-			if (m.getTo().getX()<0||m.getTo().getX()>9||
-				m.getTo().getY()<0||m.getTo().getY()>9)
-				return false;
+		if (m.getToX()<0||m.getToX()>9||
+			m.getToY()<0||m.getToY()>9)
+			return false;
 		if (getPiece(m.getTo()) == null)
 			return false;
 		if (getPiece(m.getFrom()) == null)
 			return false;
 		if (getPiece(m.getTo()).getRank().equals(Rank.WATER))
-			return false;
-		if (getPiece(m.getFrom()) != m.getPiece())
-			return false;
-		if (m.getPiece().getColor() == getPiece(m.getTo()).getColor())
 			return false;
 		
 
@@ -376,108 +402,105 @@ public class Board
 		return valid;
 
 	}
-	
-	protected boolean validMove(Move m)
+
+	// TRUE if piece moves to legal and unoccupied square
+	public boolean validMove(BMove m)
 	{
-		if (m.getTo() != IN_TRAY)
-			if (m.getTo().getX()<0||m.getTo().getX()>9||
-				m.getTo().getY()<0||m.getTo().getY()>9)
-				return false;
+		if (m.getToX()<0||m.getToX()>9||
+			m.getToY()<0||m.getToY()>9)
+			return false;
 		if (getPiece(m.getTo()) != null)
 			return false;
-		if (getPiece(m.getFrom()) == null)
-			return false;
-		if (getPiece(m.getFrom()) != m.getPiece())
+		Piece fp = getPiece(m.getFrom());
+		if (fp == null)
 			return false;
 		
 		//check for rule: "a player may not move their piece back and fourth.." or something
-		if (recentMoves.contains(m))
+		if (isRecentMove(new Move(fp, m)))
 			return false;
 
-		switch (m.getPiece().getRank())
+		switch (fp.getRank())
 		{
 		case FLAG:
 		case BOMB:
 			return false;
 		}
 
-		if (m.getFrom().getX() == m.getTo().getX())
-			if (Math.abs(m.getFrom().getY() - m.getTo().getY()) == 1)
+		if (m.getFromX() == m.getToX())
+			if (Math.abs(m.getFromY() - m.getToY()) == 1)
 				return true;
-		if (m.getFrom().getY() == m.getTo().getY())
-			if (Math.abs(m.getFrom().getX() - m.getTo().getX()) == 1)
+		if (m.getFromY() == m.getToY())
+			if (Math.abs(m.getFromX() - m.getToX()) == 1)
 				return true;
 
-		if (m.getPiece().getRank().equals(Rank.NINE))
-			return validScoutMove(m.getFrom().getX(), m.getFrom().getY(), m.getTo(), m.getPiece());
+		if (fp.getRank().equals(Rank.NINE))
+			return validScoutMove(m.getFromX(), m.getFromY(), m.getToX(), m.getToY(), fp);
 
 		return false;
 	}
 	
-	private boolean validScoutMove(int x, int y, Spot to, Piece p)
+	private boolean validScoutMove(int x, int y, int tox, int toy, Piece p)
 	{
-		if ( !(grid[x][y] == null || p.equals(grid[x][y])) )
+		if ( !(grid.getPiece(x,y) == null || p.equals(grid.getPiece(x,y))) )
 			return false;
 
-		if (x == to.getX())
+		if (x == tox)
 		{
-			if (Math.abs(y - to.getY()) == 1)
+			if (Math.abs(y - toy) == 1)
 			{
 				p.setKnown(true); //scouts reveal themselves by moving more than one piece
 				return true;
 			}
-			if (y - to.getY() > 0)
-				return validScoutMove(x, y - 1, to, p);
-			if (y - to.getY() < 0)
-				return validScoutMove(x, y + 1, to, p);
+			if (y - toy > 0)
+				return validScoutMove(x, y - 1, tox, toy, p);
+			if (y - toy < 0)
+				return validScoutMove(x, y + 1, tox, toy, p);
 		}
-		else if (y == to.getY())
+		else if (y == toy)
 		{
-			if (Math.abs(x - to.getX()) == 1)
+			if (Math.abs(x - tox) == 1)
 			{
 				p.setKnown(true);
 				return true;
 			}
-			if (x - to.getX() > 0)
-				return validScoutMove(x - 1, y, to, p);
-			if (x - to.getX() < 0)
-				return validScoutMove(x + 1, y, to, p);
+			if (x - tox > 0)
+				return validScoutMove(x - 1, y, tox, toy, p);
+			if (x - tox < 0)
+				return validScoutMove(x + 1, y, tox, toy, p);
 		}
 
 		return false;
 	}
 
-	private int winFight(Piece attack, Piece defend)
+	// return 1 attacker wins
+	// return -1 equal
+	// return 0 attacker loses
+	public int winFight(Piece attack, Piece defend)
 	{
-		if (attack.getRank().equals(defend.getRank()))
+		if (attack.getRank() == defend.getRank())
 		{
 			if (Settings.bDefendAdvantage)
 				return 0;
 			else
 				return -1;
 		}
-		if (defend.getRank().equals(Rank.FLAG))
+		if (defend.getRank() == Rank.FLAG)
 			return 1;
-		if (defend.getRank().equals(Rank.SPY))
-			return 1;
-		if (defend.getRank().equals(Rank.BOMB))
+		if (defend.getRank() == Rank.BOMB)
 		{
-			if (attack.getRank().equals(Rank.EIGHT))
+			if (attack.getRank() == Rank.EIGHT)
 				return 1;
 			if (Settings.bOneTimeBombs)
 				return -1;
 			else
 				return 0;
 		}
-		if (attack.getRank().equals(Rank.SPY))
-		{
-			if (defend.getRank().equals(Rank.ONE))
+		if (attack.getRank() == Rank.SPY & defend.getRank() == Rank.ONE)
 				return 1;
-			return 0;
-		}
 		
 		if (attack.getRank().toInt() < defend.getRank().toInt())
 			return 1;
 		return 0;
 	}
 }
+

@@ -84,21 +84,21 @@ public class ServerEngine extends Engine
 		}
 		else if (status == Status.SETUP)
 		{
-			if (m.getFrom() == Board.IN_TRAY)
+			if (m.getFrom() == 0) // Board.IN_TRAY
 			{
 				for (int i=0;i<board.getTraySize();i++)
 					if (board.getTrayPiece(i).getRank().equals(m.getPiece().getRank()))
-						setupPlacePiece(board.getTrayPiece(i), m.getTo());
+						setupPlacePiece(board.getTrayPiece(i), new Spot(m.getToX(), m.getToY()));
 			}
-			else if (m.getTo() == Board.IN_TRAY)
+			else if (m.getTo() == 0) // Board.IN_TRAY
 			{
-				setupRemovePiece(m.getFrom());
+				setupRemovePiece(new Spot(m.getFromX(), m.getFromY()));
 				board.hideAll();
 			}
 			else
 			{
-				if (setupRemovePiece(m.getFrom()))
-					setupPlacePiece(m.getPiece(), m.getTo());
+				if (setupRemovePiece(new Spot(m.getFromX(), m.getFromY())))
+					setupPlacePiece(m.getPiece(), new Spot(m.getToX(), m.getToY()));
 			}
 		}
 	}

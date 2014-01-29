@@ -31,7 +31,6 @@ import javax.swing.JSlider;
 import com.cjmalloy.stratego.Settings;
 
 
-
 public class WSettings {
 
 	private JFrame jFrame = null;  //  @jve:decl-index=0:visual-constraint="10,10"
@@ -135,7 +134,7 @@ public class WSettings {
 			sAILevel.setMajorTickSpacing(5);
 			sAILevel.setPaintTicks(true);
 			sAILevel.setSnapToTicks(true);
-			sAILevel.setValue(4);
+			sAILevel.setValue(6);
 			sAILevel.setMinimum(1);
 			sAILevel.setMaximum(21);
 			sAILevel.addChangeListener(new javax.swing.event.ChangeListener()
@@ -169,6 +168,7 @@ public class WSettings {
 		if (cNoHideAll == null) {
 			cNoHideAll = new JCheckBox();
 			cNoHideAll.setBounds(new Rectangle(45, 195, 21, 21));
+			cNoHideAll.doClick();
 			cNoHideAll.addActionListener(new java.awt.event.ActionListener()
 			{
 				public void actionPerformed(java.awt.event.ActionEvent e)
@@ -216,6 +216,7 @@ public class WSettings {
 		if (cNoMoveDefender == null) {
 			cNoMoveDefender = new JCheckBox();
 			cNoMoveDefender.setBounds(new Rectangle(15, 255, 21, 21));
+			cNoMoveDefender.doClick();
 			cNoMoveDefender.addActionListener(new java.awt.event.ActionListener()
 			{
 				public void actionPerformed(java.awt.event.ActionEvent e)

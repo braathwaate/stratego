@@ -24,7 +24,6 @@ import javax.swing.JList;
 
 import com.cjmalloy.stratego.server.shared.Message;
 
-
 public class ColorListCellRenderer extends DefaultListCellRenderer
 {
 	private static final long serialVersionUID = 1L;

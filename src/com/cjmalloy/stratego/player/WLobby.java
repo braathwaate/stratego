@@ -52,7 +52,6 @@ import com.cjmalloy.stratego.server.shared.Connection;
 import com.cjmalloy.stratego.server.shared.Message;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
-
 public class WLobby implements MessageHandler
 {
 	private JFrame jFrame = null;  //  @jve:decl-index=0:visual-constraint="10,54"

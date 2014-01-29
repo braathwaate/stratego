@@ -24,7 +24,6 @@ import java.util.Scanner;
 import com.cjmalloy.stratego.server.shared.ClientConnection;
 
 
-
 public class RemoteDriver
 {
 	public static void main(String[] args)

@@ -17,6 +17,11 @@
 
 package com.cjmalloy.stratego.player;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
+
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
@@ -35,7 +40,6 @@ import com.cjmalloy.stratego.Move;
 import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
-
 
 
 public class PieceButton extends JButton implements MouseListener,
@@ -78,8 +82,9 @@ public class PieceButton extends JButton implements MouseListener,
 	public void setPiece(Piece p)
 	{
 		piece = p;
-		if (piece != null && piece.getColor() > 1)
+		if (piece != null && piece.getColor() > 1) {
 			piece.setShown(true);
+		}
 		
 		if (piece != null && piece.getColor() == -1)
 			setBackground(skin.waterColor);
@@ -102,24 +107,35 @@ public class PieceButton extends JButton implements MouseListener,
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
 			{
-				if (piece.getColor()%2 == 0)
-					setIcon(skin.redBack);
-				else
-					setIcon(skin.blueBack);
+				if (piece.getColor()%2 == 0) {
+					if (piece.hasMoved())
+						setIcon(skin.redABack);
+					else
+						setIcon(skin.redBack);
+				} else {
+					if (piece.hasMoved())
+						setIcon(skin.blueABack);
+					else
+						setIcon(skin.blueBack);
+				}
 			}
 			else
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isShown() && !Settings.bShowAll)
+					if (piece.isKnown() && !Settings.bShowAll)
 						setIcon(skin.redASkins[piece.getRank().ordinal()]);
+					else if (piece.hasMoved() && !Settings.bShowAll)
+						setIcon(skin.redAASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.redSkins[piece.getRank().ordinal()]);
 				}
 				else
 				{
-					if (piece.isShown() && !Settings.bShowAll)
+					if (piece.isKnown() && !Settings.bShowAll)
 						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
+					else if (piece.hasMoved() && !Settings.bShowAll)
+						setIcon(skin.blueAASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
 				}
@@ -139,24 +155,35 @@ public class PieceButton extends JButton implements MouseListener,
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
 			{
-				if (piece.getColor()%2 == 0)
-					pc = skin.redBack.getImage();
-				else
-					pc = skin.blueBack.getImage();
+				if (piece.getColor()%2 == 0) {
+					if (piece.hasMoved())
+						pc = skin.redABack.getImage();
+					else
+						pc = skin.redBack.getImage();
+				} else {
+					if (piece.hasMoved()) {
+						pc = skin.blueABack.getImage();
+					} else
+						pc = skin.blueBack.getImage();
+				}
 			}
 			else
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isShown() && !Settings.bShowAll)
+					if (piece.isKnown() && !Settings.bShowAll)
 						pc = skin.redASkins[piece.getRank().ordinal()].getImage();
+					else if (piece.hasMoved() && !Settings.bShowAll)
+						pc = skin.redAASkins[piece.getRank().ordinal()].getImage();
 					else
 						pc = skin.redSkins[piece.getRank().ordinal()].getImage();
 				}
 				else
 				{
-					if (piece.isShown() && !Settings.bShowAll)
+					if (piece.isKnown() && !Settings.bShowAll)
 						pc = skin.blueASkins[piece.getRank().ordinal()].getImage();
+					else if (piece.hasMoved() && !Settings.bShowAll)
+						pc = skin.blueAASkins[piece.getRank().ordinal()].getImage();
 					else
 
 						pc = skin.blueSkins[piece.getRank().ordinal()].getImage();

@@ -19,13 +19,13 @@ package com.cjmalloy.stratego;
 
 public class Settings
 {
-	public static int aiLevel = 4;
+	public static int aiLevel = 6;
 	public static int topColor;
 	public static int bottomColor;
-	public static boolean bNoHideAll = false;
+	public static boolean bNoHideAll = true;
 	public static boolean bShowAll = false;
 	public static boolean bDefendAdvantage = false;
-	public static boolean bNoMoveDefender = false;
+	public static boolean bNoMoveDefender = true;
 	public static boolean bNoShowDefender = false;
 	public static boolean bOneTimeBombs = false;
 	

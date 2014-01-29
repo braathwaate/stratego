@@ -26,7 +26,6 @@ import java.util.concurrent.Semaphore;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
 
-
 public abstract class Server implements MessageHandler
 {
 	protected ArrayList<ServerConnection> connections = new ArrayList<ServerConnection>();

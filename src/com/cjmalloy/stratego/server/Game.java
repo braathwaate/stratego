@@ -29,7 +29,6 @@ import com.cjmalloy.stratego.server.shared.Message;
 import com.cjmalloy.stratego.server.shared.MessageHandler;
 
 
-
 public class Game
 {
 	private class Mailbox implements MessageHandler

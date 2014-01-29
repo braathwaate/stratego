@@ -22,6 +22,8 @@ import java.awt.Event;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.KeyEvent;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
@@ -58,9 +60,14 @@ public class WSetup
 		getJFrame().setVisible(true);
 		
 		File f = new File("ai.cfg");
-	    if(!f.exists()) f.createNewFile();
-	    f = null;
-		BufferedReader cfg = new BufferedReader(new FileReader("ai.cfg"));
+		BufferedReader cfg;
+	    if(!f.exists()) {
+                        // f.createNewFile();
+                        InputStream is = Class.class.getResourceAsStream("/com/cjmalloy/stratego/resource/ai.cfg");
+                        InputStreamReader isr = new InputStreamReader(is);
+                        cfg = new BufferedReader(isr);
+		} else 
+			cfg = new BufferedReader(new FileReader("ai.cfg"));
 
 		String fn;
 		while ((fn = cfg.readLine()) != null)
