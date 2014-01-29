@@ -307,8 +307,5 @@ public class TestingBoard extends Board
 	}
 
 	@Override
-	protected void setKnown(Piece p, boolean b){}
-
-	@Override
 	protected void setShown(Piece p, boolean b){}
 }
