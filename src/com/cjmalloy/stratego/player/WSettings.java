@@ -134,7 +134,7 @@ public class WSettings {
 			sAILevel.setMajorTickSpacing(5);
 			sAILevel.setPaintTicks(true);
 			sAILevel.setSnapToTicks(true);
-			sAILevel.setValue(6);
+			sAILevel.setValue(8);
 			sAILevel.setMinimum(1);
 			sAILevel.setMaximum(21);
 			sAILevel.addChangeListener(new javax.swing.event.ChangeListener()
