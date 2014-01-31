@@ -29,6 +29,7 @@ public class Piece implements Comparable<Piece>
 	// a shown piece can be unknown to the computer
 	private boolean moved = false;	// used by screen view thread so
 					// do not update by ai
+	private int value = 0;
 	public int moves = 0;	// times piece has moved
 
 	public Piece(int id, int c, Rank r) 
@@ -97,6 +98,16 @@ public class Piece implements Comparable<Piece>
 	public void setMoved(boolean m)
 	{
 		moved = m;
+	}
+
+	public void setAiValue(int v)
+	{
+		value = v;
+	}
+
+	public int aiValue()
+	{
+		return value;
 	}
 
 	public int compareTo(Piece p)

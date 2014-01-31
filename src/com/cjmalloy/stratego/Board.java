@@ -143,7 +143,7 @@ public class Board
 				setShown(tp, true);
 			}
 			
-			int result = winFight(fp, tp);
+			int result = fp.getRank().winFight(tp.getRank());
 			if (result == 1)
 			{
 				remove(m.getTo());
@@ -470,37 +470,6 @@ public class Board
 		}
 
 		return false;
-	}
-
-	// return 1 attacker wins
-	// return -1 equal
-	// return 0 attacker loses
-	public int winFight(Piece attack, Piece defend)
-	{
-		if (attack.getRank() == defend.getRank())
-		{
-			if (Settings.bDefendAdvantage)
-				return 0;
-			else
-				return -1;
-		}
-		if (defend.getRank() == Rank.FLAG)
-			return 1;
-		if (defend.getRank() == Rank.BOMB)
-		{
-			if (attack.getRank() == Rank.EIGHT)
-				return 1;
-			if (Settings.bOneTimeBombs)
-				return -1;
-			else
-				return 0;
-		}
-		if (attack.getRank() == Rank.SPY & defend.getRank() == Rank.ONE)
-				return 1;
-		
-		if (attack.getRank().toInt() < defend.getRank().toInt())
-			return 1;
-		return 0;
 	}
 }
 

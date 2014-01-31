@@ -49,7 +49,6 @@ public class AI implements Runnable
 
 	private ReentrantLock tLock = new ReentrantLock();
 	private Semaphore bLock = new Semaphore(1);
-	private static int value = -1;
 	private static TestingBoard tmpB = null;
 	private int turnF = 0;
 	private static int[] dir = { -12, -1,  1, 12 };
@@ -243,7 +242,7 @@ public class AI implements Runnable
 		else
 			turnF = 1;
 
-		value = Rank.aiTotalValue() * -3;
+		int value = -9999;
 		int alpha = -9999;
 		int beta = 9999;
 
@@ -297,6 +296,7 @@ public class AI implements Runnable
 
 					// not threaded
 					valueNMoves(tmpB, n-1, alpha, beta); 
+					// valueNMoves(tmpB, n-1, -9999, 9999); 
 System.out.println(n + " (" + b.getPiece(tmpM.getFrom()).getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + tmpB.getValue());
 					if (tmpB.getValue() > alpha)
 					{
@@ -421,12 +421,12 @@ System.out.println("----");
 				int vm = b.getValue();
 
 				b.undo(fp, i, tp, t, valueB);
-
 /*
 for (int ii=5; ii >= n; ii--)
 	System.out.print("  ");
 System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
 */
+
 
 				if (vm > alpha && turn == Settings.topColor)
 				{

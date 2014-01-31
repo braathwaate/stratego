@@ -66,41 +66,6 @@ public enum Rank
 		}
 	}
 	
-	public int aiValue()
-	{
-		switch (this)
-		{
-		case FLAG:
-			return 6000;
-		case BOMB:
-			return 100;//6
-		case SPY:
-			return 360;
-		case ONE:
-			return 420;
-		case TWO:
-			return 360;
-		case THREE:
-			return 150;//2
-		case FOUR:
-			return 80;//3
-		case FIVE:
-			return 45;//4
-		case UNKNOWN:	// TBD: unknown value changes during game
-			return 35;//4
-		case SIX:
-			return 30;//4
-		case SEVEN:
-			return 15;//4
-		case EIGHT:
-			return 60;//5
-		case NINE:
-			return 7;//8
-		default:
-			return 0;
-		}
-	}
-
 	public static int getRanks(int i)
 	{	
 		int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1};
@@ -108,8 +73,36 @@ public enum Rank
 		return ranks[i];
 	}
 
-	public static int aiTotalValue()
+
+	// return 1 attacker wins
+	// return -1 equal
+	// return 0 attacker loses
+	public int winFight(Rank defend)
 	{
-		return 9000-4;
+		if (this == defend)
+		{
+			if (Settings.bDefendAdvantage)
+				return 0;
+			else
+				return -1;
+		}
+		if (defend == Rank.FLAG)
+			return 1;
+		if (defend == Rank.BOMB)
+		{
+			if (this == Rank.EIGHT)
+				return 1;
+			if (Settings.bOneTimeBombs)
+				return -1;
+			else
+				return 0;
+		}
+		if (this == Rank.SPY & defend == Rank.ONE)
+				return 1;
+		
+		if (toInt() < defend.toInt())
+			return 1;
+		return 0;
 	}
 }
+

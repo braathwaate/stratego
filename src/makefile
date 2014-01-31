@@ -1,9 +1,15 @@
 PKG=com/cjmalloy/stratego
 VER=stratego_v0.1.jar
 
-all: $(VER)
+all: $(VER) 
 
-$(VER):
+foo:
+	cd $(PKG); javac -g *.java
+	cd $(PKG); javac -g server/shared/*.java
+	cd $(PKG); javac -g player/*.java
+	cd $(PKG); javac -g server/*.java
+
+$(VER): foo
 	jar cfm $(VER) Manifest.txt images $(PKG)/*.class $(PKG)/player/*.class $(PKG)/server/shared/*.class $(PKG)/resource
 
 clean:
