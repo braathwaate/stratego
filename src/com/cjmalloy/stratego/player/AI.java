@@ -259,8 +259,8 @@ public class AI implements Runnable
 				continue;
 			if (fp.getColor() != Settings.topColor)
 				continue;
-			if (fp.getRank() == Rank.BOMB ||
-				fp.getRank() == Rank.FLAG)
+			Rank rank = fp.getRank();
+			if (rank == Rank.BOMB || rank == Rank.FLAG)
 				continue;
 			for (int k=0;k<4;k++)
 			{
@@ -269,7 +269,7 @@ public class AI implements Runnable
 				boolean scoutFarMove = false;
 				for ( ;b.isValid(t); t+=d, scoutFarMove = true) {
 					Piece tp = b.getPiece(t);
-					if (tp != null && tp.getColor() == fp.getColor())
+					if (tp != null && (tp.getColor() == fp.getColor() || rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
 						break;
 					
 					tmpM = new BMove(i, t);
@@ -335,7 +335,21 @@ System.out.println(n + " (" + b.getPiece(tmpM.getFrom()).getRank() + ") " + tmpM
 			}
 
 		}
-System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY() + " " + value);
+if (b.getPiece(move.getTo()) == null)
+System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
++ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
++ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
++ " moves:" + b.getPiece(move.getFrom()).moves
++ " " + value);
+else
+System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
++ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
++ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
++ " moves:" + b.getPiece(move.getFrom()).moves
++ " hasMoved:" + b.getPiece(move.getTo()).hasMoved()
++ " isKnown:" + b.getPiece(move.getTo()).isKnown()
++ " moves:" + b.getPiece(move.getTo()).moves
++ " " + value);
 System.out.println("----");
 
 		
@@ -397,8 +411,8 @@ System.out.println("----");
 				continue;
 			if (fp.getColor() != turn)
 				continue;
-			if (fp.getRank() == Rank.BOMB ||
-				fp.getRank() == Rank.FLAG)
+			Rank rank = fp.getRank();
+			if (rank == Rank.BOMB || rank == Rank.FLAG)
 				continue;
 				
 			for (int k=0;k<4;k++)
@@ -407,7 +421,7 @@ System.out.println("----");
 				if  (!b.isValid(t))
 					continue;
 				Piece tp = b.getPiece(t);
-				if (tp != null && tp.getColor() == fp.getColor())
+				if (tp != null && (tp.getColor() == fp.getColor() || rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
 					continue;
 
 				BMove tmpM = new BMove(i, t);
@@ -416,16 +430,39 @@ System.out.println("----");
 
 				int valueB = b.getValue();
 				b.move(tmpM, depth, false);
+/*
+if (n != 1)
+for (int ii=5; ii >= n; ii--)
+	System.out.print("  ");
+System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
++ " " + valueB + " " + b.getValue());
+*/
 				valueNMoves(b, n-1, alpha, beta);
 
 				int vm = b.getValue();
-
 				b.undo(fp, i, tp, t, valueB);
 /*
 for (int ii=5; ii >= n; ii--)
 	System.out.print("  ");
-System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
+if (b.getPiece(tmpM.getTo()) == null)
+System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
++ " hasMoved:" + b.getPiece(tmpM.getFrom()).hasMoved()
++ " isKnown:" + b.getPiece(tmpM.getFrom()).isKnown()
++ " moves:" + b.getPiece(tmpM.getFrom()).moves
++ " aiV:" + b.getPiece(tmpM.getFrom()).aiValue()
++ " " + vm);
+else
+System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
++ " hasMoved:" + b.getPiece(tmpM.getFrom()).hasMoved()
++ " isKnown:" + b.getPiece(tmpM.getFrom()).isKnown()
++ " moves:" + b.getPiece(tmpM.getFrom()).moves
++ " hasMoved:" + b.getPiece(tmpM.getTo()).hasMoved()
++ " isKnown:" + b.getPiece(tmpM.getTo()).isKnown()
++ " moves:" + b.getPiece(tmpM.getTo()).moves
++ " aiV:" + b.getPiece(tmpM.getTo()).aiValue()
++ " " + vm);
 */
+
 
 
 				if (vm > alpha && turn == Settings.topColor)

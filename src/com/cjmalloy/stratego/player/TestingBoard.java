@@ -72,7 +72,7 @@ public class TestingBoard extends Board
 					else
 						np.setAiValue(-aiValue(p.getRank()));
 					int r = p.getRank().toInt();
-					if (r == 0)
+					if (r == 0 || r > 10)
 						continue;
 					if (p.isKnown())
 						knownRank[p.getColor()][r-1]++;
@@ -89,7 +89,7 @@ public class TestingBoard extends Board
 		for (int i=0;i<getTraySize();i++) {
 			Piece p = getTrayPiece(i);
 			int r = p.getRank().toInt();
-			if (r == 0)
+			if (r == 0 || r > 10)
 				continue;
 			knownRank[p.getColor()][r-1]++;
 		}
@@ -144,31 +144,19 @@ public class TestingBoard extends Board
 			}
 			recentMoves.add(m);
 		} else { // attack
-			if (!fp.isKnown() && fp.getColor() == Settings.topColor
-				&& tp.isKnown() && depth != 0) {
-				// unknown ai piece at depth has bluffing value
-				int result = fp.getRank().winFight(tp.getRank());
-				if (result == -1) {	// even
-					setPiece(null, m.getTo());
-					value += fp.aiValue() + tp.aiValue();
-				} else if (result == 0) // lost
-					value += 10; //bluffing value
-				else {	// won
-					setPiece(fp, m.getTo()); // won
-					value += tp.aiValue();
-				}
-			} else if ((fp.isKnown() || fp.getColor() == Settings.topColor)
-				&& tp.isKnown()) {
+			if ((fp.isKnown() || fp.getColor() == Settings.topColor)
+				&& (tp.isKnown() || tp.getColor() == Settings.topColor)) {
 				// known attacker and defender
 				int result = fp.getRank().winFight(tp.getRank());
 				if (result == -1) {	// even
 					setPiece(null, m.getTo());
 					value += fp.aiValue() + tp.aiValue();
-				} else if (result == 0) // lost
+				} else if (result == 0) { // lost
 					value += fp.aiValue();
-				else {	// won
+				} else {	// won
+					if (tp.isKnown() || tp.hasMoved())
+						value += tp.aiValue();
 					setPiece(fp, m.getTo()); // won
-					value += tp.aiValue();
 				}
 			} else {
 				// unknown attacker or defender
@@ -190,7 +178,7 @@ public class TestingBoard extends Board
 						// tp stays on board
 						value += fp.aiValue();
 					} else {
-						aiUnknownValue(fp, tp, m.getTo());
+						aiUnknownValue(fp, tp, m.getTo(), depth);
 					}
 				} else if ((fp.isKnown() || fp.getColor() == Settings.topColor) && tp.hasMoved()) {
 					// attacker is known and defender has moved
@@ -198,16 +186,17 @@ public class TestingBoard extends Board
 						value += tp.aiValue();
 						setPiece(fp, m.getTo()); // won
 					} else {
-						aiUnknownValue(fp, tp, m.getTo());
+						aiUnknownValue(fp, tp, m.getTo(), depth);
 					}
 				} else {
 					// nothing is known about target.
 					// attacker is just guessing.
-					aiUnknownValue(fp, tp, m.getTo());
+					aiUnknownValue(fp, tp, m.getTo(), depth);
 				}
 			} // unknown attacker or defender
 
-			value -= depth;	// prefer early attacks
+			if (fp.getColor() == Settings.topColor)
+				value -= depth;	// prefer early attacks
 			return true;
 
 		} // else attack
@@ -227,7 +216,7 @@ public class TestingBoard extends Board
 	// Value given to discovering an unknown piece.
 	// Discovery of these pieces is the primary driver of the heuristic,
 	// as it leads to discovery of the flag.
-	private void aiUnknownValue(Piece fp, Piece tp, int to)
+	private void aiUnknownValue(Piece fp, Piece tp, int to, int depth)
 	{
 /*
 		if (fp.getRank() != Rank.EIGHT) {
@@ -235,33 +224,47 @@ public class TestingBoard extends Board
 			setPiece(null, m.getTo()); // maybe even
 		}
 */
-		// If the piece has moved little assume a win.
-		// This deters new movement of pieces near opp. pieces.
-		// SPY almost always loses against unknown piece
-		int lossValue;
-		if (tp.moves != 0 && tp.moves <= Settings.aiLevel / 2 && fp.getRank() != Rank.SPY) {
-			lossValue = 0;
-			setPiece(fp, to);	// win
-		} else {
-			lossValue = fp.aiValue();
-			setPiece(null, to);	// loss
-		}
+		// If the defending piece has not yet moved
+		// but we are evaluating moves for it,
+		// assume that the defending piece loses.
+		// This deters new movement of pieces near opp. pieces,	
+		// which makes them easy to capture.
 
-		// Add in fp.moves to prevent stalling
-		// and create an unequal exchange
-		// (i.e. fp x tp is not the same as tp x fp because of fp.moves)
 		if (tp.getColor() == Settings.bottomColor) {
-			// ai is attacker
-			value += (fp.moves + (tp.aiValue() + lossValue)/3);
+			// ai is attacker (fp)
+			assert !tp.isKnown() : "tp is known"; // defender (tp) is unknown
+			value += (tp.aiValue() + fp.aiValue()) / 3;
+			if (!tp.hasMoved()) {
+				// Add in fp.moves to prevent stalling
+				value += fp.moves;
+				// assume lost
+				// "from" square already cleared on board
+			} else if (depth != 0 && fp.moves == 1 && !fp.isKnown()) {
+				// "from" square already cleared on board
+				value += 10;	// bluffing value
+				setPiece(null, to);	// assume even
+			}
+				// else assume lost
+				// "from" square already cleared on board
 		} else {
 			// ai is defender (tp)
-			int gainValue;
-			if (tp.isKnown())
-				gainValue = tp.aiValue();
+			assert !fp.isKnown() : "fp is known"; // defender (fp) is unknown
+
+			if (!tp.hasMoved() && tp.moves == 0 && !tp.isKnown())
+				value += (fp.aiValue()) / 3;
 			else
-				gainValue = -aiValue(Rank.UNKNOWN);
-				
-			value += (-fp.moves + (gainValue + lossValue)/3);
+				value += (tp.aiValue() + fp.aiValue()) / 3;
+
+			if (!fp.hasMoved() && !fp.isKnown()) {
+				// Add in tp.moves to prevent stalling
+				value += tp.moves;
+				// attacker loses
+				// "from" square already cleared on board
+			} else if ((tp.hasMoved() || tp.moves != 0) && !tp.isKnown()) {
+				// bluffing value
+				value += 10;
+			} else
+				setPiece(null, to);	// even
 		}
 	}
 

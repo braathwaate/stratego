@@ -33,6 +33,17 @@ public class Board
 			return id;
 		}
 	}
+
+        protected class UndoMove
+        {
+                public Piece fp = null;
+                public Piece tp = null;
+                public int from = 0;
+                public int to = 0;
+        }
+
+        public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
+
 	
 	public static final int RED  = 0;
 	public static final int BLUE = 1;
@@ -132,10 +143,21 @@ public class Board
 	// TRUE if valid attack
 	public boolean attack(BMove m)
 	{
+		Piece fp = getPiece(m.getFrom());
+		Piece tp = getPiece(m.getTo());
+		UndoMove undo = new UndoMove();
+		if (tp != null)
+			undo.tp = new Piece(UniqueID.get(), tp);
+		else
+			undo.tp = null;
+		undo.fp = new Piece(UniqueID.get(), fp);
+		undo.from = m.getFrom();
+		undo.to = m.getTo();
+
 		if (validAttack(m))
 		{
-			Piece fp = getPiece(m.getFrom());
-			Piece tp = getPiece(m.getTo());
+			undoList.add(undo);
+
 			setShown(fp, true);
 			fp.setKnown(true);
 			tp.setKnown(true);
@@ -314,6 +336,13 @@ public class Board
 			Piece fp = getPiece(m.getFrom());
 			recentMoves.add(m);
 			
+			UndoMove undo = new UndoMove();
+			undo.tp = null;
+			undo.fp = new Piece(UniqueID.get(), fp);
+			undo.from = m.getFrom();
+			undo.to = m.getTo();
+			undoList.add(undo);
+
 			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
 			fp.setMoved(true);
@@ -352,7 +381,31 @@ public class Board
 			return false;
 		return m.equals(recentMoves.get(size-4));
 	}
-	
+
+	public void undoLastMove()
+	{
+		int size = undoList.size();
+		if (size < 2)
+			return;
+		for (int j = 0; j < 2; j++, size--) {
+			UndoMove undo = undoList.get(size-1);
+			Piece p = getPiece(undo.to);
+			setPiece(undo.fp, undo.from);
+			setPiece(undo.tp, undo.to);
+			if (undo.tp == null)
+				recentMoves.remove(recentMoves.size()-1);
+			else {
+				if (p == null) {
+					tray.remove(tray.size()-1);
+					tray.remove(tray.size()-1);
+				} else
+					tray.remove(tray.size()-1);
+			}
+			undoList.remove(size - 1);
+		}
+	}
+
+
 	private void scoutLose(BMove m)
 	{
 		Spot tmp = getScoutLooseFrom(m);
@@ -394,6 +447,7 @@ public class Board
 		
 
 		Piece tmp = getPiece(m.getTo());
+
 		setPiece(null, m.getTo());
 		
 		boolean valid = validMove(m);

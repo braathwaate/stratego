@@ -39,31 +39,7 @@ public enum Rank
 
 	public int toInt()
 	{
-		switch (this)
-		{
-		case ONE:
-			return 1;
-		case TWO:
-			return 2;
-		case THREE:
-			return 3;
-		case FOUR:
-			return 4;
-		case FIVE:
-			return 5;
-		case SIX:
-			return 6;
-		case SEVEN:
-			return 7;
-		case EIGHT:
-			return 8;
-		case NINE:
-			return 9;
-		case SPY:
-			return 10;
-		default:
-			return 0;
-		}
+		return ordinal();
 	}
 	
 	public static int getRanks(int i)

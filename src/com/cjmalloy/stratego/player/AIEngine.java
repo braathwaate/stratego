@@ -45,6 +45,12 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	
 	public void play()
 	{
+                if (status == Status.PLAYING) {
+                        board.undoLastMove();
+                        update();
+			return;
+                }
+
 		if (status != Status.SETUP)
 			return;
 		
