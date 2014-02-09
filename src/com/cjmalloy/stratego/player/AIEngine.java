@@ -56,6 +56,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		
 		if (board.getTraySize() == 0)
 		{
+			view.setUndoMode();
 			status = Status.PLAYING;
 			if (turn!=Settings.bottomColor)
 				requestCompMove();
@@ -122,6 +123,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 			//AI trapped
 			status = Status.STOPPED;
 			board.showAll();
+			view.setPlayMode();
 			view.gameOver(Settings.bottomColor);
 			return;
 		}
@@ -144,6 +146,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	@Override
 	protected void gameOver(int winner)
 	{
+		view.setPlayMode();
 		view.gameOver(winner);
 	}
 

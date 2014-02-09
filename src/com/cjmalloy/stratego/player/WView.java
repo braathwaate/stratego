@@ -61,6 +61,7 @@ public class WView implements MoveListener
 	private JButton settingsButton = null;
 	private JButton helpButton = null;
 	private JButton playButton = null;
+	private JButton undoButton = null;
 
 	protected PieceButton grid[][] = new PieceButton[10][10];
 	protected PieceButton trayComp[] = new PieceButton[40];
@@ -138,7 +139,21 @@ public class WView implements MoveListener
 		
 		getJFrame().repaint();
 	}
-	
+
+	public void setPlayMode()
+	{
+		jMenuBar.remove(5);
+		jMenuBar.add(getPlayButton());
+		jMenuBar.revalidate();
+	}
+
+	public void setUndoMode()
+	{
+		jMenuBar.remove(5);
+		jMenuBar.add(getUndoButton());
+		jMenuBar.revalidate();
+	}
+
 	private void updateTray()
 	{
 		for (int j=0;j<40;j++)
@@ -252,6 +267,7 @@ public class WView implements MoveListener
 		newGameButton.setIcon(skin.scaledNewGameIcon);
 		helpButton.setIcon(skin.scaledHelpIcon);
 		playButton.setIcon(skin.scaledPlayIcon);
+		getUndoButton().setIcon(skin.scaledUndoIcon);
 	}
 	
 	private void paintBack(Graphics g)
@@ -326,6 +342,8 @@ public class WView implements MoveListener
 		}
 
 		if (warn()) return;
+
+		setPlayMode();
 		
 		if (clientMode)
 		{
@@ -703,6 +721,26 @@ public class WView implements MoveListener
 			});
 		}
 		return playButton;
+	}
+
+	private JButton getUndoButton()
+	{
+		if (undoButton == null)
+		{
+			undoButton = new JButton();
+			undoButton.setText("Undo");
+			undoButton.setFocusable(false);
+			if (!skin.bgColor.equals(Color.white))
+				undoButton.setBackground(skin.bgColor);
+			undoButton.addActionListener(new ActionListener()
+			{
+				public void actionPerformed(ActionEvent e)
+				{
+					play();
+				}
+			});
+		}
+		return undoButton;
 	}
 }
 

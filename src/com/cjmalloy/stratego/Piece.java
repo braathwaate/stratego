@@ -50,6 +50,14 @@ public class Piece implements Comparable<Piece>
 		shown = p.shown;
 	}
 
+	public void clear()
+	{
+		moved = false;
+		moves = 0;
+		known = false;
+		shown = false;
+	}
+
 	public void setUnknownRank()
 	{
 		rank = Rank.UNKNOWN;

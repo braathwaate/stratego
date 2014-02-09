@@ -51,7 +51,7 @@ public class AI implements Runnable
 	private Semaphore bLock = new Semaphore(1);
 	private static TestingBoard tmpB = null;
 	private int turnF = 0;
-	private static int[] dir = { -12, -1,  1, 12 };
+	private static int[] dir = { -11, -1,  1, 11 };
 
 	private Thread threads[] = new Thread[160];
 	private int threadc = 0;
@@ -246,13 +246,13 @@ public class AI implements Runnable
 		int alpha = -9999;
 		int beta = 9999;
 
-		for (int j=13;j<=131;j++)
+		for (int j=12;j<=120;j++)
 		{
 			// order the move evaluation to consider
 			// the pieces furthest down the board first because
 			// already moved pieces have the highest scores.
 			// This results in the most alpha-beta pruning.
-			int i = 144 - j;
+			int i = 132 - j;
 
 			Piece fp = b.getPiece(i);
 			if (fp == null)
@@ -394,7 +394,7 @@ System.out.println("----");
 
 		int depth = Settings.aiLevel - n;
 		
-		for (int j=13;j<=131;j++)
+		for (int j=12;j<=120;j++)
 		{
 			// order the move evaluation to consider
 			// the pieces furthest down the board first because
@@ -402,7 +402,7 @@ System.out.println("----");
 			// This results in the most alpha-beta pruning.
 			int i;
 			if (turn == Settings.topColor)
-				i = 144 - j;
+				i = 132 - j;
 			else
 				i = j;
 
@@ -421,8 +421,21 @@ System.out.println("----");
 				if  (!b.isValid(t))
 					continue;
 				Piece tp = b.getPiece(t);
-				if (tp != null && (tp.getColor() == fp.getColor() || rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
-					continue;
+
+				// skip collisions with pieces of same color
+				// or pieces other than eights sacrificing
+				// themselves on known bombs.
+				if (tp != null && (tp.getColor() == fp.getColor()
+					|| rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
+						continue;
+
+				int vm = 0;
+				// we don't actually know if unknown unmoved pieces
+				// can or will move, but usually we don't care
+				// unless they attack on their first move
+				if (tp == null && rank == Rank.UNKNOWN && !fp.hasMoved())
+					vm = b.getValue() + b.aiMovedValue(fp);
+				else {
 
 				BMove tmpM = new BMove(i, t);
 				if (b.isRecentMove(tmpM))
@@ -439,7 +452,7 @@ System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM
 */
 				valueNMoves(b, n-1, alpha, beta);
 
-				int vm = b.getValue();
+				vm = b.getValue();
 				b.undo(fp, i, tp, t, valueB);
 /*
 for (int ii=5; ii >= n; ii--)
@@ -463,7 +476,7 @@ System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM
 + " " + vm);
 */
 
-
+				}
 
 				if (vm > alpha && turn == Settings.topColor)
 				{

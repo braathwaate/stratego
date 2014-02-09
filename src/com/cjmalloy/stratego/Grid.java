@@ -25,7 +25,7 @@ public class Grid
 	// board with illegal squares
 	// so that illegal moves are easily discarded
 
-private Piece[] grid = new Piece[144];
+private Piece[] grid = new Piece[132];
 private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
 
 protected static class UniqueID
@@ -51,13 +51,11 @@ protected static class UniqueID
 		setPiece(6,5,water);
 		setPiece(7,5,water);
 
-		for (int i = 0; i < 12; i++)
+		for (int i = 0; i < 11; i++)
 			setPiece(i,water);
-		for (int i = 0; i < 144; i+=12)
+		for (int i = 0; i < 132; i+=11)
 			setPiece(i,water);
-		for (int i = 11; i < 144; i+=12)
-			setPiece(i,water);
-		for (int i = 132; i < 144; i++)
+		for (int i = 121; i < 132; i++)
 			setPiece(i,water);
 	}
 
@@ -79,7 +77,7 @@ protected static class UniqueID
 
 	public int getIndex(int x, int y)
 	{
-		return x + 1 + (y+1) * 12;
+		return x + 1 + (y+1) * 11;
 	}
 
 	public void setPiece(int i, Piece p) 
@@ -94,7 +92,7 @@ protected static class UniqueID
 
 	public void clear()
 	{
-		for (int i=0;i<144;i++) {
+		for (int i=0;i<132;i++) {
 			if (grid[i] != null && grid[i] != water)
 			{
 				grid[i] = null;

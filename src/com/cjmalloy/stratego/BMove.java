@@ -31,8 +31,8 @@ public class BMove
 
 	public BMove(Spot f, Spot t)
 	{
-		from = f.getX() + 1 + (f.getY() + 1) * 12 ;
-		to = t.getX() + 1 + (t.getY() + 1) * 12 ;
+		from = f.getX() + 1 + (f.getY() + 1) * 11 ;
+		to = t.getX() + 1 + (t.getY() + 1) * 11 ;
 	}
 
 	public int getFrom()
@@ -47,22 +47,22 @@ public class BMove
 
 	public int getFromX()
 	{
-		return from % 12 - 1;
+		return from % 11 - 1;
 	}
 
 	public int getFromY()
 	{
-		return from / 12 - 1;
+		return from / 11 - 1;
 	}
 	
 	public int getToX()
 	{
-		return to % 12 - 1;
+		return to % 11 - 1;
 	}
 
 	public int getToY()
 	{
-		return to / 12 - 1;
+		return to / 11 - 1;
 	}
 
 	public boolean equals(Object m)

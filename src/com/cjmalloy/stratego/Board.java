@@ -161,6 +161,8 @@ public class Board
 			setShown(fp, true);
 			fp.setKnown(true);
 			tp.setKnown(true);
+			fp.setMoved(true);
+			fp.moves++;
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				setShown(tp, true);
 			}
@@ -245,16 +247,15 @@ public class Board
 		grid.clear();
 
 		tray.clear();
+		// put all the pieces in the tray
 		tray.addAll(red);
 		tray.addAll(blue);
 
 		Collections.sort(tray);
-		
-		for (Piece p: tray) {
-			p.setShown(false);
-			p.setKnown(false);
-			p.setMoved(false);
-		}
+
+		// clear all the dynamic piece data
+		for (Piece p: tray)
+			p.clear();
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -403,6 +404,7 @@ public class Board
 			}
 			undoList.remove(size - 1);
 		}
+		Collections.sort(tray);
 	}
 
 

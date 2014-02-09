@@ -85,6 +85,7 @@ public class Skin
 	private Image settingsIcon = null;
 	private Image helpIcon = null;
 	private Image playIcon = null;
+	private Image undoIcon = null;
 	private Image openIcon = null;
 	private Image saveIcon = null;
 	private Image saveAsIcon = null;
@@ -95,6 +96,7 @@ public class Skin
 	public ImageIcon scaledSettingsIcon = null;
 	public ImageIcon scaledHelpIcon = null;
 	public ImageIcon scaledPlayIcon = null;
+	public ImageIcon scaledUndoIcon = null;
 	public ImageIcon scaledOpenIcon = null;
 	public ImageIcon scaledSaveIcon = null;
 	public ImageIcon scaledSaveAsIcon = null;
@@ -152,6 +154,7 @@ public class Skin
 			scaledSettingsIcon = scale(settingsIcon, w, h);
 			scaledHelpIcon = scale(helpIcon, w, h);
 			scaledPlayIcon = scale(playIcon, w, h);
+			scaledUndoIcon = scale(undoIcon, w, h);
 			scaledOpenIcon = scale(openIcon, w, h);
 			scaledSaveIcon = scale(saveIcon, w, h);
 			scaledSaveAsIcon = scale(saveAsIcon, w, h);
@@ -392,6 +395,8 @@ public class Skin
 					twoPlayerIcon = ImageIO.read(zf.getInputStream(zf.getEntry(value.next().trim())));
 				else if (s.equalsIgnoreCase("Play"))
 					playIcon = ImageIO.read(zf.getInputStream(zf.getEntry(value.next().trim())));
+				else if (s.equalsIgnoreCase("Undo"))
+					undoIcon = ImageIO.read(zf.getInputStream(zf.getEntry(value.next().trim())));
 				else if (s.equalsIgnoreCase("Open"))
 					openIcon = ImageIO.read(zf.getInputStream(zf.getEntry(value.next().trim())));
 				else if (s.equalsIgnoreCase("Save"))
@@ -571,6 +576,11 @@ public class Skin
 		{
 			in = this.getClass().getResource("/images/play.png"); 
 			playIcon = ImageIO.read(in);
+		}
+		if (undoIcon == null)
+		{
+			in = this.getClass().getResource("/images/undo.png"); 
+			undoIcon = ImageIO.read(in);
 		}
 		if (openIcon == null)
 		{
