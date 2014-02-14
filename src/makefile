@@ -1,5 +1,5 @@
 PKG=com/cjmalloy/stratego
-VER=stratego_v0.1.jar
+VER=stratego_v0.1.0.jar
 
 all: $(VER) 
 
@@ -11,6 +11,7 @@ foo:
 
 $(VER): foo
 	jar cfm $(VER) Manifest.txt images $(PKG)/*.class $(PKG)/player/*.class $(PKG)/server/shared/*.class $(PKG)/resource
+	chmod +x $(VER)
 
 clean:
 	rm -f $(VER)
