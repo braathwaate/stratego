@@ -19,8 +19,13 @@ package com.cjmalloy.stratego;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.concurrent.locks.ReentrantLock;
 
 
+//
+// The board class contains all the factual information
+// about the current and historical position
+//
 public class Board
 {
 	protected static class UniqueID
@@ -42,6 +47,7 @@ public class Board
                 public int to = 0;
         }
 
+	public static ReentrantLock bLock = new ReentrantLock();
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
 
 	
@@ -54,6 +60,12 @@ public class Board
 	protected ArrayList<Piece> red = new ArrayList<Piece>();
 	protected ArrayList<Piece> blue = new ArrayList<Piece>();
 	protected ArrayList<BMove> recentMoves = new ArrayList<BMove>();
+	// setup contains the original locations of Pieces
+	// as they are discovered.
+	// this is used to guess flags and other bombs
+	// TBD: try to guess the opponents entire setup by
+	// correllating against all setups in the database
+	protected Rank[] setup = new Rank[121];
 	
 	public Board()
 	{
@@ -143,19 +155,16 @@ public class Board
 	// TRUE if valid attack
 	public boolean attack(BMove m)
 	{
-		Piece fp = getPiece(m.getFrom());
-		Piece tp = getPiece(m.getTo());
-		UndoMove undo = new UndoMove();
-		if (tp != null)
-			undo.tp = new Piece(UniqueID.get(), tp);
-		else
-			undo.tp = null;
-		undo.fp = new Piece(UniqueID.get(), fp);
-		undo.from = m.getFrom();
-		undo.to = m.getTo();
-
 		if (validAttack(m))
 		{
+			Piece fp = getPiece(m.getFrom());
+			Piece tp = getPiece(m.getTo());
+			UndoMove undo = new UndoMove();
+			undo.tp = new Piece(tp);
+			undo.fp = new Piece(fp);
+			undo.from = m.getFrom();
+			undo.to = m.getTo();
+
 			undoList.add(undo);
 
 			setShown(fp, true);
@@ -166,6 +175,11 @@ public class Board
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				setShown(tp, true);
 			}
+
+			// TBD: store original setup location
+			// after each discovery
+			if (tp.getRank() == Rank.BOMB)
+				setup[m.getTo()] = Rank.BOMB;
 			
 			int result = fp.getRank().winFight(tp.getRank());
 			if (result == 1)
@@ -256,6 +270,12 @@ public class Board
 		// clear all the dynamic piece data
 		for (Piece p: tray)
 			p.clear();
+
+		recentMoves.clear();
+		undoList.clear();
+
+		for (int i = 11; i <=120; i++)
+			setup[i] = Rank.UNKNOWN;
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -332,6 +352,9 @@ public class Board
 	
 	public boolean move(BMove m)
 	{
+		if (getPiece(m.getTo()) != null)
+			return false;
+
 		if (validMove(m))
 		{
 			Piece fp = getPiece(m.getFrom());
@@ -339,7 +362,7 @@ public class Board
 			
 			UndoMove undo = new UndoMove();
 			undo.tp = null;
-			undo.fp = new Piece(UniqueID.get(), fp);
+			undo.fp = new Piece(fp);
 			undo.from = m.getFrom();
 			undo.to = m.getTo();
 			undoList.add(undo);
@@ -390,17 +413,19 @@ public class Board
 			return;
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
-			Piece p = getPiece(undo.to);
+			Piece tp = getPiece(undo.to);
 			setPiece(undo.fp, undo.from);
 			setPiece(undo.tp, undo.to);
 			if (undo.tp == null)
 				recentMoves.remove(recentMoves.size()-1);
 			else {
-				if (p == null) {
-					tray.remove(tray.size()-1);
-					tray.remove(tray.size()-1);
-				} else
-					tray.remove(tray.size()-1);
+				if (tp == null) {
+					tray.remove(tray.indexOf(undo.tp));
+					tray.remove(tray.indexOf(undo.fp));
+				} else if (tp.equals(undo.tp))
+					tray.remove(tray.indexOf(undo.fp));
+				else
+					tray.remove(tray.indexOf(undo.tp));
 			}
 			undoList.remove(size - 1);
 		}
@@ -450,22 +475,14 @@ public class Board
 
 		Piece tmp = getPiece(m.getTo());
 
-		setPiece(null, m.getTo());
-		
-		boolean valid = validMove(m);
-		setPiece(tmp, m.getTo());
-		
-		return valid;
-
+		return validMove(m);
 	}
 
-	// TRUE if piece moves to legal and unoccupied square
+	// TRUE if piece moves to legal square
 	public boolean validMove(BMove m)
 	{
 		if (m.getToX()<0||m.getToX()>9||
 			m.getToY()<0||m.getToY()>9)
-			return false;
-		if (getPiece(m.getTo()) != null)
 			return false;
 		Piece fp = getPiece(m.getFrom());
 		if (fp == null)

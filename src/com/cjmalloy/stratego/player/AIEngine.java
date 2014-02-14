@@ -115,9 +115,6 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		if (turn == Settings.bottomColor)
 			return;
 
-		if (m.getPiece().getColor() == Settings.bottomColor)
-			return; // shoulden't happen anyway
-		
 		if (m==null || m.getPiece()==null)
 		{
 			//AI trapped
@@ -128,6 +125,9 @@ public class AIEngine extends Engine implements CompControls, UserControls
 			return;
 		}
 
+		assert m.getPiece().getColor() != Settings.bottomColor
+			: "piece is bottom color?";
+		
 		requestMove(m);
 
 		if (turn != Settings.bottomColor) {

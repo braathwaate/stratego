@@ -26,6 +26,7 @@ public class Grid
 	// so that illegal moves are easily discarded
 
 private Piece[] grid = new Piece[132];
+private static int validIndex[] = new int[92];
 private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
 
 protected static class UniqueID
@@ -57,6 +58,10 @@ protected static class UniqueID
 			setPiece(i,water);
 		for (int i = 121; i < 132; i++)
 			setPiece(i,water);
+		int j = 0;
+		for (int i = 11; i <=120; i++)
+			if (isValid(i))
+				validIndex[j++] = i;
 	}
 
 	public boolean isValid(int i)
@@ -68,6 +73,21 @@ protected static class UniqueID
 	public Piece getPiece(int i) 
 	{
 		return grid[i];
+	}
+
+	static public int getValidIndex(int i) 
+	{
+		return validIndex[i];
+	}
+
+	static public int getX(int i)
+	{
+		return i % 11 - 1;
+	}
+
+	static public int getY(int i)
+	{
+		return i / 11 - 1;
 	}
 
 	public Piece getPiece(int x, int y) 

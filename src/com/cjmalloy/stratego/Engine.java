@@ -66,7 +66,6 @@ public abstract class Engine
 				}
 			}
 
-
 			if (board.attack(m))
 				return true;
 	

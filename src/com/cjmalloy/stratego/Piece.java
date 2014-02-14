@@ -39,9 +39,9 @@ public class Piece implements Comparable<Piece>
 		rank = r;
 	}
 
-	public Piece(int id, Piece p) 
+	public Piece(Piece p) 
 	{
-		uniqueID = id;
+		uniqueID = p.uniqueID;
 		color = p.color;
 		moved = p.moved;
 		moves = p.moves;
