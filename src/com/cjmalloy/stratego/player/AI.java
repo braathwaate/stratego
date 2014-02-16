@@ -188,7 +188,7 @@ public class AI implements Runnable
                 try
                 {
 	
-			bestMove = getBestMove(board, Settings.aiLevel);
+			bestMove = getBestMove(new TestingBoard(board), Settings.aiLevel);
 		}
 		finally
 		{
@@ -228,12 +228,12 @@ public class AI implements Runnable
 		and ultimately the flag and its defences.
 */
 
-	private Move getBestMove(Board b, int n)
+	private Move getBestMove(TestingBoard b, int n)
 	{
 		BMove move = null;
 		BMove tmpM = null;
 		ArrayList<BMove> moveList = new ArrayList<BMove>();
-		ArrayList<TestingBoard> boardList = new ArrayList<TestingBoard>();
+		ArrayList<Integer> valueList = new ArrayList<Integer>();
 		
 		if (n%2==0)
 			turnF = 0;
@@ -289,33 +289,24 @@ public class AI implements Runnable
 					if (b.isRecentMove(tmpM))
 						break;
 
-					// a new TestingBoard is required for each move
-					// because evaluation changes piece data
-					TestingBoard tmpB = new TestingBoard(b);
-					tmpB.move(tmpM, 0, scoutFarMove);
+					int valueB = b.getValue();
+					b.move(tmpM, 0, scoutFarMove);
 
+
+					valueNMoves(b, n-1, alpha, beta); 
+					// valueNMoves(b, n-1, -9999, 9999); 
+System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
+
+					int vm = b.getValue();
 					moveList.add(tmpM);
-					// store the board pointer rather
-					// than the value because we might
-					// be using threads to eval values.
-					boardList.add(tmpB);
+					valueList.add(vm);
 
-					// do not access tmpB after this point
-					// if we are using threads
+					b.undo(fp, i, tp, t, valueB);
 
-					// threaded
-					// threadValueNMoves(tmpB, n-1, alpha, beta); 
-					// end of threaded
-
-					// not threaded
-					valueNMoves(tmpB, n-1, alpha, beta); 
-					// valueNMoves(tmpB, n-1, -9999, 9999); 
-System.out.println(n + " (" + b.getPiece(tmpM.getFrom()).getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + tmpB.getValue());
-					if (tmpB.getValue() > alpha)
+					if (vm > alpha)
 					{
-						alpha = tmpB.getValue();
+						alpha = vm;
 					}
-					// end of not threaded
 
 					if (fp.getRank() != Rank.NINE || tp != null)
 						break;
@@ -328,8 +319,7 @@ System.out.println(n + " (" + b.getPiece(tmpM.getFrom()).getRank() + ") " + tmpM
 
 		for (int i = 0; i < moveList.size(); i++) {
 			tmpM = moveList.get(i);
-			boardList.get(i).getValue();
-			int vm = boardList.get(i).getValue();
+			int vm = valueList.get(i);
 
 			if (vm > value)
 			{

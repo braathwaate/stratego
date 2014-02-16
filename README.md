@@ -1,7 +1,7 @@
 Download
 --------
 
-[Stratego 0.1.0][dl]
+[Stratego v0.1.0][dl]
 [dl]: https://github.com/braathwaate/stratego/releases/download/v.0.1.0/stratego_v0.1.0.jar
 
 Introduction

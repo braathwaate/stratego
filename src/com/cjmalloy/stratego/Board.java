@@ -66,6 +66,7 @@ public class Board
 	// TBD: try to guess the opponents entire setup by
 	// correllating against all setups in the database
 	protected Rank[] setup = new Rank[121];
+	protected static int[] dir = { -11, -1,  1, 11 };
 	
 	public Board()
 	{
@@ -159,21 +160,15 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			Piece tp = getPiece(m.getTo());
-			UndoMove undo = new UndoMove();
-			undo.tp = new Piece(tp);
-			undo.fp = new Piece(fp);
-			undo.from = m.getFrom();
-			undo.to = m.getTo();
+			moveHistory(fp, tp, m.getFrom(), m.getTo());
 
-			undoList.add(undo);
-
-			setShown(fp, true);
+			fp.setShown(true);
 			fp.setKnown(true);
 			tp.setKnown(true);
 			fp.setMoved(true);
 			fp.moves++;
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
-				setShown(tp, true);
+				tp.setShown(true);
 			}
 
 			// TBD: store original setup location
@@ -314,9 +309,9 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (grid.getPiece(i, j) != null)
-				setShown(grid.getPiece(i,j), true);
+				grid.getPiece(i,j).setShown(true);
 		for (Piece p: tray)
-			setShown(p, true);
+			p.setShown(true);
 	}
 	
 	public void hideAll()
@@ -324,7 +319,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (grid.getPiece(i, j) != null)
-				setShown(grid.getPiece(i,j), false);
+				grid.getPiece(i,j).setShown(false);
 
 		hideTray();
 	}
@@ -332,7 +327,7 @@ public class Board
 	public void hideTray()
 	{
 		for (Piece p: tray)
-			setShown(p, false);
+			p.setShown(false);
 	}
 	
 	protected void setPiece(Piece p, Spot s)
@@ -344,10 +339,61 @@ public class Board
 	{
 		grid.setPiece(i, p);
 	}
-	
-	protected void setShown(Piece p, boolean b)
+
+	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		p.setShown(b);	// make piece visible
+		UndoMove undo = new UndoMove();
+		undo.tp = tp;
+		undo.fp = new Piece(fp);
+		undo.from = from;
+		undo.to = to;
+		undoList.add(undo);
+
+		// Acting rank is a historical property of the known
+		// opponent piece ranks that a moved piece was adjacent to.
+		//
+		// If it moves next to a known opponent piece, 
+		// it inherits an acting rank of a equal to or lower than the
+		// known piece.
+		//
+		// If it moves away from a known opponent piece,
+		// it inherits an acting rank of a equal to or higher than the
+		// known piece.
+		//
+		// Acting rank is calculated factually, but is of
+		// questionable use in the heuristic because of bluffing.
+		//
+		for (int k = 0; k < 4; k++) {
+			int i = to + dir[k];
+			if (!isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p != null
+				&& p.getColor() != fp.getColor()
+				&& p.isKnown()) {
+				Rank rank = p.getRank();
+				Rank arank = fp.getActingRankLow();
+				if (arank == Rank.NIL
+				|| arank.toInt() > rank.toInt())
+					fp.setActingRankLow(rank);
+			}
+		}
+
+		for (int k = 0; k < 4; k++) {
+			int i = from + dir[k];
+			if (!isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p != null
+				&& p.getColor() != fp.getColor()
+				&& p.isKnown()) {
+				Rank rank = p.getRank();
+				Rank arank = fp.getActingRankHigh();
+				if (arank == Rank.NIL
+				|| arank.toInt() < rank.toInt())
+					fp.setActingRankHigh(rank);
+			}
+		}
 	}
 	
 	public boolean move(BMove m)
@@ -359,13 +405,7 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			recentMoves.add(m);
-			
-			UndoMove undo = new UndoMove();
-			undo.tp = null;
-			undo.fp = new Piece(fp);
-			undo.from = m.getFrom();
-			undo.to = m.getTo();
-			undoList.add(undo);
+			moveHistory(fp, null, m.getFrom(), m.getTo());
 
 			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
@@ -373,7 +413,7 @@ public class Board
 			fp.moves++;
 			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
 				Math.abs(m.getToY() - m.getFromY()) > 1)
-				setShown(fp, true);
+				fp.setShown(true);
 
 			return true;
 		}
@@ -398,6 +438,15 @@ public class Board
 		return remove(grid.getIndex(s.getX(), s.getY()));
 	}
 
+	// Three Moves on Two Squares: Two Square Rule.
+	//
+	// It is not allowed to move a piece more than 3
+	// times non-stop between the same two
+	// squares, regardless of what the opponent is doing.
+	//
+	// The restriction here is more strict.
+	// It prevents a piece from moving more than 2 times
+	// non-stop betwen the same two squares.
 	public boolean isRecentMove(BMove m)
 	{
 		int size = recentMoves.size();
@@ -405,6 +454,15 @@ public class Board
 			return false;
 		return m.equals(recentMoves.get(size-4));
 	}
+
+	// Repetition of Threatening Moves: More-Squares Rule
+	// It is not allowed to continuously chase one or
+	// more pieces of the opponent endlessly. The
+	// continuous chaser may not play a chasing
+	// move which would lead to a position on the
+	// board which has already taken place.
+	// TBD: need a transposition table
+	// TBD
 
 	public void undoLastMove()
 	{

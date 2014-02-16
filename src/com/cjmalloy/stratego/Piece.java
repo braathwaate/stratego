@@ -30,6 +30,9 @@ public class Piece implements Comparable<Piece>
 	private boolean moved = false;	// used by screen view thread so
 					// do not update by ai
 	private int value = 0;
+	private Rank actingRankHigh = Rank.NIL;
+	private Rank actingRankLow = Rank.NIL;
+	
 	public int moves = 0;	// times piece has moved
 
 	public Piece(int id, int c, Rank r) 
@@ -48,6 +51,8 @@ public class Piece implements Comparable<Piece>
 		rank = p.rank;
 		known = p.known;
 		shown = p.shown;
+		actingRankHigh = p.actingRankHigh;
+		actingRankLow = p.actingRankLow;
 	}
 
 	public void clear()
@@ -61,6 +66,12 @@ public class Piece implements Comparable<Piece>
 	public void setUnknownRank()
 	{
 		rank = Rank.UNKNOWN;
+	}
+
+	public void setPossibleBomb()
+	{
+		rank = Rank.BOMB;
+		value = -99;
 	}
 
 	public int getColor() 
@@ -116,6 +127,26 @@ public class Piece implements Comparable<Piece>
 	public int aiValue()
 	{
 		return value;
+	}
+
+	public Rank getActingRankLow()
+	{
+		return actingRankLow;
+	}
+
+	public void setActingRankLow(Rank r)
+	{
+		actingRankLow = r;
+	}
+
+	public Rank getActingRankHigh()
+	{
+		return actingRankHigh;
+	}
+
+	public void setActingRankHigh(Rank r)
+	{
+		actingRankHigh = r;
 	}
 
 	public int compareTo(Piece p)
