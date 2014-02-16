@@ -45,6 +45,13 @@ public class Board
                 public Piece tp = null;
                 public int from = 0;
                 public int to = 0;
+		UndoMove(Piece fpin, Piece tpin, int f, int t)
+		{
+			fp = fpin;
+			tp = tpin;
+			from = f;
+			to = t;
+		}
         }
 
 	public static ReentrantLock bLock = new ReentrantLock();
@@ -160,7 +167,7 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			Piece tp = getPiece(m.getTo());
-			moveHistory(fp, tp, m.getFrom(), m.getTo());
+			moveHistory(new Piece(fp), new Piece(tp), m.getFrom(), m.getTo());
 
 			fp.setShown(true);
 			fp.setKnown(true);
@@ -342,12 +349,7 @@ public class Board
 
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		UndoMove undo = new UndoMove();
-		undo.tp = tp;
-		undo.fp = new Piece(fp);
-		undo.from = from;
-		undo.to = to;
-		undoList.add(undo);
+		undoList.add(new UndoMove(fp, tp, from, to));
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -405,15 +407,18 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			recentMoves.add(m);
-			moveHistory(fp, null, m.getFrom(), m.getTo());
+			moveHistory(new Piece(fp), null, m.getFrom(), m.getTo());
 
 			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
 			fp.setMoved(true);
 			fp.moves++;
 			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
-				Math.abs(m.getToY() - m.getFromY()) > 1)
+				Math.abs(m.getToY() - m.getFromY()) > 1) {
+				//scouts reveal themselves by moving more than one place
 				fp.setShown(true);
+				fp.setKnown(true);
+			}
 
 			return true;
 		}
@@ -578,10 +583,7 @@ public class Board
 		if (x == tox)
 		{
 			if (Math.abs(y - toy) == 1)
-			{
-				p.setKnown(true); //scouts reveal themselves by moving more than one piece
 				return true;
-			}
 			if (y - toy > 0)
 				return validScoutMove(x, y - 1, tox, toy, p);
 			if (y - toy < 0)
@@ -590,10 +592,7 @@ public class Board
 		else if (y == toy)
 		{
 			if (Math.abs(x - tox) == 1)
-			{
-				p.setKnown(true);
 				return true;
-			}
 			if (x - tox > 0)
 				return validScoutMove(x - 1, y, tox, toy, p);
 			if (x - tox < 0)

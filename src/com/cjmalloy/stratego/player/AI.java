@@ -51,6 +51,14 @@ public class AI implements Runnable
 	private int turnF = 0;
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] movable = new int[92];
+	private class moveValuePair {
+		BMove move = null;
+		Integer value = 0;
+		moveValuePair(BMove m, Integer v) {
+			move = m;
+			value = v;
+		}
+	}
 
 	public AI(Board b, CompControls u) 
 	{
@@ -232,8 +240,7 @@ public class AI implements Runnable
 	{
 		BMove move = null;
 		BMove tmpM = null;
-		ArrayList<BMove> moveList = new ArrayList<BMove>();
-		ArrayList<Integer> valueList = new ArrayList<Integer>();
+		ArrayList<moveValuePair> moveList = new ArrayList<moveValuePair>();
 		
 		if (n%2==0)
 			turnF = 0;
@@ -298,9 +305,7 @@ public class AI implements Runnable
 System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
 
 					int vm = b.getValue();
-					moveList.add(tmpM);
-					valueList.add(vm);
-
+					moveList.add(new moveValuePair(tmpM, vm));
 					b.undo(fp, i, tp, t, valueB);
 
 					if (vm > alpha)
@@ -318,8 +323,9 @@ System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM
 			return null;	// ai trapped
 
 		for (int i = 0; i < moveList.size(); i++) {
-			tmpM = moveList.get(i);
-			int vm = valueList.get(i);
+			moveValuePair mvp = moveList.get(i);
+			tmpM = mvp.move;
+			int vm = mvp.value;
 
 			if (vm > value)
 			{
