@@ -19,7 +19,7 @@ package com.cjmalloy.stratego;
 
 public class Settings
 {
-	public static int aiLevel = 8;
+	public static int aiLevel = 1;
 	public static int topColor;
 	public static int bottomColor;
 	public static boolean bNoHideAll = true;

@@ -532,11 +532,11 @@ public class Board
 			return false;
 		if (getPiece(m.getFrom()) == null)
 			return false;
+		if (getPiece(m.getFrom()).getColor() ==
+			getPiece(m.getTo()).getColor())
+			return false;
 		if (getPiece(m.getTo()).getRank().equals(Rank.WATER))
 			return false;
-		
-
-		Piece tmp = getPiece(m.getTo());
 
 		return validMove(m);
 	}

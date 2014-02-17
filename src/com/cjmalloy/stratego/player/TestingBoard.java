@@ -79,11 +79,6 @@ public class TestingBoard extends Board
 					np.setUnknownRank();
 					Random rnd = new Random();
 					int v = aiValue(p.getColor(), Rank.UNKNOWN)
-						// unknown pieces are worth more on the back ranks
-						// because we need to find bombs around the flag
-						// note: *3 to outgain
-						// -depth early capture rule
-						+ (i/11-7) * 3
 						// discourage stalling
 						+ recentMoves.size()/10
 						// we add a random 1 point to the value so that
@@ -96,8 +91,14 @@ public class TestingBoard extends Board
 					// especially if it has Acting Rank,
 					// so we don't gain as much
 					// by discovering it.
-						
-					if (p.hasMoved())
+
+					// unknown pieces are worth more on the back ranks
+					// because we need to find bombs around the flag
+					// note: *3 to outgain
+					// -depth early capture rule
+					if (!p.hasMoved())
+						v += (i/11-7) * 3;
+					else
 						v /= 2;
 					np.setAiValue(v);
 			 	} else {
@@ -256,12 +257,15 @@ public class TestingBoard extends Board
 		return (trayRank[color][rank-1] != Rank.getRanks(rank-1));
 	}
 
+	// set the flag value higher than a bomb
+	// so that a miner that removes a bomb to get at the flag
+	// will attack the flag rather than another bomb
 	private void genDestFlag(int i)
 	{
 		Piece p = getPiece(i);
 		if (p != null && !p.isKnown() && !p.hasMoved()) {
 			if (p.getColor() == Settings.bottomColor)
-				p.setAiValue(p.aiValue() + 4);
+				p.setAiValue(120);
 			// hmmm, currently we are not able to change
 			// unknown values for ai pieces
 			// else
@@ -318,6 +322,7 @@ public class TestingBoard extends Board
 	// initially all bombs are worthless (-99)
 	private void valueBombs()
 	{
+		// remove bombs that block the lanes
 		int [][] frontPattern = { { 78, 79 }, {90, 79}, {82, 83}, {86, 87}, {86, 98} };
 		for (int i = 0; i < 5; i++) {
 			Piece p1 = getPiece(frontPattern[i][0]);
@@ -330,10 +335,12 @@ public class TestingBoard extends Board
 				genDestTmp(p2.getColor(), frontPattern[i][1], -1);
 				genDestValue(1-p2.getColor(), 8);
 				p2.setAiValue(100);
-				neededRank[1-p2.getColor()][7] = true;
+				if (movedRank[1-p2.getColor()][7] == 0)
+					neededRank[1-p2.getColor()][7] = true;
 			}
 		}
-			
+		
+		// remove bombs that surround a possible back row flag
 		for (int i = 111; i<= 120; i++) {
 			Piece tp = getPiece(i);
 			if (tp != null && !tp.isKnown()) {
@@ -357,10 +364,18 @@ public class TestingBoard extends Board
 						continue;
 					Piece p = getPiece(j);
 					if (p.getRank() == Rank.BOMB) {
-						genDestTmp(p.getColor(), j, -1);
-						genDestValue(1-p.getColor(), 8);
 						p.setAiValue(100);
-						neededRank[1-p.getColor()][7] = true;
+						genDestTmp(p.getColor(), j, -1);
+						// send a miner
+						genDestValue(1-p.getColor(), 8);
+						if (movedRank[1-p.getColor()][7] == 0)
+							neededRank[1-p.getColor()][7] = true;
+						// send a low ranked piece for protection
+						for (int r = 1; r < 8; r++)
+							if (rankAtLarge(1-p.getColor(), r)) {
+								genDestValue(1-p.getColor(), r);
+								break;
+							}
 					}
 				}
 		  	}
@@ -415,7 +430,7 @@ public class TestingBoard extends Board
 	}
 
 	// TRUE if move is valid
-	public boolean move(BMove m, int depth, boolean scoutFarMove)
+	public boolean move(BMove m, int depth, boolean unknownScoutFarMove)
 	{
 		Piece fp = getPiece(m.getFrom());
 		Piece tp = getPiece(m.getTo());
@@ -433,15 +448,17 @@ public class TestingBoard extends Board
 				value -= (destValue[color][r][m.getTo()]
 					- destValue[color][r][m.getFrom()]);
 
-			if (!fp.isKnown() && fp.moves == 1)
+			if (!fp.isKnown() && !fp.hasMoved())
 				// moving a unknown piece makes it vulnerable
-				value += aiMovedValue(fp);
+				value += aiMovedValue(fp, fp.moves % 3);
 			setPiece(fp, m.getTo());
-			if (scoutFarMove) {
-				// moving a scout more than one position
-				// makes it known
-				if (!fp.isKnown() && fp.moves == 2)
-					value += aiMovedValue(fp);
+			if (unknownScoutFarMove) {
+				// moving an unknown scout
+				// more than one position makes it known
+				// penalize so that scout should only 
+				// make itself known for a long voyage
+				// towards a destination.
+				value += aiMovedValue(fp, 5);
 				fp.setKnown(true);
 			}
 			recentMoves.add(m);
@@ -528,7 +545,7 @@ public class TestingBoard extends Board
 		return false;
 	}
 
-	public void undo(Piece fp, int f, Piece tp, int t, int valueB)
+	public void undo(Piece fp, int f, Piece tp, int t, int valueB, boolean unknownScoutFarMove)
 	{
 		setPiece(fp, f);
 		setPiece(tp, t);
@@ -536,6 +553,8 @@ public class TestingBoard extends Board
 		fp.moves--;
 		if (tp == null)
 			recentMoves.remove(recentMoves.size()-1);
+		if (unknownScoutFarMove)
+			fp.setKnown(false);
 	}
 	
 	// Value given to discovering an unknown piece.
@@ -624,14 +643,13 @@ public class TestingBoard extends Board
 	// it gains a point.  So in a N move depth search, it can gain
 	// N points.  So the penalty needs to be 1 < penalty < N + 1.
 
-	public int aiMovedValue(Piece fp)
+	public int aiMovedValue(Piece fp, int v)
 	{
 		int color = fp.getColor();
 		Rank rank = fp.getRank();
 		if (neededRank[color][rank.toInt()-1])
 			return 0;
 
-		int v = Settings.aiLevel / 3 + 1;
 		if (color == Settings.bottomColor) {
 			return v;
 		} else {
@@ -657,10 +675,20 @@ public class TestingBoard extends Board
 			value += 30;
 	}
 
+	// Stealth value is expressed as a percentage of the piece's
+	// actual value.  An unknown Marshal should not take a Six
+	// or even a Five, but certainly a Four is worthwhile.
+	// An unknown General should not take a Six, but a Five
+	// would be tempting.
+	//
+	// So maybe stealth value is about 11%.
+	//
+	// If a piece has moved, then much is probably guessed about
+	// the piece already, so it has half of its stealth value.
 	public void aiStealthValue(Piece p)
 	{
 		if (!p.isKnown()) {
-			int v = aiValue(p.getColor(), Rank.UNKNOWN);
+			int v = aiValue(p.getColor(), p.getRank()) / 9;
 			if (p.hasMoved())
 				v /= 2;
 			value += v;

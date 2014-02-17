@@ -26,6 +26,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Random;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.Collections;
+
 
 import javax.swing.JOptionPane;
 
@@ -47,16 +49,20 @@ public class AI implements Runnable
 	private CompControls engine = null;
 
 	private int mmax;
-	private int foo;	// java bug: mmax
-	private int turnF = 0;
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] movable = new int[92];
-	private class moveValuePair {
+
+	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
 		Integer value = 0;
-		moveValuePair(BMove m, Integer v) {
+		boolean unknownScoutFarMove = false;
+		MoveValuePair(BMove m, Integer v, boolean s) {
 			move = m;
 			value = v;
+			unknownScoutFarMove = s;
+		}
+		public int compareTo(MoveValuePair mvp) {
+			return mvp.value - value;
 		}
 	}
 
@@ -92,7 +98,7 @@ public class AI implements Runnable
 		{
 			Random rnd = new Random();
 			String line = setup.get(rnd.nextInt(setup.size()));
-			String[] opts = line.split(" ");
+			String[] opts = line.split(",");
 			long skip = 0;
 			if (opts.length > 1)
 				skip = (Integer.parseInt(opts[1]) - 1) * 80;
@@ -191,7 +197,7 @@ public class AI implements Runnable
 
 	public void run() 
 	{
-		Move bestMove = null;
+		BMove bestMove = null;
 		aiLock.lock();
                 try
                 {
@@ -205,10 +211,11 @@ public class AI implements Runnable
 		
 		System.runFinalization();
 		System.gc(); 
-		
-		engine.aiReturnMove(bestMove);
-	}
 
+		// return the actual board move
+		engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
+
+	}
 /*	
 	The AI algorithm is the usual minimax with alpha-beta pruning.
 	The search depth is adjustable with the Settings menu.
@@ -221,7 +228,7 @@ public class AI implements Runnable
 	An ai piece will avoid unknown pieces unless it is invincible.
 	Unknown unmoved pieces that are removed have a specified
 	value, which is about equal to a Six.  This results in an eagerness
-	to use pieces of ranks Seven through Nine to discover opponent's pieces.
+	to use pieces of ranks Six, Seven and Nine to discover opponent's pieces.
 
 	This simple algorithm results in a basic level of play.  
 
@@ -236,22 +243,11 @@ public class AI implements Runnable
 		and ultimately the flag and its defences.
 */
 
-	private Move getBestMove(TestingBoard b, int n)
+	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int n, int turn, int depth)
 	{
 		BMove move = null;
 		BMove tmpM = null;
-		ArrayList<moveValuePair> moveList = new ArrayList<moveValuePair>();
-		
-		if (n%2==0)
-			turnF = 0;
-		else
-			turnF = 1;
-
-		int value = -10000;	// must be less than alpha/beta
-					// so that even a lost move is chosen
-		int alpha = -9999;
-		int beta = 9999;
-
+		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
 		// generate array of movable indices to speed move generation
 		// by removing unmovable pieces (bombs + flag)
 		int mmax = 0;
@@ -266,7 +262,6 @@ public class AI implements Runnable
 			}
 			movable[mmax++] = i;
 		}
-		foo = mmax;	// java bug: mmax is zero in valueNMoves
 			
 		for (int j=0;j<mmax;j++)
 		{
@@ -274,20 +269,24 @@ public class AI implements Runnable
 			// the pieces furthest down the board first because
 			// already moved pieces have the highest scores.
 			// This results in the most alpha-beta pruning.
-			int i = movable[mmax -j - 1];
+			int i;
+			if (turn == Settings.topColor)
+				i = movable[mmax - j - 1];
+			else
+				i = movable[j];
 
 			Piece fp = b.getPiece(i);
 			if (fp == null)
 				continue;
-			if (fp.getColor() != Settings.topColor)
+			if (fp.getColor() != turn)
 				continue;
 			Rank rank = fp.getRank();
 			for (int k=0;k<4;k++)
 			{
 				int d = dir[k];
 				int t = i + d;
-				boolean scoutFarMove = false;
-				for ( ;b.isValid(t); t+=d, scoutFarMove = true) {
+				boolean unknownScoutFarMove = false;
+				for ( ;b.isValid(t); t+=d) {
 					Piece tp = b.getPiece(t);
 					if (tp != null && (tp.getColor() == fp.getColor() || rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
 						break;
@@ -295,46 +294,64 @@ public class AI implements Runnable
 					tmpM = new BMove(i, t);
 					if (b.isRecentMove(tmpM))
 						break;
-
-					int valueB = b.getValue();
-					b.move(tmpM, 0, scoutFarMove);
-
-
-					valueNMoves(b, n-1, alpha, beta); 
-					// valueNMoves(b, n-1, -9999, 9999); 
-System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
-
-					int vm = b.getValue();
-					moveList.add(new moveValuePair(tmpM, vm));
-					b.undo(fp, i, tp, t, valueB);
-
-					if (vm > alpha)
-					{
-						alpha = vm;
-					}
-
-					if (fp.getRank() != Rank.NINE || tp != null)
+					moveList.add(new MoveValuePair(tmpM, 0, unknownScoutFarMove));
+					// NOTE: FORWARD PRUNING
+					// generate scout far moves only at depth 0
+					if (depth != 0 || (fp.getRank() != Rank.NINE || tp != null))
 						break;
+					if (!fp.isKnown())
+						unknownScoutFarMove = true;
 				} // for
 			} // k
 		}
 
-		if (moveList.size() == 0)
-			return null;	// ai trapped
+		return moveList;
+	}
 
-		for (int i = 0; i < moveList.size(); i++) {
-			moveValuePair mvp = moveList.get(i);
+
+	private BMove getBestMove(TestingBoard b, int n)
+	{
+		BMove move = null;
+		BMove tmpM = null;
+		ArrayList<MoveValuePair> moveList = getMoves(b, n, Settings.topColor, 0);
+		
+		long t = System.currentTimeMillis( );
+
+		int n1 = 1;
+		while (true) {
+
+		int alpha = -9999;
+		int beta = 9999;
+
+		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
-			int vm = mvp.value;
 
-			if (vm > value)
+			int valueB = b.getValue();
+			Piece fp = b.getPiece(mvp.move.getFrom());
+			Piece tp = b.getPiece(mvp.move.getTo());
+			b.move(tmpM, 0, mvp.unknownScoutFarMove);
+
+
+			valueNMoves(b, n1-1, alpha, beta, Settings.bottomColor, 1); 
+			// valueNMoves(b, n1-1, -9999, 9999, Settings.bottomColor, 1); 
+System.out.println(n1 + ": " + n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
+
+			int vm = b.getValue();
+			mvp.value = vm;
+			b.undo(fp, mvp.move.getFrom(), tp, mvp.move.getTo(), valueB, mvp.unknownScoutFarMove);
+
+			if (vm > alpha)
 			{
-				value = vm;
-				move = tmpM;
+				alpha = vm;
 			}
 
-		}
+			if (t != 0 && System.currentTimeMillis( ) > t + Settings.aiLevel * Settings.aiLevel * 100 ) {
+				if (moveList.size() == 0)
+					return null;	// ai trapped
 
+				mvp = moveList.get(0);
+				move = mvp.move;
+				int value = mvp.value;
 if (b.getPiece(move.getTo()) == null)
 System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
@@ -352,91 +369,65 @@ System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move
 + " " + value);
 System.out.println("----");
 
-		
-		return new Move(b.getPiece(move.getFrom()), move);
+				return move;
+			}
+		}
+		System.out.println("-+-");
+		Collections.sort(moveList);
+		System.out.println("-+++-");
+
+		n1++;
+
+		} // iterative deepening
 	}
 
 
-	private void valueNMoves(TestingBoard b, int n, int alpha, int beta)
+	private void valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth)
 	{
 		if (n<1)
 			return;
 
-		int turn;
 		int v;
-		if ((turnF + n) % 2 == 0) {
+		if (turn == Settings.topColor)
 			v = alpha;
-			turn = Settings.topColor;
-		} else {
+		else
 			v = beta;
-			turn = Settings.bottomColor;
-		}
 
-		int depth = Settings.aiLevel - n;
-		
-		for (int j=0;j<foo;j++)
-		{
-			// order the move evaluation to consider
-			// the pieces furthest down the board first because
-			// already moved pieces have the highest scores.
-			// This results in the most alpha-beta pruning.
-			int i;
-			if (turn == Settings.topColor)
-				i = movable[foo - j - 1];
-			else
-				i = movable[j];
+		ArrayList<MoveValuePair> moveList = getMoves(b, n, turn, depth);
+		for (MoveValuePair mvp : moveList) {
+			int vm = 0;
+			Piece fp = b.getPiece(mvp.move.getFrom());
+			Piece tp = b.getPiece(mvp.move.getTo());
 
-			Piece fp = b.getPiece(i);
-			if (fp == null)
-				continue;
-			if (fp.getColor() != turn)
-				continue;
-			Rank rank = fp.getRank();
-				
-			for (int k=0;k<4;k++)
-			{
-				int t = i + dir[k];
-				if  (!b.isValid(t))
-					continue;
-				Piece tp = b.getPiece(t);
-
-				// skip collisions with pieces of same color
-				// or pieces other than eights sacrificing
-				// themselves on known bombs.
-				if (tp != null && (tp.getColor() == fp.getColor()
-					|| rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
-						continue;
-
-				int vm = 0;
-				// NOTE: FORWARD TREE PRUNING
-				// We don't actually know if an unknown unmoved piece
-				// can or will move, but usually we don't care
-				// unless they attack on their first or
-				// second move.
-				// In other words, don't evaluate moves to an
-				// open square for an unknown unmoved piece
-				// past its initial move.
-				if (tp == null && rank == Rank.UNKNOWN && !fp.hasMoved() && fp.moves == 1)
-					vm = beta;
-				else {
-
-				BMove tmpM = new BMove(i, t);
-				if (b.isRecentMove(tmpM))
-					continue;
-
+			// NOTE: FORWARD TREE PRUNING
+			// We don't actually know if an unknown unmoved piece
+			// can or will move, but usually we don't care
+			// unless they attack on their first or
+			// second move.
+			// In other words, don't evaluate moves to an
+			// open square for an unknown unmoved piece
+			// past its initial move.
+			if (tp == null && fp.getRank() == Rank.UNKNOWN && !fp.hasMoved() && fp.moves == 1)
+				vm = beta;
+			else {
 				int valueB = b.getValue();
-				b.move(tmpM, depth, false);
+
+				b.move(mvp.move, depth, false);
+
 /*
-if (n != 1)
+int tpvalue = 0;
+if (tp != null)
+	tpvalue = tp.aiValue();
 for (int ii=5; ii >= n; ii--)
 	System.out.print("  ");
-System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
-+ " " + valueB + " " + b.getValue());
+System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
++ " " + fp.aiValue() + " " + tpvalue + " " + valueB + " " + b.getValue());
 */
-				valueNMoves(b, n-1, alpha, beta);
+
+				valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1);
 
 				vm = b.getValue();
-				b.undo(fp, i, tp, t, valueB);
+				b.undo(fp, mvp.move.getFrom(), tp, mvp.move.getTo(), valueB, false);
 /*
 for (int ii=5; ii >= n; ii--)
 	System.out.print("  ");
@@ -459,23 +450,22 @@ System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM
 + " " + vm);
 */
 
-				}
+			}
 
-				if (vm > alpha && turn == Settings.topColor)
-				{
-					v = alpha = vm;
-				}
-				if (vm < beta && turn == Settings.bottomColor)
-				{
-					v = beta = vm;
-				}
+			if (vm > alpha && turn == Settings.topColor)
+			{
+				v = alpha = vm;
+			}
+			if (vm < beta && turn == Settings.bottomColor)
+			{
+				v = beta = vm;
+			}
 
-				if (beta <= alpha) {
-					b.setValue(v);
-					return;
-				}
-			} // k
-		} // 
+			if (beta <= alpha) {
+				b.setValue(v);
+				return;
+			}
+		} // moveList
 		b.setValue(v);
 		return;
 	}
