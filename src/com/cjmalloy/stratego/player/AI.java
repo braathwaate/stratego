@@ -49,6 +49,7 @@ public class AI implements Runnable
 	private CompControls engine = null;
 
 	private int mmax;
+	private int foo;	//java mmax bug
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] movable = new int[92];
 
@@ -248,22 +249,7 @@ public class AI implements Runnable
 		BMove move = null;
 		BMove tmpM = null;
 		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
-		// generate array of movable indices to speed move generation
-		// by removing unmovable pieces (bombs + flag)
-		int mmax = 0;
-		for (int j=0;j<92;j++)
-		{
-			int i = Grid.getValidIndex(j);
-			Piece fp = b.getPiece(i);
-			if (fp != null) {
-				Rank rank = fp.getRank();
-				if (rank == Rank.BOMB || rank == Rank.FLAG)
-					continue;
-			}
-			movable[mmax++] = i;
-		}
-			
-		for (int j=0;j<mmax;j++)
+		for (int j=0;j<foo;j++)
 		{
 			// order the move evaluation to consider
 			// the pieces furthest down the board first because
@@ -271,7 +257,7 @@ public class AI implements Runnable
 			// This results in the most alpha-beta pruning.
 			int i;
 			if (turn == Settings.topColor)
-				i = movable[mmax - j - 1];
+				i = movable[foo - j - 1];
 			else
 				i = movable[j];
 
@@ -313,6 +299,23 @@ public class AI implements Runnable
 	{
 		BMove move = null;
 		BMove tmpM = null;
+
+		// generate array of movable indices to speed move generation
+		// by removing unmovable pieces (bombs + flag)
+		int mmax = 0;
+		for (int j=0;j<92;j++)
+		{
+			int i = Grid.getValidIndex(j);
+			Piece fp = b.getPiece(i);
+			if (fp != null) {
+				Rank rank = fp.getRank();
+				if (rank == Rank.BOMB || rank == Rank.FLAG)
+					continue;
+			}
+			movable[mmax++] = i;
+		}
+		foo = mmax; // java bug
+			
 		ArrayList<MoveValuePair> moveList = getMoves(b, n, Settings.topColor, 0);
 		
 		long t = System.currentTimeMillis( );
