@@ -1,8 +1,8 @@
 Download
 --------
 
-[Stratego v0.1.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.1.0/stratego_v0.1.0.jar
+[Stratego v0.2.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.2.0/stratego_v0.2.0.jar
 
 Introduction
 ------------
@@ -71,4 +71,5 @@ Areas for improvements are:
 References
 ----------
 [COMPETITIVE PLAY IN STRATEGO, A.F.C. Arts](https://project.dke.maastrichtuniversity.nl/games/files/msc/Arts_thesis.pdf).
+
 [Invincible. A Stratego Bot, V. de Boer](http://www.kbs.twi.tudelft.nl/Publications/MSc/2008-deBoer-Msc.html).
