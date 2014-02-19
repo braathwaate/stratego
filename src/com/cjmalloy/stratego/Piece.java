@@ -63,15 +63,9 @@ public class Piece implements Comparable<Piece>
 		shown = false;
 	}
 
-	public void setUnknownRank()
+	public void setRank(Rank r)
 	{
-		rank = Rank.UNKNOWN;
-	}
-
-	public void setPossibleBomb()
-	{
-		rank = Rank.BOMB;
-		value = -99;
+		rank = r;
 	}
 
 	public int getColor() 

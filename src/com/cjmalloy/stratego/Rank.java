@@ -20,7 +20,6 @@ package com.cjmalloy.stratego;
 
 public enum Rank
 {
-
 	WATER,
 	ONE,
 	TWO,
@@ -37,6 +36,10 @@ public enum Rank
 	UNKNOWN,
 	NIL;
 
+	static public final int WINS = 1;
+	static public final int EVEN = -1;
+	static public final int UNK = -2;
+	static public final int LOSES = 0;
 	public int toInt()
 	{
 		return ordinal();
@@ -60,30 +63,34 @@ public enum Rank
 	// return 0 attacker loses
 	public int winFight(Rank defend)
 	{
+		if (defend == Rank.FLAG)
+			return WINS;
+
+		if (this == Rank.UNKNOWN || defend == Rank.UNKNOWN)
+			return UNK;
+
 		if (this == defend)
 		{
 			if (Settings.bDefendAdvantage)
-				return 0;
+				return LOSES;
 			else
-				return -1;
+				return EVEN;
 		}
-		if (defend == Rank.FLAG)
-			return 1;
 		if (defend == Rank.BOMB)
 		{
 			if (this == Rank.EIGHT)
-				return 1;
+				return WINS;
 			if (Settings.bOneTimeBombs)
-				return -1;
+				return EVEN;
 			else
-				return 0;
+				return LOSES;
 		}
 		if (this == Rank.SPY & defend == Rank.ONE)
-				return 1;
+				return WINS;
 		
 		if (toInt() < defend.toInt())
-			return 1;
-		return 0;
+			return WINS;
+		return LOSES;
 	}
 }
 

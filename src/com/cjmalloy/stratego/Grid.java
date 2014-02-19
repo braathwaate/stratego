@@ -64,6 +64,11 @@ protected static class UniqueID
 				validIndex[j++] = i;
 	}
 
+	public Grid(Grid g)
+	{
+		grid = g.grid.clone();
+	}
+
 	public boolean isValid(int i)
 	{
 		return grid[i] != water;

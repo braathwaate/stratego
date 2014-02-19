@@ -54,7 +54,6 @@ public class Board
 		}
         }
 
-	public static ReentrantLock bLock = new ReentrantLock();
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
 
 	
@@ -64,8 +63,8 @@ public class Board
 	
 	protected Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
-	protected ArrayList<Piece> red = new ArrayList<Piece>();
-	protected ArrayList<Piece> blue = new ArrayList<Piece>();
+	protected static ArrayList<Piece> red = new ArrayList<Piece>();
+	protected static ArrayList<Piece> blue = new ArrayList<Piece>();
 	protected ArrayList<BMove> recentMoves = new ArrayList<BMove>();
 	// setup contains the original locations of Pieces
 	// as they are discovered.
@@ -130,12 +129,11 @@ public class Board
 
 	public Board(Board b)
 	{
-                for (int i=0;i<10;i++)
-                for (int j=0;j<10;j++)
-                        grid.setPiece(i, j, b.getPiece(i, j));
+		grid = new Grid(b.grid);
 				
 		tray.addAll(b.tray);
 		recentMoves.addAll(b.recentMoves);
+		setup = b.setup.clone();
 	}
 
 	public boolean add(Piece p, Spot s)

@@ -49,9 +49,10 @@ public class AI implements Runnable
 	private CompControls engine = null;
 
 	private int mmax;
-	private int foo;	//java mmax bug
+	private int foo;
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] movable = new int[92];
+	private int[][] hh = new int[121][121];	// move history heuristic
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
@@ -203,7 +204,7 @@ public class AI implements Runnable
                 try
                 {
 	
-			bestMove = getBestMove(new TestingBoard(board), Settings.aiLevel);
+			bestMove = getBestMove(new TestingBoard(board));
 		}
 		finally
 		{
@@ -217,34 +218,8 @@ public class AI implements Runnable
 		engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
 
 	}
-/*	
-	The AI algorithm is the usual minimax with alpha-beta pruning.
-	The search depth is adjustable with the Settings menu.
 
-	At the default depth (5 ticks = 6 plys = 3 ai + 3 opponent moves),
-	it completes within a second on a modern desktop.  It completes within
-	a few seconds at 7 ticks.
-
-	Evaluation heuristic is based on material gained versus lost.
-	An ai piece will avoid unknown pieces unless it is invincible.
-	Unknown unmoved pieces that are removed have a specified
-	value, which is about equal to a Six.  This results in an eagerness
-	to use pieces of ranks Six, Seven and Nine to discover opponent's pieces.
-
-	This simple algorithm results in a basic level of play.  
-
-	Areas for improvements are:
-	1. Regression testing.  Design an automatic way to allow further
-		improvements to be tested, such as allowing ai v. ai
-		play.
-	2. Improving the search tree.  Extreme pruning will be required to
-		get to deeper levels.  A transposition table is needed.
-	3. Adding probability to collisions with unknown pieces.  This would
-		lead to the computer choosing which pieces to target,
-		and ultimately the flag and its defences.
-*/
-
-	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int n, int turn, int depth)
+	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int turn, int depth)
 	{
 		BMove move = null;
 		BMove tmpM = null;
@@ -267,9 +242,8 @@ public class AI implements Runnable
 			if (fp.getColor() != turn)
 				continue;
 			Rank rank = fp.getRank();
-			for (int k=0;k<4;k++)
+			for (int d : dir )
 			{
-				int d = dir[k];
 				int t = i + d;
 				boolean unknownScoutFarMove = false;
 				for ( ;b.isValid(t); t+=d) {
@@ -295,7 +269,7 @@ public class AI implements Runnable
 	}
 
 
-	private BMove getBestMove(TestingBoard b, int n)
+	private BMove getBestMove(TestingBoard b)
 	{
 		BMove move = null;
 		BMove tmpM = null;
@@ -314,13 +288,18 @@ public class AI implements Runnable
 			}
 			movable[mmax++] = i;
 		}
-		foo = mmax; // java bug
+		foo = mmax; //java bug
+
+		// move history heuristic (hh)
+		for (int j=12; j<=120; j++)
+		for (int k=12; k<=120; k++)
+			hh[j][k] = 0;
 			
-		ArrayList<MoveValuePair> moveList = getMoves(b, n, Settings.topColor, 0);
+		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, 0);
 		
 		long t = System.currentTimeMillis( );
 
-		int n1 = 1;
+		int n = 1;
 		while (true) {
 
 		int alpha = -9999;
@@ -335,9 +314,9 @@ public class AI implements Runnable
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 
-			valueNMoves(b, n1-1, alpha, beta, Settings.bottomColor, 1); 
-			// valueNMoves(b, n1-1, -9999, 9999, Settings.bottomColor, 1); 
-System.out.println(n1 + ": " + n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
+			valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
+			// valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
+System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
 
 			int vm = b.getValue();
 			mvp.value = vm;
@@ -348,13 +327,19 @@ System.out.println(n1 + ": " + n + " (" + fp.getRank() + ") " + tmpM.getFromX() 
 				alpha = vm;
 			}
 
-			if (t != 0 && System.currentTimeMillis( ) > t + Settings.aiLevel * Settings.aiLevel * 100 ) {
-				if (moveList.size() == 0)
-					return null;	// ai trapped
+		}
+		System.out.println("-+-");
+		Collections.sort(moveList);
+		MoveValuePair mvp = moveList.get(0);
+		hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
+		System.out.println("-+++-");
 
-				mvp = moveList.get(0);
-				move = mvp.move;
-				int value = mvp.value;
+		if (t != 0 && System.currentTimeMillis( ) > t + Settings.aiLevel * Settings.aiLevel * 100 ) {
+			if (moveList.size() == 0)
+				return null;	// ai trapped
+
+			move = mvp.move;
+			int value = mvp.value;
 if (b.getPiece(move.getTo()) == null)
 System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
@@ -372,14 +357,9 @@ System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move
 + " " + value);
 System.out.println("----");
 
-				return move;
-			}
+			return move;
 		}
-		System.out.println("-+-");
-		Collections.sort(moveList);
-		System.out.println("-+++-");
-
-		n1++;
+		n++;
 
 		} // iterative deepening
 	}
@@ -390,13 +370,19 @@ System.out.println("----");
 		if (n<1)
 			return;
 
+		BMove bestMove = null;
 		int v;
 		if (turn == Settings.topColor)
 			v = alpha;
 		else
 			v = beta;
 
-		ArrayList<MoveValuePair> moveList = getMoves(b, n, turn, depth);
+		ArrayList<MoveValuePair> moveList = getMoves(b, turn, depth);
+		for (MoveValuePair mvp : moveList) {
+			mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
+		}
+		Collections.sort(moveList);
+
 		for (MoveValuePair mvp : moveList) {
 			int vm = 0;
 			Piece fp = b.getPiece(mvp.move.getFrom());
@@ -458,18 +444,23 @@ System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM
 			if (vm > alpha && turn == Settings.topColor)
 			{
 				v = alpha = vm;
+				bestMove = mvp.move;
 			}
 			if (vm < beta && turn == Settings.bottomColor)
 			{
 				v = beta = vm;
+				bestMove = mvp.move;
 			}
 
 			if (beta <= alpha) {
 				b.setValue(v);
+				hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
 				return;
 			}
 		} // moveList
 		b.setValue(v);
+		if (bestMove != null)
+			hh[bestMove.getFrom()][bestMove.getTo()]+=n;
 		return;
 	}
 }
