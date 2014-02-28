@@ -40,5 +40,5 @@ public enum Message
 	public static final int PROTOCOL_MAJOR_VERSION = 2;
 	public static final int PROTOCOL_MINOR_VERSION = 0;
 	public static final String DOWNLOAD_URL = "http://java-stratego.sourceforge.net";
-	public static final String WELCOME_MSG  = "Welcome to Stratego @cs.smu.ca.\nType :h for help\n";
+	public static final String WELCOME_MSG  = "Welcome to Stratego @cs.smu.ca.\nType :h for help or :<command>.\n";
 }

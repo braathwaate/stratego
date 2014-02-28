@@ -39,18 +39,14 @@ public class Board
 		}
 	}
 
-        protected class UndoMove
+        public class UndoMove extends Move
         {
-                public Piece fp = null;
                 public Piece tp = null;
-                public int from = 0;
-                public int to = 0;
-		UndoMove(Piece fpin, Piece tpin, int f, int t)
+
+		public UndoMove(Piece fpin, Piece tpin, int f, int t)
 		{
-			fp = fpin;
+			super(fpin, f, t);
 			tp = tpin;
-			from = f;
-			to = t;
 		}
         }
 
@@ -65,7 +61,6 @@ public class Board
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
 	protected static ArrayList<Piece> red = new ArrayList<Piece>();
 	protected static ArrayList<Piece> blue = new ArrayList<Piece>();
-	protected ArrayList<BMove> recentMoves = new ArrayList<BMove>();
 	// setup contains the original locations of Pieces
 	// as they are discovered.
 	// this is used to guess flags and other bombs
@@ -73,6 +68,7 @@ public class Board
 	// correllating against all setups in the database
 	protected Rank[] setup = new Rank[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
+	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
 	
 	public Board()
 	{
@@ -132,7 +128,7 @@ public class Board
 		grid = new Grid(b.grid);
 				
 		tray.addAll(b.tray);
-		recentMoves.addAll(b.recentMoves);
+		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
 	}
 
@@ -165,7 +161,7 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			Piece tp = getPiece(m.getTo());
-			moveHistory(new Piece(fp), new Piece(tp), m.getFrom(), m.getTo());
+			moveHistory(fp, tp, m.getFrom(), m.getTo());
 
 			fp.setShown(true);
 			fp.setKnown(true);
@@ -271,7 +267,6 @@ public class Board
 		for (Piece p: tray)
 			p.clear();
 
-		recentMoves.clear();
 		undoList.clear();
 
 		for (int i = 11; i <=120; i++)
@@ -308,7 +303,7 @@ public class Board
 	{
 		return tray.size();
 	}
-	
+
 	public void showAll()
 	{
 		for (int i=0;i<10;i++)
@@ -345,9 +340,17 @@ public class Board
 		grid.setPiece(i, p);
 	}
 
+	public UndoMove getLastMove()
+	{
+		return undoList.get(undoList.size()-1);
+	}
+
+
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		undoList.add(new UndoMove(fp, tp, from, to));
+		if (tp != null)
+			tp = new Piece(tp);
+		undoList.add(new UndoMove(new Piece(fp), tp, from, to));
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -363,8 +366,10 @@ public class Board
 		// Acting rank is calculated factually, but is of
 		// questionable use in the heuristic because of bluffing.
 		//
-		for (int k = 0; k < 4; k++) {
-			int i = to + dir[k];
+
+		// movement towards
+		for (int d : dir) {
+			int i = to + d;
 			if (!isValid(i))
 				continue;
 			Piece p = getPiece(i);
@@ -379,8 +384,9 @@ public class Board
 			}
 		}
 
-		for (int k = 0; k < 4; k++) {
-			int i = from + dir[k];
+		// movement aways
+		for (int d : dir) {
+			int i = from + d;
 			if (!isValid(i))
 				continue;
 			Piece p = getPiece(i);
@@ -404,8 +410,7 @@ public class Board
 		if (validMove(m))
 		{
 			Piece fp = getPiece(m.getFrom());
-			recentMoves.add(m);
-			moveHistory(new Piece(fp), null, m.getFrom(), m.getTo());
+			moveHistory(fp, null, m.getFrom(), m.getTo());
 
 			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
@@ -430,6 +435,10 @@ public class Board
 			return false;
 		
 		getPiece(i).setShown(true);
+		getPiece(i).setKnown(false);
+
+		for (Piece p : tray) 
+			p.setKnown(true);
 		tray.add(getPiece(i));
 		setPiece(null, i);
 		Collections.sort(tray);
@@ -452,10 +461,10 @@ public class Board
 	// non-stop betwen the same two squares.
 	public boolean isRecentMove(BMove m)
 	{
-		int size = recentMoves.size();
+		int size = undoList.size();
 		if (size < 4)
 			return false;
-		return m.equals(recentMoves.get(size-4));
+		return m.equals(undoList.get(size-4));
 	}
 
 	// Repetition of Threatening Moves: More-Squares Rule
@@ -475,16 +484,14 @@ public class Board
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
 			Piece tp = getPiece(undo.to);
-			setPiece(undo.fp, undo.from);
+			setPiece(undo.getPiece(), undo.from);
 			setPiece(undo.tp, undo.to);
-			if (undo.tp == null)
-				recentMoves.remove(recentMoves.size()-1);
-			else {
+			if (undo.tp != null) {
 				if (tp == null) {
 					tray.remove(tray.indexOf(undo.tp));
-					tray.remove(tray.indexOf(undo.fp));
+					tray.remove(tray.indexOf(undo.getPiece()));
 				} else if (tp.equals(undo.tp))
-					tray.remove(tray.indexOf(undo.fp));
+					tray.remove(tray.indexOf(undo.getPiece()));
 				else
 					tray.remove(tray.indexOf(undo.tp));
 			}
@@ -550,7 +557,7 @@ public class Board
 			return false;
 		
 		//check for rule: "a player may not move their piece back and fourth.." or something
-		if (isRecentMove(new Move(fp, m)))
+		if (isRecentMove(m))
 			return false;
 
 		switch (fp.getRank())

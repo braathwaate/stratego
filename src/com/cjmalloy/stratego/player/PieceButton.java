@@ -125,8 +125,6 @@ public class PieceButton extends JButton implements MouseListener,
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
 						setIcon(skin.redASkins[piece.getRank().ordinal()]);
-					else if (piece.hasMoved() && !Settings.bShowAll)
-						setIcon(skin.redAASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.redSkins[piece.getRank().ordinal()]);
 				}
@@ -134,8 +132,6 @@ public class PieceButton extends JButton implements MouseListener,
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
 						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
-					else if (piece.hasMoved() && !Settings.bShowAll)
-						setIcon(skin.blueAASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
 				}

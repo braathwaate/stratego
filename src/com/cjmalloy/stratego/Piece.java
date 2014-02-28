@@ -53,6 +53,7 @@ public class Piece implements Comparable<Piece>
 		shown = p.shown;
 		actingRankHigh = p.actingRankHigh;
 		actingRankLow = p.actingRankLow;
+		value = p.value;
 	}
 
 	public void clear()
@@ -61,6 +62,9 @@ public class Piece implements Comparable<Piece>
 		moves = 0;
 		known = false;
 		shown = false;
+		actingRankLow = Rank.NIL;
+		actingRankHigh = Rank.NIL;
+		value = 0;
 	}
 
 	public void setRank(Rank r)

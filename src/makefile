@@ -4,8 +4,9 @@ VER=stratego_v0.2.0.jar
 all: $(VER) 
 
 foo:
-	cd $(PKG); javac -g *.java
 	cd $(PKG); javac -g server/shared/*.java
+	cd $(PKG); javac -g *.java
+#	cd $(PKG); javac -g server/remote/*.java
 	cd $(PKG); javac -g player/*.java
 	cd $(PKG); javac -g server/*.java
 

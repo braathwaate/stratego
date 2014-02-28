@@ -67,9 +67,8 @@ public class BMove
 
 	public boolean equals(Object m)
         {
-                if (m==null) return false;
-                return from==((BMove)m).from &&  to==((BMove)m).to;
-	 }
+                return from==((BMove)m).from && to==((BMove)m).to;
+	}
 
 }
 

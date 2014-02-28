@@ -119,7 +119,7 @@ public class AI implements Runnable
 			}
 			catch (Exception e)
 			{
-				setup.remove(opts[0]);
+				setup.remove(line);
 				continue;
 			}
 			
@@ -219,10 +219,29 @@ public class AI implements Runnable
 
 	}
 
-	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int turn, int depth)
+	private BMove getMove(TestingBoard b, Piece fp, int f, int t)
 	{
-		BMove move = null;
-		BMove tmpM = null;
+		if (!b.isValid(t))
+			return null;
+		Piece tp = b.getPiece(t);
+		Rank rank = fp.getRank();
+		if (tp != null && tp.getColor() == fp.getColor())
+			return null;
+		
+		BMove tmpM = new BMove(f, t);
+		if (b.isRecentMove(tmpM))
+			return null;
+		return tmpM;
+	}
+
+	// Quiescent search with only attack moves limits the
+	// horizon effect but does not eliminate it, because
+	// the ai is still prone to make bad moves 
+	// that waste more material in a position where
+	// the opponent has a sure favorable attack in the future,
+	// and the ai depth does not reach the position of exchange.
+	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int turn)
+	{
 		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
 		for (int j=0;j<foo;j++)
 		{
@@ -241,28 +260,27 @@ public class AI implements Runnable
 				continue;
 			if (fp.getColor() != turn)
 				continue;
-			Rank rank = fp.getRank();
-			for (int d : dir )
-			{
-				int t = i + d;
-				boolean unknownScoutFarMove = false;
-				for ( ;b.isValid(t); t+=d) {
-					Piece tp = b.getPiece(t);
-					if (tp != null && (tp.getColor() == fp.getColor() || rank != Rank.EIGHT && tp.getRank() == Rank.BOMB && tp.isKnown()))
-						break;
-					
-					tmpM = new BMove(i, t);
-					if (b.isRecentMove(tmpM))
-						break;
-					moveList.add(new MoveValuePair(tmpM, 0, unknownScoutFarMove));
+			for (int d : dir ) {
+				int t = i + d ;
+				BMove tmpM = getMove(b, fp, i, t);
+				if (tmpM != null) {
+					moveList.add(new MoveValuePair(tmpM, 0, false));
 					// NOTE: FORWARD PRUNING
-					// generate scout far moves only at depth 0
-					if (depth != 0 || (fp.getRank() != Rank.NINE || tp != null))
-						break;
-					if (!fp.isKnown())
-						unknownScoutFarMove = true;
-				} // for
-			} // k
+					// generate scout far moves
+					// only for captures and far rank
+					if (fp.getRank() == Rank.NINE) {
+						while (b.getPiece(t) == null)
+							t += d;
+						if (t != i + d) {
+							if (!b.isValid(t))
+								t -= d;
+							tmpM = getMove(b, fp, i, t);
+							if (tmpM != null)
+								moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+						}
+					} // scout far moves
+				} // valid move
+			} // d
 		}
 
 		return moveList;
@@ -271,7 +289,6 @@ public class AI implements Runnable
 
 	private BMove getBestMove(TestingBoard b)
 	{
-		BMove move = null;
 		BMove tmpM = null;
 
 		// generate array of movable indices to speed move generation
@@ -295,12 +312,13 @@ public class AI implements Runnable
 		for (int k=12; k<=120; k++)
 			hh[j][k] = 0;
 			
-		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, 0);
+		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor);
 		
 		long t = System.currentTimeMillis( );
 
-		int n = 1;
-		while (true) {
+		for (int n = 1;
+			System.currentTimeMillis( ) < t + Settings.aiLevel * Settings.aiLevel * 100;
+			n++) {
 
 		int alpha = -9999;
 		int beta = 9999;
@@ -314,13 +332,12 @@ public class AI implements Runnable
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 
-			valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
-			// valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
-System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + b.getValue());
+			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
+			// int vm = valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
+System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
 
-			int vm = b.getValue();
 			mvp.value = vm;
-			b.undo(fp, mvp.move.getFrom(), tp, mvp.move.getTo(), valueB, mvp.unknownScoutFarMove);
+			b.undo(valueB);
 
 			if (vm > alpha)
 			{
@@ -334,20 +351,22 @@ System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmp
 		hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
 		System.out.println("-+++-");
 
-		if (t != 0 && System.currentTimeMillis( ) > t + Settings.aiLevel * Settings.aiLevel * 100 ) {
-			if (moveList.size() == 0)
-				return null;	// ai trapped
+		} // iterative deepening
 
-			move = mvp.move;
-			int value = mvp.value;
+		if (moveList.size() == 0)
+			return null;	// ai trapped
+
+		MoveValuePair mvp = moveList.get(0);
+		BMove move = mvp.move;
+		int value = mvp.value;
 if (b.getPiece(move.getTo()) == null)
-System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
+System.out.println(" (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
 + " isKnown:" + b.getPiece(move.getFrom()).isKnown()
 + " moves:" + b.getPiece(move.getFrom()).moves
 + " " + value);
 else
-System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
+System.out.println( " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
 + " isKnown:" + b.getPiece(move.getFrom()).isKnown()
 + " moves:" + b.getPiece(move.getFrom()).moves
@@ -357,27 +376,128 @@ System.out.println(n + " (" + b.getPiece(move.getFrom()).getRank() + ") " + move
 + " " + value);
 System.out.println("----");
 
-			return move;
-		}
-		n++;
+		return move;
+	}
 
-		} // iterative deepening
+	// Evaluation-Based Quiescence Search (qs)
+	// Quiescence Search for Stratego
+	//	Maarten P.D. Schadd Mark H.M. Winands
+	// A faster and more effective method than
+	// deepening the tree to evaluate captures for qs.
+	// 
+	// The reason why ebqs is more effective is that it sums
+	// all the pieces under attack.  This prevents a
+	// single level horizon effect where the ai places another
+	// (lesser) piece subject to attack when the loss of an existing piece
+	// is inevitable.
+	// 
+	// This version gives no value to pieces attacked by
+	// the last piece that was moved.  This prevents the ai
+	// from thinking it has won or lost at the end of
+	// a chase sequence, because otherwise the ebqs would give value when
+	// (usually, unless cornered) the chase sequence can be extended
+	// indefinitely without any material loss or gain.
+	private int ebqs(TestingBoard b, int depth)
+	{
+		int qs = b.getValue();
+		b.setValue(0);
+		int to = b.getLastMove().getTo();
+		for (int j=0;j<foo;j++) {
+			int i = movable[j];
+			Piece fp = b.getPiece(i);
+			if (fp == null || to == i)
+				continue;
+			int min = 0;
+			int max = 0;
+			for (int d : dir ) {
+				int t = i + d;
+				if (!b.isValid(t))
+					continue;
+				Piece tp = b.getPiece(t);
+				if (tp == null || tp.getColor() == fp.getColor())
+					continue;
+				b.move(new BMove(i, t), depth, false);
+				int vm = b.getValue();
+
+				if (vm > max) {
+					vm = recapture(b, t, depth, true);
+					if (vm > max)
+						max = vm;
+				}
+				if (vm < min) {
+					vm = recapture(b, t, depth, false);
+					if (vm < min)
+						min = vm;
+				}
+				b.undo(0);
+			}
+			if (fp.getColor() == Settings.topColor)
+				qs += max;
+			else
+				qs += min;
+		}
+		return qs;
+	}
+
+	// ebqs recaptures
+	// this gives a better ebqs when a piece can be won
+	// but the attacking piece can be recaptured by a lower
+	// piece. e.g.:
+	// R2 B3
+	//    B1
+	// Red 2 can take Blue 3, but Blue 1 will take Red 2.
+	//
+	int recapture(TestingBoard b, int t, int depth, boolean ismax)
+	{
+		int qs = b.getValue();
+		b.setValue(0);
+		Piece tp = b.getPiece(t);
+		if (tp == null)
+			return qs;
+		int min = 0;
+		int max = 0;
+		for (int d : dir ) {
+			int f = t + d;
+			if (!b.isValid(f))
+				continue;
+			Piece fp = b.getPiece(f);
+			if (fp == null
+				|| tp.getColor() == fp.getColor()
+				|| fp.getRank() == Rank.BOMB
+				|| fp.getRank() == Rank.FLAG)
+				continue;
+			b.move(new BMove(f, t), depth, false);
+			int vm = b.getValue();
+			b.undo(0);
+
+			if (vm > max)
+				max = vm;
+			if (vm < min)
+				min = vm;
+		}
+		if (ismax)
+			return qs + min;
+		else
+			return qs + max;
 	}
 
 
-	private void valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth)
+	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth)
 	{
-		if (n<1)
-			return;
-
 		BMove bestMove = null;
+		int valueB = b.getValue();
 		int v;
+		if (n < 1) {
+			return ebqs(b, depth);
+		}
+
 		if (turn == Settings.topColor)
 			v = alpha;
 		else
 			v = beta;
 
-		ArrayList<MoveValuePair> moveList = getMoves(b, turn, depth);
+		ArrayList<MoveValuePair> moveList = getMoves(b, turn);
+
 		for (MoveValuePair mvp : moveList) {
 			mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
 		}
@@ -399,8 +519,6 @@ System.out.println("----");
 			if (tp == null && fp.getRank() == Rank.UNKNOWN && !fp.hasMoved() && fp.moves == 1)
 				vm = beta;
 			else {
-				int valueB = b.getValue();
-
 				b.move(mvp.move, depth, false);
 
 /*
@@ -413,54 +531,51 @@ System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + 
 + " " + fp.aiValue() + " " + tpvalue + " " + valueB + " " + b.getValue());
 */
 
-				valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1);
 
-				vm = b.getValue();
-				b.undo(fp, mvp.move.getFrom(), tp, mvp.move.getTo(), valueB, false);
+				vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1);
+				// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
+
+				b.undo(valueB);
 /*
 for (int ii=5; ii >= n; ii--)
 	System.out.print("  ");
-if (b.getPiece(tmpM.getTo()) == null)
-System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
-+ " hasMoved:" + b.getPiece(tmpM.getFrom()).hasMoved()
-+ " isKnown:" + b.getPiece(tmpM.getFrom()).isKnown()
-+ " moves:" + b.getPiece(tmpM.getFrom()).moves
-+ " aiV:" + b.getPiece(tmpM.getFrom()).aiValue()
+if (b.getPiece(mvp.move.getTo()) == null)
+System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
++ " aiV:" + b.getPiece(mvp.move.getFrom()).aiValue()
 + " " + vm);
 else
-System.out.println(n + " (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY()
-+ " hasMoved:" + b.getPiece(tmpM.getFrom()).hasMoved()
-+ " isKnown:" + b.getPiece(tmpM.getFrom()).isKnown()
-+ " moves:" + b.getPiece(tmpM.getFrom()).moves
-+ " hasMoved:" + b.getPiece(tmpM.getTo()).hasMoved()
-+ " isKnown:" + b.getPiece(tmpM.getTo()).isKnown()
-+ " moves:" + b.getPiece(tmpM.getTo()).moves
-+ " aiV:" + b.getPiece(tmpM.getTo()).aiValue()
+System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
++ " tprank:" + b.getPiece(mvp.move.getTo()).getRank()
++ " aiV:" + b.getPiece(mvp.move.getTo()).aiValue()
 + " " + vm);
 */
 
+
+
+
+
+
+
+
+			} // else
+
+			if (turn == Settings.topColor) {
+				if (vm > alpha) {
+					v = alpha = vm;
+					bestMove = mvp.move;
+				}
+			} else {
+				if (vm < beta) {
+					v = beta = vm;
+					bestMove = mvp.move;
+				}
 			}
 
-			if (vm > alpha && turn == Settings.topColor)
-			{
-				v = alpha = vm;
-				bestMove = mvp.move;
-			}
-			if (vm < beta && turn == Settings.bottomColor)
-			{
-				v = beta = vm;
-				bestMove = mvp.move;
-			}
-
-			if (beta <= alpha) {
-				b.setValue(v);
-				hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
-				return;
-			}
+			if (beta <= alpha)
+				break;
 		} // moveList
-		b.setValue(v);
 		if (bestMove != null)
 			hh[bestMove.getFrom()][bestMove.getTo()]+=n;
-		return;
+		return v;
 	}
 }

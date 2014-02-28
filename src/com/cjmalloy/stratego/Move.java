@@ -48,6 +48,6 @@ public class Move extends BMove
 
 	public boolean equals(Object m)
 	{
-		return super.equals(m) && piece==((Move)m).piece;
+		return super.equals(m) && piece.equals(((Move)m).piece);
 	}
 }
