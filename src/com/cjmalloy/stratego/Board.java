@@ -330,12 +330,12 @@ public class Board
 			p.setShown(false);
 	}
 	
-	protected void setPiece(Piece p, Spot s)
+	public void setPiece(Piece p, Spot s)
 	{
 		grid.setPiece(s.getX(),s.getY(),p);
 	}
 	
-	protected void setPiece(Piece p, int i)
+	public void setPiece(Piece p, int i)
 	{
 		grid.setPiece(i, p);
 	}
@@ -345,6 +345,21 @@ public class Board
 		return undoList.get(undoList.size()-1);
 	}
 
+	public boolean isProtected(int i)
+	{
+		Piece fp = getPiece(i);
+		for (int d : dir) {
+			int j = i + d;
+			if (!isValid(j))
+				continue;
+			Piece p = getPiece(j);
+			if (p != null
+				&& p.getColor() == fp.getColor()) {
+				return true;
+			}
+		}
+		return false;
+	}
 
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
@@ -355,17 +370,24 @@ public class Board
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
 		//
-		// If it moves next to a known opponent piece, 
-		// it inherits an acting rank of a equal to or lower than the
-		// known piece.
-		//
-		// If it moves away from a known opponent piece,
-		// it inherits an acting rank of a equal to or higher than the
-		// known piece.
-		//
 		// Acting rank is calculated factually, but is of
 		// questionable use in the heuristic because of bluffing.
 		//
+		// If an unprotected piece moves next to a known opponent piece, 
+		// it inherits a chase acting rank
+		// of a equal to or lower than the known piece.
+		//
+		// If a piece moves away from a known and unprotected
+		// opponent piece, it inherits a flee acting rank
+		// of the lowest rank that it fleed from.
+		// High flee acting ranks are probably of
+		// little use because unknown low ranks may flee
+		// to prevent discovery.
+		//
+		// However, the lower the rank it flees from,
+		// the more likely that the piece rank
+		// really is equal to or greater than the flee acting rank,
+		// because low ranks are irresistable captures.
 
 		// movement towards
 		for (int d : dir) {
@@ -375,12 +397,13 @@ public class Board
 			Piece p = getPiece(i);
 			if (p != null
 				&& p.getColor() != fp.getColor()
-				&& p.isKnown()) {
+				&& p.isKnown()
+				&& !isProtected(i)) {
 				Rank rank = p.getRank();
-				Rank arank = fp.getActingRankLow();
+				Rank arank = fp.getActingRankChase();
 				if (arank == Rank.NIL
 				|| arank.toInt() > rank.toInt())
-					fp.setActingRankLow(rank);
+					fp.setActingRankChase(rank);
 			}
 		}
 
@@ -392,12 +415,13 @@ public class Board
 			Piece p = getPiece(i);
 			if (p != null
 				&& p.getColor() != fp.getColor()
-				&& p.isKnown()) {
+				&& p.isKnown()
+				&& !isProtected(i)) {
 				Rank rank = p.getRank();
-				Rank arank = fp.getActingRankHigh();
+				Rank arank = fp.getActingRankFlee();
 				if (arank == Rank.NIL
-				|| arank.toInt() < rank.toInt())
-					fp.setActingRankHigh(rank);
+				|| arank.toInt() > rank.toInt())
+					fp.setActingRankFlee(rank);
 			}
 		}
 	}
@@ -464,6 +488,11 @@ public class Board
 		int size = undoList.size();
 		if (size < 4)
 			return false;
+
+		// let opponent get away with it
+		if (getPiece(m.getFrom()).getColor() == Settings.bottomColor)
+			return false;
+
 		return m.equals(undoList.get(size-4));
 	}
 

@@ -45,9 +45,10 @@ import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Rank;
 import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
+import com.cjmalloy.stratego.View;
 
 
-public class WView implements MoveListener
+public class WView extends View implements MoveListener
 {
 	private JFrame jFrame = null;  //  @jve:decl-index=0:visual-constraint="10,10"
 	private JPanel jContentPane = null;

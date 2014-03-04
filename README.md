@@ -8,7 +8,7 @@ Introduction
 ------------
 
 Java remake of stratego.  Forked from cjmalloy/stratego.
-This version has an improved ai and other features.
+This version has an improved AI and other features.
 
 Installation and Requirements
 -----------------------------
@@ -40,8 +40,8 @@ it completes within a fraction of a second
 usally completing about 6-8 ply depending on the speed of the desktop.
 
 Evaluation heuristic is based on material gained versus lost.
-An ai piece will generally avoid unknown and unmoved opponent pieces.
-If the ai piece is invincible, it will attack all unknown moved pieces.
+An AI piece will generally avoid unknown and unmoved opponent pieces.
+If the AI piece is invincible, it will attack all unknown moved pieces.
 Unknown pieces have a specified value,
 which is about equal to a Five,
 although this varies with play.
@@ -54,19 +54,37 @@ gaining opponent piece information.
 I won't tell you how it works here because it is a bit of a spoiler.
 As with human opponents, once you know their strategy
 it is easy to thwart it.
-This is much worse with the ai, because it does not adapt.
+This is much worse with the AI, because it does not adapt.
 You need to read the code if you want to find out
-what the ai tries to accomplish.
+what the AI tries to accomplish.
 
 This simple algorithm results in an amateur level of play.  
 
 Areas for improvements are:
 
-  1. Regression testing.  Design an automatic way to benchmark improvements, such as allowing ai v. ai play.
-  2. Improving the search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.
-  3. Improving the heuristic.
-  4. Improving the static position analysis.
+  1. Improving the search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.
+  2. Improving the heuristic.
+  3. Improving the static position analysis.
 
+AI Regression Testing
+---------------------
+
+Stratego supports the protocol used in
+[Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
+This is used to test the strength of the AI.
+To use Stratego with the Stratego AI Evaluator,
+use the -t option on the command line
+
+For a given set of initial setups,
+any change to the AI code must result in 100% wins against the agents.
+In addition, the number of moves to reach the win
+are totaled.
+The sum of the number of moves for all the games played against each agent
+must be equal or less than that recorded by the prior AI code.
+In other words,
+while a modified AI may take more moves to win any individual game
+(and it must win all games against all agents),
+the aggregate of all moves to win a set of games must be less.
 
 References
 ----------

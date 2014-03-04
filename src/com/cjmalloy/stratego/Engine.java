@@ -28,6 +28,11 @@ public abstract class Engine
 		return board.getPiece(x, y);
 	}
 	
+	public void setBoardPiece(Piece p, Spot s)
+	{
+		board.setPiece(p, s);
+	}
+	
 	public Piece getTrayPiece(int i)
 	{
 		return board.getTrayPiece(i);
@@ -97,7 +102,7 @@ public abstract class Engine
 	}
 
 
-	protected boolean requestMove(Move m)
+	protected boolean requestMove(Move m, boolean noCheckOppPieces)
 	{
 		int t = turn;
 
@@ -106,12 +111,14 @@ public abstract class Engine
 		
 		if (status == Status.PLAYING)
 		{
-			int winner;
-			if ((winner = board.checkWin()) >= 0)
-			{
-				status = Status.STOPPED;
-				board.showAll();
-				gameOver(winner);
+			if (!noCheckOppPieces) {
+				int winner;
+				if ((winner = board.checkWin()) >= 0)
+				{
+					status = Status.STOPPED;
+					board.showAll();
+					gameOver(winner);
+				}
 			}
 
 			turn = (turn + 1) % 2;

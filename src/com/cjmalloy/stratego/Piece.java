@@ -30,8 +30,8 @@ public class Piece implements Comparable<Piece>
 	private boolean moved = false;	// used by screen view thread so
 					// do not update by ai
 	private int value = 0;
-	private Rank actingRankHigh = Rank.NIL;
-	private Rank actingRankLow = Rank.NIL;
+	private Rank actingRankFlee = Rank.NIL;
+	private Rank actingRankChase = Rank.NIL;
 	
 	public int moves = 0;	// times piece has moved
 
@@ -51,8 +51,8 @@ public class Piece implements Comparable<Piece>
 		rank = p.rank;
 		known = p.known;
 		shown = p.shown;
-		actingRankHigh = p.actingRankHigh;
-		actingRankLow = p.actingRankLow;
+		actingRankFlee = p.actingRankFlee;
+		actingRankChase = p.actingRankChase;
 		value = p.value;
 	}
 
@@ -62,8 +62,8 @@ public class Piece implements Comparable<Piece>
 		moves = 0;
 		known = false;
 		shown = false;
-		actingRankLow = Rank.NIL;
-		actingRankHigh = Rank.NIL;
+		actingRankChase = Rank.NIL;
+		actingRankFlee = Rank.NIL;
 		value = 0;
 	}
 
@@ -127,24 +127,24 @@ public class Piece implements Comparable<Piece>
 		return value;
 	}
 
-	public Rank getActingRankLow()
+	public Rank getActingRankChase()
 	{
-		return actingRankLow;
+		return actingRankChase;
 	}
 
-	public void setActingRankLow(Rank r)
+	public void setActingRankChase(Rank r)
 	{
-		actingRankLow = r;
+		actingRankChase = r;
 	}
 
-	public Rank getActingRankHigh()
+	public Rank getActingRankFlee()
 	{
-		return actingRankHigh;
+		return actingRankFlee;
 	}
 
-	public void setActingRankHigh(Rank r)
+	public void setActingRankFlee(Rank r)
 	{
-		actingRankHigh = r;
+		actingRankFlee = r;
 	}
 
 	public int compareTo(Piece p)

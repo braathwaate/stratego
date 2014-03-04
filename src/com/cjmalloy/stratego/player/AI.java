@@ -19,6 +19,7 @@ package com.cjmalloy.stratego.player;
 
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
@@ -47,6 +48,7 @@ public class AI implements Runnable
 	public static ReentrantLock aiLock = new ReentrantLock();
 	private Board board = null;
 	private CompControls engine = null;
+	private PrintWriter log;
 
 	private int mmax;
 	private int foo;
@@ -193,7 +195,9 @@ public class AI implements Runnable
 				
 			engine.aiReturnPlace(p, new Spot(i, j));
 		}
-		
+	
+		log = new PrintWriter("ai.out", "UTF-8");
+	
 		engine.play();
 	}
 
@@ -205,18 +209,16 @@ public class AI implements Runnable
                 {
 	
 			bestMove = getBestMove(new TestingBoard(board));
+			System.runFinalization();
+			System.gc(); 
+
+			// return the actual board move
+			engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
 		}
 		finally
 		{
 			aiLock.unlock();
 		}
-		
-		System.runFinalization();
-		System.gc(); 
-
-		// return the actual board move
-		engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
-
 	}
 
 	private BMove getMove(TestingBoard b, Piece fp, int f, int t)
@@ -224,13 +226,14 @@ public class AI implements Runnable
 		if (!b.isValid(t))
 			return null;
 		Piece tp = b.getPiece(t);
-		Rank rank = fp.getRank();
 		if (tp != null && tp.getColor() == fp.getColor())
 			return null;
 		
 		BMove tmpM = new BMove(f, t);
+
 		if (b.isRecentMove(tmpM))
 			return null;
+
 		return tmpM;
 	}
 
@@ -334,7 +337,7 @@ public class AI implements Runnable
 
 			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
 			// int vm = valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
-System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
+			log.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
 
 			mvp.value = vm;
 			b.undo(valueB);
@@ -345,11 +348,12 @@ System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmp
 			}
 
 		}
-		System.out.println("-+-");
+		log.println("-+-");
 		Collections.sort(moveList);
 		MoveValuePair mvp = moveList.get(0);
 		hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
-		System.out.println("-+++-");
+		log.println("-+++-");
+
 
 		} // iterative deepening
 
@@ -357,26 +361,11 @@ System.out.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmp
 			return null;	// ai trapped
 
 		MoveValuePair mvp = moveList.get(0);
-		BMove move = mvp.move;
-		int value = mvp.value;
-if (b.getPiece(move.getTo()) == null)
-System.out.println(" (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
-+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
-+ " moves:" + b.getPiece(move.getFrom()).moves
-+ " " + value);
-else
-System.out.println( " (" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
-+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
-+ " moves:" + b.getPiece(move.getFrom()).moves
-+ " hasMoved:" + b.getPiece(move.getTo()).hasMoved()
-+ " isKnown:" + b.getPiece(move.getTo()).isKnown()
-+ " moves:" + b.getPiece(move.getTo()).moves
-+ " " + value);
-System.out.println("----");
+		logMove(b, mvp.move, mvp.value);
+		log.println("----");
+		log.flush();
 
-		return move;
+		return mvp.move;
 	}
 
 	// Evaluation-Based Quiescence Search (qs)
@@ -391,21 +380,32 @@ System.out.println("----");
 	// (lesser) piece subject to attack when the loss of an existing piece
 	// is inevitable.
 	// 
-	// This version gives no value to pieces attacked by
-	// the last piece that was moved.  This prevents the ai
+	// This version gives no credit for the best attack on a moved
+	// piece on the board because it is likely the opponent will move
+	// the defender the very next move.  This prevents the ai
 	// from thinking it has won or lost at the end of
 	// a chase sequence, because otherwise the ebqs would give value when
 	// (usually, unless cornered) the chase sequence can be extended
 	// indefinitely without any material loss or gain.
-	private int ebqs(TestingBoard b, int depth)
+	//
+	// Unmoved pieces are likely bombs or flags.
+	//
+	// bug: is that if two pieces can attack the same piece,
+	// the piece is added twice.
+	//
+	// possible bug: if a piece is cornered, it does not get valued
+	// until the opponents turn.  Is this just a 1 ply horizon effect?
+	//
+	private int ebqs(TestingBoard b, int turn, int depth)
 	{
 		int qs = b.getValue();
 		b.setValue(0);
-		int to = b.getLastMove().getTo();
+		int maxbest = 0;
+		int minbest = 0;
 		for (int j=0;j<foo;j++) {
 			int i = movable[j];
 			Piece fp = b.getPiece(i);
-			if (fp == null || to == i)
+			if (fp == null)
 				continue;
 			int min = 0;
 			int max = 0;
@@ -423,20 +423,29 @@ System.out.println("----");
 					vm = recapture(b, t, depth, true);
 					if (vm > max)
 						max = vm;
+					if (max > maxbest && tp.hasMoved())
+						maxbest = max;
 				}
 				if (vm < min) {
 					vm = recapture(b, t, depth, false);
 					if (vm < min)
 						min = vm;
+					if (min < minbest && tp.hasMoved())
+						minbest = min;
 				}
 				b.undo(0);
 			}
-			if (fp.getColor() == Settings.topColor)
+			if (fp.getColor() == Settings.topColor) {
 				qs += max;
-			else
+			} else {
 				qs += min;
+			}
 		}
-		return qs;
+
+		if (turn == Settings.topColor)
+			return qs - minbest;
+		else
+			return qs - maxbest;
 	}
 
 	// ebqs recaptures
@@ -488,7 +497,7 @@ System.out.println("----");
 		int valueB = b.getValue();
 		int v;
 		if (n < 1) {
-			return ebqs(b, depth);
+			return ebqs(b, turn, depth);
 		}
 
 		if (turn == Settings.topColor)
@@ -536,23 +545,18 @@ System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + 
 				// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
 
 				b.undo(valueB);
-/*
+
 for (int ii=5; ii >= n; ii--)
-	System.out.print("  ");
+	log.print("  ");
 if (b.getPiece(mvp.move.getTo()) == null)
-System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
+log.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
 + " aiV:" + b.getPiece(mvp.move.getFrom()).aiValue()
 + " " + vm);
 else
-System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
+log.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
 + " tprank:" + b.getPiece(mvp.move.getTo()).getRank()
 + " aiV:" + b.getPiece(mvp.move.getTo()).aiValue()
 + " " + vm);
-*/
-
-
-
-
 
 
 
@@ -577,5 +581,36 @@ System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + 
 		if (bestMove != null)
 			hh[bestMove.getFrom()][bestMove.getTo()]+=n;
 		return v;
+	}
+
+	void logMove(Board b, BMove move, int value)
+	{
+	int color = b.getPiece(move.getFrom()).getColor();
+	if (b.getPiece(move.getTo()) == null)
+	log.println(color + "(" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
+	+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
+	+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
+	+ " moves:" + b.getPiece(move.getFrom()).moves
+	+ " " + value);
+	else
+	log.println(color + "(" + b.getPiece(move.getFrom()).getRank() + "x" + b.getPiece(move.getTo()).getRank() + ")" + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
+	+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
+	+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
+	+ " moves:" + b.getPiece(move.getFrom()).moves
+	+ " hasMoved:" + b.getPiece(move.getTo()).hasMoved()
+	+ " isKnown:" + b.getPiece(move.getTo()).isKnown()
+	+ " moves:" + b.getPiece(move.getTo()).moves
+	+ " " + value);
+	}
+
+	public void logMove(Move m)
+	{
+		logMove(board, m, 0);
+	}
+
+	public void log(String s)
+	{
+		log.println(s);
+		log.flush();
 	}
 }

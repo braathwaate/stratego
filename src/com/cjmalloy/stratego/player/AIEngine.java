@@ -28,15 +28,16 @@ import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
 import com.cjmalloy.stratego.Status;
+import com.cjmalloy.stratego.View;
 
 
 
 public class AIEngine extends Engine implements CompControls, UserControls
 {
-	private WView view = null;
+	private View view = null;
 	private AI ai = null;
 	
-	public AIEngine(WView v)
+	public AIEngine(View v)
 	{
 		view = v;
 		board = new Board();
@@ -53,9 +54,10 @@ public class AIEngine extends Engine implements CompControls, UserControls
 
 		if (status != Status.SETUP)
 			return;
-		
+
 		if (board.getTraySize() == 0)
 		{
+			// this is how we get started
 			view.setUndoMode();
 			status = Status.PLAYING;
 			if (turn!=Settings.bottomColor)
@@ -73,12 +75,11 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		if (Settings.bShowAll)
 			board.showAll();
 	}
-	
+
 	private void requestCompMove()
 	{
-		if (status == Status.PLAYING)
-		if (turn != Settings.bottomColor)
-			ai.getMove();
+		assert (status == Status.PLAYING) : "requestCompMove but not playing?";
+		ai.getMove();
 	}
 	
 	public void requestUserMove(Move m)
@@ -92,29 +93,25 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		}
 		else
 		{
-			if (turn != Settings.bottomColor)
-			{
-				if (!AI.aiLock.isLocked())
-					requestCompMove();
-			}
-			else
-			{
-				if (Settings.bShowAll)
-					board.showAll();
-				else if (!Settings.bNoHideAll)
-					board.hideAll();
-				
-				if (requestMove(m))
-					requestCompMove();
-			}
+			if (Settings.bShowAll)
+				board.showAll();
+			else if (!Settings.bNoHideAll)
+				board.hideAll();
+
+			// wait for the ai to finish
+			ai.aiLock.lock();
+			ai.aiLock.unlock();
+
+			ai.logMove(m);
+			if (requestMove(m, view.isActive())) {
+				requestCompMove();
+			} else
+				ai.log("ILLEGAL MOVE");
 		}
 	}
 
 	public void aiReturnMove(Move m)
 	{
-		if (turn == Settings.bottomColor)
-			return;
-
 		if (m==null || m.getPiece()==null)
 		{
 			//AI trapped
@@ -128,12 +125,18 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		assert m.getPiece().getColor() != Settings.bottomColor
 			: "piece is bottom color?";
 		
-		requestMove(m);
-
+		view.moveInit(m);
+		if (!requestMove(m, view.isActive())) {
+			ai.log("ILLEGAL MOVE-->");
+			ai.logMove(m);
+			ai.log("<--ILLEGAL MOVE");
+		}
+/*
 		if (turn != Settings.bottomColor) {
 			JOptionPane.showMessageDialog(null,
 					"AI turn error " + turn + " " + Settings.bottomColor , "Critical Error", JOptionPane.ERROR_MESSAGE);
 		}
+*/
 	}
 	
 	public void aiReturnPlace(Piece p, Spot s)

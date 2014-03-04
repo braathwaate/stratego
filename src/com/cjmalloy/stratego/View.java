@@ -15,20 +15,29 @@
     along with Stratego.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-package com.cjmalloy.stratego.player;
+package com.cjmalloy.stratego;
+
+import java.io.IOException;
+
+import javax.swing.JOptionPane;
+
+import com.cjmalloy.stratego.Board;
+import com.cjmalloy.stratego.Engine;
+import com.cjmalloy.stratego.Move;
+import com.cjmalloy.stratego.Piece;
+import com.cjmalloy.stratego.Settings;
+import com.cjmalloy.stratego.Spot;
+import com.cjmalloy.stratego.Status;
 
 
 
-public class StrategoDriver
+public class View
 {
-	//main entry point
-	public static void main(String[] args)
-	{
-		for(String arg:args)
-		    if (arg.equals("-t"))
-			new AITest();
-		
-		new WView();
-	}
-
+	public void setUndoMode() {}
+	public void setPlayMode() {}
+	public void gameOver(int color) {}
+	public void update() {}
+	public boolean isActive() { return false; }
+	public void moveInit(Move m) {}
 }
+
