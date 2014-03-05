@@ -25,8 +25,10 @@ public class StrategoDriver
 	public static void main(String[] args)
 	{
 		for(String arg:args)
-		    if (arg.equals("-t"))
+		    if (arg.equals("-t")) {
 			new AITest();
+			return;
+		    }
 		
 		new WView();
 	}

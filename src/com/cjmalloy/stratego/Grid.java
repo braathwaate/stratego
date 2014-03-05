@@ -99,7 +99,7 @@ protected static class UniqueID
 		return getPiece(getIndex(x, y));
 	}
 
-	public int getIndex(int x, int y)
+	static public int getIndex(int x, int y)
 	{
 		return x + 1 + (y+1) * 11;
 	}
@@ -122,5 +122,31 @@ protected static class UniqueID
 				grid[i] = null;
 			}
 		}
+	}
+
+	public int closestPiece(int to)
+	{
+		Piece tp = getPiece(to);
+		int tpcolor = tp.getColor();
+		int tx = Grid.getX(to);
+		int ty = Grid.getY(to);
+	
+		int minsteps = 99;
+		int from = to;
+		for (int y = 0; y < 10; y++)
+		for (int x = 0; x < 10; x++) {
+			Piece fp = getPiece(x,y);
+			if (fp != null
+				&& fp.hasMoved()
+				&& fp.getColor() != tpcolor) {
+				int steps = Math.abs(ty - y) + Math.abs(tx - x);
+				if (steps < minsteps) {
+					minsteps = steps;
+					from = Grid.getIndex(x,y);
+				}
+			}
+		}
+
+		return from;
 	}
 }

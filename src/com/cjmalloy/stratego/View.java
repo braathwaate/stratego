@@ -39,5 +39,6 @@ public class View
 	public void update() {}
 	public boolean isActive() { return false; }
 	public void moveInit(Move m) {}
+	public void moveComplete(Move m) { update(); }
 }
 

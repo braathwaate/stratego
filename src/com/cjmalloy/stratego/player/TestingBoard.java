@@ -89,6 +89,13 @@ public class TestingBoard extends Board
 		{ 21, 42, 54, 30 }	// corner double layer
 	};
 
+	static final int[][] lanes = {
+		{ 45, 46, 56, 57, 67, 68, 78, 79 },
+		{ 49, 50, 60, 61, 71, 72, 82, 83 },
+		{ 53, 54, 64, 65, 75, 76, 86, 87 }
+	};
+		
+
 	public TestingBoard() {}
 	
 	public TestingBoard(Board t)
@@ -234,7 +241,7 @@ public class TestingBoard extends Board
 				int y = Grid.getY(i);
 				if (y <= 3)
 					y = -y;
-				genDestTmp(p.getColor(), i, DEST_PRIORITY_LOW + y - 9);
+				genDestTmp(false, p.getColor(), i, DEST_PRIORITY_LOW + y - 9);
 				genDestValue(1-p.getColor(), 5);
 				genDestValue(1-p.getColor(), 6);
 				genDestValue(1-p.getColor(), 7);
@@ -292,7 +299,10 @@ public class TestingBoard extends Board
 	{
 		Piece p = getPiece(i);
 		if (r >= 2 && r <= 8)  {
-			genDestTmp(p.getColor(), i, DEST_PRIORITY_LOW);
+			genDestTmp(false, p.getColor(), i, DEST_PRIORITY_LOW);
+			// this nulls out incentive for chase sequences
+			destTmp[i] = DEST_VALUE_NIL;
+
 			boolean found = false;
 			for (int j = r - 1; j >= 1; j--)
 			if (rankAtLarge(1-p.getColor(),j)) {
@@ -348,23 +358,19 @@ public class TestingBoard extends Board
 			return;
 
 		assert pflag.getColor() == Settings.topColor : "flag routines only for ai";
-		// If the ai assumes opponent has guessed the flag
-		// by setting it known
-		// then the ai will leave pieces hanging if the opponent
-		// can take the flag.  But the opponent may or may know.
-		// pflag.setKnown(true);
 		pflag.setAiValue(aiFlagValue(pflag.getColor()));
 
 		// assume opponent will try to get to it
 		// with all known and unknown ranks
-		genDestTmp(pflag.getColor(), flag, DEST_PRIORITY_DEFEND_FLAG);
+		genDestTmp(false, pflag.getColor(), flag, DEST_PRIORITY_DEFEND_FLAG);
 		for (int r = 1; r <= Rank.UNKNOWN.toInt(); r++)
 			genDestValue(1-pflag.getColor(), r);
 
-		// defend it by lowest ranked pieces
-		for (int r = 1; r <= 7; r++)
+		// defend it with lowest ranked piece
+		int index = grid.closestPiece(flag);
+		for (int r = 1; r < 8; r++)
 			if (rankAtLarge(pflag.getColor(),r)) {
-				genDestTmp(1-pflag.getColor(), flag, DEST_PRIORITY_DEFEND_FLAG);
+				genDestTmp(false, 1-pflag.getColor(), index, DEST_PRIORITY_DEFEND_FLAG);
 				genDestValue(pflag.getColor(), r);
 				break;
 			}
@@ -383,7 +389,7 @@ public class TestingBoard extends Board
 
 				// assume opponent will try to remove
 				// with eights and unknown ranks
-				genDestTmp(p.getColor(), j, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+				genDestTmp(false, p.getColor(), j, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 				genDestValue(1-p.getColor(), Rank.UNKNOWN.toInt());
 				genDestValue(1-p.getColor(), Rank.EIGHT.toInt());
 
@@ -391,23 +397,50 @@ public class TestingBoard extends Board
 				// then the opponent probably has guessed
 				// the location of the flag.
 				// Try to protect the bombs with the lowest rank(s)
-				if (p.isKnown())
+				if (p.isKnown()) {
+					int indexb = grid.closestPiece(j);
 					for (int r = 1; r < 8; r++)
 						if (rankAtLarge(p.getColor(), r)) {
-							genDestTmp(p.getColor(), j + 11, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+							// genDestTmp(false, p.getColor(), j + 11, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+							genDestTmp(false, p.getColor(), indexb, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 							genDestValue(p.getColor(), r);
 							break;
 						}
+				}
 			}
 		}
 	}
 
-	// establish location it as a flag destination.
+	// Establish location it as a flag destination.
+
+	// AI FLAG:
+	// If the ai assumes opponent has guessed its flag
+	// and sets the flag to be known,
+	// then the ai will leave pieces hanging if the opponent
+	// can take the flag, because the ai assumes the opponent
+	// is going to take the flag rather than the ai pieces.
+	// If the opponent does not exactly know, it
+	// is better to allow the opponent to take the
+	// flag in the search tree, moving the ai pieces
+	// as if nothing is amiss (bluffing).
+	// If the opponent HAS guessed it correctly, then
+	// the flag needs to be set known so the ai pieces
+	// respond.
+
+	// The ai sets the flag to be known on a flag that
+	// was totally bombed.  That way, the bombs must be
+	// removed in order for non-eights to find the flag.
+	// But the ai also assumes
+	// that unknown pieces take bombs and transform
+	// into eights.  So this makes the ai vigilant in
+	// protecting the bombed area from unknown pieces.
+
 	private void genDestFlag(int b[])
 	{
 		int i = b[0];
 		Piece flagp = getPiece(i);
-		if (flagp.getColor() == Settings.bottomColor) {
+		if (flagp.getColor() == Settings.bottomColor
+			|| flagp.getRank() == Rank.FLAG) {
 			flagp.setRank(Rank.FLAG);
 			flagp.setKnown(true);
 			flagp.setAiValue(aiFlagValue(flagp.getColor()));
@@ -421,7 +454,7 @@ public class TestingBoard extends Board
 		// destination matrix will not extend past the bombs.
 		// So the lowly piece will only be activated IF
 		// there is an open path to the flag.
-		genDestTmp(flagp.getColor(), i, DEST_PRIORITY_ATTACK_FLAG);
+		genDestTmp(false, flagp.getColor(), i, DEST_PRIORITY_ATTACK_FLAG);
 		for (int k = 9; k > 0; k--) {
 			if (rankAtLarge(1-flagp.getColor(),k)) {
 				genNeededDest(1-flagp.getColor(), k);
@@ -558,7 +591,8 @@ public class TestingBoard extends Board
 	private void destBomb(int b[])
 	{
 		int flag = b[0];
-		int j = b[2];	// closest bomb in pattern
+		for (int k = 1; k < 4; k++) {
+		int j = b[k];
 		Piece p = getPiece(j);
 
 		// stay near but don't get in the way
@@ -570,7 +604,7 @@ public class TestingBoard extends Board
 		// Send a lower ranked piece along to protect the eight
 		// and possibly confuse the opponent about which is which
 		// if both are unknown
-		genDestTmp(p.getColor(), near, DEST_PRIORITY_LOW);
+		genDestTmp(false, p.getColor(), near, DEST_PRIORITY_LOW);
 		int r;
 		for (r = 5; r >= 1; r--)
 			if (activeRank[1-p.getColor()][r-1] != 0) {
@@ -579,8 +613,9 @@ public class TestingBoard extends Board
 		}
 
 		// Send the miner 
-		genDestTmp(p.getColor(), j, DEST_PRIORITY_LOW);
+		genDestTmp(true, p.getColor(), j, DEST_PRIORITY_LOW);
 		genNeededDest(1-p.getColor(), 8);
+	}
 	}
 
 	// some bombs are worth removing and others we can ignore.
@@ -594,13 +629,13 @@ public class TestingBoard extends Board
 			Piece p2 = getPiece(frontPattern[i][1]);
 			if (p1 != null && p1.getRank() == Rank.BOMB
 				&& p2 != null && p2.getRank() == Rank.BOMB) {
-				genDestTmp(p1.getColor(), frontPattern[i][0], DEST_PRIORITY_LOW);
+				genDestTmp(true, p1.getColor(), frontPattern[i][0], DEST_PRIORITY_LOW);
 				p1.setAiValue(aiBombValue(p1.getColor()));
 				if (p1.getRank() == Rank.UNKNOWN)
 					p1.setRank(Rank.BOMB);
 				genNeededDest(1-p1.getColor(), 8);
 
-				genDestTmp(p2.getColor(), frontPattern[i][1], DEST_PRIORITY_LOW);
+				genDestTmp(true, p2.getColor(), frontPattern[i][1], DEST_PRIORITY_LOW);
 				p2.setAiValue(aiBombValue(p2.getColor()));
 				if (p2.getRank() == Rank.UNKNOWN)
 					p2.setRank(Rank.BOMB);
@@ -628,9 +663,12 @@ public class TestingBoard extends Board
 	//
 	// Seed the matrix with "n" at "to".
 	//
+	// If guarded is true, then the matrix will avoid passing
+	// any guards in the lanes.  This is used when sending eights.
+	//
 	// This matrix is used to lead pieces to desired
 	// destinations.
-	private void genDestTmp(int color, int to, int n)
+	private void genDestTmp(boolean guarded, int color, int to, int n)
 	{
 		for (int j = 12; j <= 120; j++)
 			destTmp[j] = DEST_VALUE_NIL;
@@ -647,6 +685,28 @@ public class TestingBoard extends Board
 				&& !p.hasMoved()
 				&& (p.getColor() == color || p.getRank() == Rank.BOMB))
 				continue;
+
+			// check for guarded lanes
+			if (guarded) {
+			for ( int[] lp : lanes ) {
+				boolean inlane = false;
+				boolean isGuarded = false;
+				for (int lane : lp) {
+					if (lane == j)
+						inlane = true;
+					Piece gp = getPiece(lane);
+					if (gp != null 
+						&& gp.getColor() == color
+						&& (!gp.isKnown()
+							|| isInvincible(gp)))
+						isGuarded = true;
+				}
+				if (isGuarded && inlane)
+					continue;
+			}
+			}
+
+			// set the neighbors
 			for (int d : dir) {
 				int i = j + d;
 				if (!isValid(i) || destTmp[i] != DEST_VALUE_NIL)
@@ -657,10 +717,6 @@ public class TestingBoard extends Board
 		}
 		n--;
 		}
-
-		// this nulls out incentive for chase sequences
-		if (getPiece(to) != null)
-			destTmp[to] = DEST_VALUE_NIL;
 	}
 
 	private void genDestValue(int color, int rank)
@@ -766,6 +822,13 @@ public class TestingBoard extends Board
 						vm -= aiBluffingValue(m.getTo());
 				}
 
+				// Because of flag safety,
+				// the ai assumes that unknown pieces win bombs.
+				if (tprank == Rank.BOMB) {
+					if (fprank == Rank.UNKNOWN)
+						fp.setRank(Rank.EIGHT);
+				}
+
 				vm += makeKnown(fp);
 				setPiece(fp, m.getTo()); // won
 				break;
@@ -862,7 +925,7 @@ public class TestingBoard extends Board
 		if (fp.getColor() == Settings.topColor)
 			value += vm;
 		else
-			value -= vm;;
+			value -= vm;
 		fp.moves++;
 	}
 
@@ -1094,7 +1157,7 @@ public class TestingBoard extends Board
 	// because the search tree depth is limited and eventually
 	// it is hoped that an exposed flag can be attacked.
 	//
-	// So a flag bomb is worth slightly more than an eight.
+	// So a flag bomb is worth slightly more than an unknown eight.
 	// The value of an eight increases with the number remaining.
 	//
 	// The ai is always willing to exchange an eight for a flag bomb.
@@ -1105,7 +1168,7 @@ public class TestingBoard extends Board
 
 	private int aiBombValue(int color)
 	{
-		return values[color][8] + 10;
+		return values[color][8] + stealthValue(color, Rank.EIGHT) + 10;
 	}
 
 	// FLAG VALUE.

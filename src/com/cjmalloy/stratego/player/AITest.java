@@ -24,7 +24,6 @@ import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
 import com.cjmalloy.stratego.Status;
 import com.cjmalloy.stratego.Rank;
-import com.cjmalloy.stratego.Reader;
 import com.cjmalloy.stratego.View;
 
 import java.util.Scanner;
@@ -331,7 +330,7 @@ public class AITest extends View
 
 	}
 
-	public synchronized void moveInit(Move m)
+	public void moveInit(Move m)
 	{
 		int fromy = m.getFromY();
 		int toy =  m.getToY();
@@ -375,6 +374,10 @@ public class AITest extends View
 			{
 			e.printStackTrace();
 			}
+	}
+
+	public synchronized void moveComplete(Move m)
+	{
 		aimove.release();
 	}
 

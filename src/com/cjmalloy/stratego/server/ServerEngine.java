@@ -79,7 +79,7 @@ public class ServerEngine extends Engine
 			if (color == turn)
 			{
 				board.hideAll();
-				requestMove(m);
+				requestMove(m, false);
 			}
 		}
 		else if (status == Status.SETUP)

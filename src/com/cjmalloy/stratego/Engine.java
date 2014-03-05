@@ -104,9 +104,14 @@ public abstract class Engine
 
 	protected boolean requestMove(Move m, boolean noCheckOppPieces)
 	{
-		int t = turn;
+		assert m != null : "m is null?";
 
-		if (m == null || !move(m))
+		// this can happen if the user tries to
+		// move a piece of the opposite color
+		if (m.getPiece().getColor() != turn)
+			return false;
+
+		if (!move(m))
 			return false;
 		
 		if (status == Status.PLAYING)
@@ -124,7 +129,6 @@ public abstract class Engine
 			turn = (turn + 1) % 2;
 		}
 
-		update();
 		return true;
 	}
 	

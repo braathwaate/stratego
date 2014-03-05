@@ -83,6 +83,8 @@ public class AI implements Runnable
 	
 	public void getBoardSetup() throws IOException
 	{
+		log = new PrintWriter("ai.out", "UTF-8");
+	
 		File f = new File("ai.cfg");
 		BufferedReader cfg;
 		if(!f.exists()) {
@@ -142,6 +144,7 @@ public class AI implements Runnable
 							break;
 						}
 				}
+				log(line);
 			}
 			catch (IOException e)
 			{
@@ -195,8 +198,6 @@ public class AI implements Runnable
 				
 			engine.aiReturnPlace(p, new Spot(i, j));
 		}
-	
-		log = new PrintWriter("ai.out", "UTF-8");
 	
 		engine.play();
 	}
@@ -337,10 +338,10 @@ public class AI implements Runnable
 
 			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
 			// int vm = valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
-			log.println(n + ": (" + fp.getRank() + ") " + tmpM.getFromX() + " " + tmpM.getFromY() + " " + tmpM.getToX() + " " + tmpM.getToY() + " " + vm);
 
 			mvp.value = vm;
 			b.undo(valueB);
+			logMove(n, b, tmpM, vm);
 
 			if (vm > alpha)
 			{
@@ -361,7 +362,7 @@ public class AI implements Runnable
 			return null;	// ai trapped
 
 		MoveValuePair mvp = moveList.get(0);
-		logMove(b, mvp.move, mvp.value);
+		logMove(0, b, mvp.move, mvp.value);
 		log.println("----");
 		log.flush();
 
@@ -409,6 +410,8 @@ public class AI implements Runnable
 				continue;
 			int min = 0;
 			int max = 0;
+			boolean minmoved = false;
+			boolean maxmoved = false;
 			for (int d : dir ) {
 				int t = i + d;
 				if (!b.isValid(t))
@@ -421,24 +424,28 @@ public class AI implements Runnable
 
 				if (vm > max) {
 					vm = recapture(b, t, depth, true);
-					if (vm > max)
+					if (vm > max) {
 						max = vm;
-					if (max > maxbest && tp.hasMoved())
-						maxbest = max;
+						maxmoved = tp.hasMoved();
+					}
 				}
 				if (vm < min) {
 					vm = recapture(b, t, depth, false);
-					if (vm < min)
+					if (vm < min) {
 						min = vm;
-					if (min < minbest && tp.hasMoved())
-						minbest = min;
+						minmoved = tp.hasMoved();
+					}
 				}
 				b.undo(0);
 			}
 			if (fp.getColor() == Settings.topColor) {
 				qs += max;
+				if (max > maxbest && maxmoved)
+					maxbest = max;
 			} else {
 				qs += min;
+				if (min < minbest && minmoved)
+					minbest = min;
 			}
 		}
 
@@ -530,36 +537,14 @@ public class AI implements Runnable
 			else {
 				b.move(mvp.move, depth, false);
 
-/*
-int tpvalue = 0;
-if (tp != null)
-	tpvalue = tp.aiValue();
-for (int ii=5; ii >= n; ii--)
-	System.out.print("  ");
-System.out.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
-+ " " + fp.aiValue() + " " + tpvalue + " " + valueB + " " + b.getValue());
-*/
-
-
 				vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1);
 				// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
 
 				b.undo(valueB);
 
-for (int ii=5; ii >= n; ii--)
-	log.print("  ");
-if (b.getPiece(mvp.move.getTo()) == null)
-log.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
-+ " aiV:" + b.getPiece(mvp.move.getFrom()).aiValue()
-+ " " + vm);
-else
-log.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.move.getFromY() + " " + mvp.move.getToX() + " " + mvp.move.getToY()
-+ " tprank:" + b.getPiece(mvp.move.getTo()).getRank()
-+ " aiV:" + b.getPiece(mvp.move.getTo()).aiValue()
-+ " " + vm);
-
-
-
+				for (int ii=8; ii >= n; ii--)
+					log.print("  ");
+				logMove(n, b, mvp.move, vm);
 
 			} // else
 
@@ -583,29 +568,42 @@ log.println(n + " (" + fp.getRank() + ") " + mvp.move.getFromX() + " " + mvp.mov
 		return v;
 	}
 
-	void logMove(Board b, BMove move, int value)
+	void logMove(int n, Board b, BMove move, int value)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
-	if (b.getPiece(move.getTo()) == null)
-	log.println(color + "(" + b.getPiece(move.getFrom()).getRank() + ") " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-	+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
-	+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
-	+ " moves:" + b.getPiece(move.getFrom()).moves
+	char hasMoved = ' ';
+	if (b.getPiece(move.getFrom()).hasMoved())
+		hasMoved = 'M';
+	char isKnown = ' ';
+	if (b.getPiece(move.getFrom()).isKnown())
+		isKnown = 'K';
+	if (b.getPiece(move.getTo()) == null) {
+	log.println(n + ":" + color
++ " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
++ " (" + b.getPiece(move.getFrom()).getRank() + ")"
+	+ hasMoved + isKnown + " "
+	+ value);
+	} else {
+		char tohasMoved = ' ';
+		if (b.getPiece(move.getTo()).hasMoved())
+			tohasMoved = 'M';
+		char toisKnown = ' ';
+		if (b.getPiece(move.getTo()).isKnown())
+			toisKnown = 'K';
+		char X = 'x';
+		if (n == 0)
+			X = 'X';
+	log.println(n + ":" + color
++ " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
++ " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
+	+ hasMoved + isKnown + " " + tohasMoved + toisKnown
 	+ " " + value);
-	else
-	log.println(color + "(" + b.getPiece(move.getFrom()).getRank() + "x" + b.getPiece(move.getTo()).getRank() + ")" + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-	+ " hasMoved:" + b.getPiece(move.getFrom()).hasMoved()
-	+ " isKnown:" + b.getPiece(move.getFrom()).isKnown()
-	+ " moves:" + b.getPiece(move.getFrom()).moves
-	+ " hasMoved:" + b.getPiece(move.getTo()).hasMoved()
-	+ " isKnown:" + b.getPiece(move.getTo()).isKnown()
-	+ " moves:" + b.getPiece(move.getTo()).moves
-	+ " " + value);
+	}
 	}
 
 	public void logMove(Move m)
 	{
-		logMove(board, m, 0);
+		logMove(0, board, m, 0);
 	}
 
 	public void log(String s)

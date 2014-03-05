@@ -62,9 +62,11 @@ This simple algorithm results in an amateur level of play.
 
 Areas for improvements are:
 
-  1. Improving the search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.
-  2. Improving the heuristic.
-  3. Improving the static position analysis.
+  1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.
+  2. Heuristic.
+  3. Static position analysis.
+  4. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups, .  (You can find the one that was used in the first line of ai.out.)
+	
 
 AI Regression Testing
 ---------------------
@@ -91,3 +93,5 @@ References
 [COMPETITIVE PLAY IN STRATEGO, A.F.C. Arts](https://project.dke.maastrichtuniversity.nl/games/files/msc/Arts_thesis.pdf).
 
 [Invincible. A Stratego Bot, V. de Boer](http://www.kbs.twi.tudelft.nl/Publications/MSc/2008-deBoer-Msc.html).
+
+[Quiescence Search for Stratego. M. P.D. Schadd, M. H.M. Winands, 2009](http://www.personeel.unimaas.nl/Maarten-Schadd/Papers/2009StrategoBNAIC1.pdf).

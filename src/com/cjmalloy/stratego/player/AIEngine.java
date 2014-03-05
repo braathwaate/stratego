@@ -102,8 +102,15 @@ public class AIEngine extends Engine implements CompControls, UserControls
 			ai.aiLock.lock();
 			ai.aiLock.unlock();
 
+			// perhaps the ai move finished the game
+			if (status != Status.PLAYING)
+				return;
+
 			ai.logMove(m);
 			if (requestMove(m, view.isActive())) {
+				// perhaps the move finished the game
+				if (status != Status.PLAYING)
+					return;
 				requestCompMove();
 			} else
 				ai.log("ILLEGAL MOVE");
@@ -131,12 +138,8 @@ public class AIEngine extends Engine implements CompControls, UserControls
 			ai.logMove(m);
 			ai.log("<--ILLEGAL MOVE");
 		}
-/*
-		if (turn != Settings.bottomColor) {
-			JOptionPane.showMessageDialog(null,
-					"AI turn error " + turn + " " + Settings.bottomColor , "Critical Error", JOptionPane.ERROR_MESSAGE);
-		}
-*/
+
+		view.moveComplete(m);
 	}
 	
 	public void aiReturnPlace(Piece p, Spot s)
