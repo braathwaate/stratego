@@ -32,6 +32,7 @@ public class Piece implements Comparable<Piece>
 	private int value = 0;
 	private Rank actingRankFlee = Rank.NIL;
 	private Rank actingRankChase = Rank.NIL;
+	private int index = 0;
 	
 	public int moves = 0;	// times piece has moved
 
@@ -54,6 +55,22 @@ public class Piece implements Comparable<Piece>
 		actingRankFlee = p.actingRankFlee;
 		actingRankChase = p.actingRankChase;
 		value = p.value;
+		index = p.index;
+	}
+
+	public void copy(Piece p) 
+	{
+		uniqueID = p.uniqueID;
+		color = p.color;
+		moved = p.moved;
+		moves = p.moves;
+		rank = p.rank;
+		known = p.known;
+		shown = p.shown;
+		actingRankFlee = p.actingRankFlee;
+		actingRankChase = p.actingRankChase;
+		value = p.value;
+		index = p.index;
 	}
 
 	public void clear()
@@ -65,6 +82,7 @@ public class Piece implements Comparable<Piece>
 		actingRankChase = Rank.NIL;
 		actingRankFlee = Rank.NIL;
 		value = 0;
+		index = 0;
 	}
 
 	public void setRank(Rank r)
@@ -145,6 +163,16 @@ public class Piece implements Comparable<Piece>
 	public void setActingRankFlee(Rank r)
 	{
 		actingRankFlee = r;
+	}
+
+	public int getIndex()
+	{
+		return index;
+	}
+
+	public void setIndex(int i)
+	{
+		index = i;
 	}
 
 	public int compareTo(Piece p)

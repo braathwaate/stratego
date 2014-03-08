@@ -51,9 +51,7 @@ public class AI implements Runnable
 	private PrintWriter log;
 
 	private int mmax;
-	private int foo;
 	private static int[] dir = { -11, -1,  1, 11 };
-	private int[] movable = new int[92];
 	private int[][] hh = new int[121][121];	// move history heuristic
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
@@ -238,16 +236,71 @@ public class AI implements Runnable
 		return tmpM;
 	}
 
+
+	public void getMoves(ArrayList<MoveValuePair> moveList, TestingBoard b, int turn, int i)
+	{
+		Piece fp = b.getPiece(i);
+		if (fp == null)
+			return;
+		if (fp.getColor() != turn)
+			return;
+
+		Rank fprank = fp.getRank();
+
+		// note: we need to make this check each time
+		// because the index and perhaps the rank
+		// could change.
+		if (fprank == Rank.BOMB
+			|| fprank == Rank.FLAG)
+			return;
+
+		for (int d : dir ) {
+			int t = i + d ;
+
+			BMove tmpM = getMove(b, fp, i, t);
+			if (tmpM != null) {
+				moveList.add(new MoveValuePair(tmpM, 0, false));
+				// NOTE: FORWARD PRUNING
+				// generate scout far moves
+				// only for captures and far rank
+				if (fprank == Rank.NINE) {
+					while (b.getPiece(t) == null)
+						t += d;
+					if (t != i + d) {
+						if (!b.isValid(t))
+							t -= d;
+						tmpM = getMove(b, fp, i, t);
+						if (tmpM != null)
+							moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+					}
+				} // scout far moves
+			} // valid move
+		} // d
+	}
+
+
 	// Quiescent search with only attack moves limits the
 	// horizon effect but does not eliminate it, because
 	// the ai is still prone to make bad moves 
 	// that waste more material in a position where
 	// the opponent has a sure favorable attack in the future,
 	// and the ai depth does not reach the position of exchange.
-	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int turn)
+	private ArrayList<MoveValuePair> getMoves(TestingBoard b, int turn, Piece chasePiece, Piece chasedPiece)
 	{
 		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
-		for (int j=0;j<foo;j++)
+		// FORWARD PRUNING
+		// chase deep search
+		// only examine moves adjacent to chase and chased pieces
+		// as they chase around the board
+		if (chasePiece != null) {
+			getMoves(moveList, b, turn, chasedPiece.getIndex());
+			for (int d : dir ) {
+				int i = chasePiece.getIndex() + d;
+				if (i != chasedPiece.getIndex())
+					getMoves(moveList, b, turn, i );
+			}
+		} else
+		for (int j=0;j<92;j++)
 		{
 			// order the move evaluation to consider
 			// the pieces furthest down the board first because
@@ -255,36 +308,11 @@ public class AI implements Runnable
 			// This results in the most alpha-beta pruning.
 			int i;
 			if (turn == Settings.topColor)
-				i = movable[foo - j - 1];
+				i = 132 - Grid.getValidIndex(j);
 			else
-				i = movable[j];
+				i = Grid.getValidIndex(j);
 
-			Piece fp = b.getPiece(i);
-			if (fp == null)
-				continue;
-			if (fp.getColor() != turn)
-				continue;
-			for (int d : dir ) {
-				int t = i + d ;
-				BMove tmpM = getMove(b, fp, i, t);
-				if (tmpM != null) {
-					moveList.add(new MoveValuePair(tmpM, 0, false));
-					// NOTE: FORWARD PRUNING
-					// generate scout far moves
-					// only for captures and far rank
-					if (fp.getRank() == Rank.NINE) {
-						while (b.getPiece(t) == null)
-							t += d;
-						if (t != i + d) {
-							if (!b.isValid(t))
-								t -= d;
-							tmpM = getMove(b, fp, i, t);
-							if (tmpM != null)
-								moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
-						}
-					} // scout far moves
-				} // valid move
-			} // d
+			getMoves(moveList, b, turn, i);
 		}
 
 		return moveList;
@@ -294,49 +322,110 @@ public class AI implements Runnable
 	private BMove getBestMove(TestingBoard b)
 	{
 		BMove tmpM = null;
+		MoveValuePair bestmove = null;
+		final int CHASE_RANK_NIL = 99;
 
-		// generate array of movable indices to speed move generation
-		// by removing unmovable pieces (bombs + flag)
-		int mmax = 0;
-		for (int j=0;j<92;j++)
-		{
-			int i = Grid.getValidIndex(j);
-			Piece fp = b.getPiece(i);
-			if (fp != null) {
-				Rank rank = fp.getRank();
-				if (rank == Rank.BOMB || rank == Rank.FLAG)
-					continue;
-			}
-			movable[mmax++] = i;
+		// chase variables
+		Piece chasedPiece = null;
+		Piece chasePiece = null;
+		Piece lastMovedPiece = null;
+		int to = 0;
+		Move lastMove = b.getLastMove(1);
+		if (lastMove != null) {
+			to = lastMove.getTo();
+			lastMovedPiece = b.getPiece(to);
 		}
-		foo = mmax; //java bug
 
 		// move history heuristic (hh)
 		for (int j=12; j<=120; j++)
 		for (int k=12; k<=120; k++)
 			hh[j][k] = 0;
-			
-		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor);
-		
-		long t = System.currentTimeMillis( );
 
-		for (int n = 1;
-			System.currentTimeMillis( ) < t + Settings.aiLevel * Settings.aiLevel * 100;
-			n++) {
+
+		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
+
+		long t = System.currentTimeMillis( );
+ 		long dur = Settings.aiLevel * Settings.aiLevel * 100;
+
+		for (int n = 1; System.currentTimeMillis( ) < t + dur && n < 20; n++) {
 
 		int alpha = -9999;
 		int beta = 9999;
 
+		// FORWARD PRUNING:
+		// Some opponent AI bots like to chase pieces around
+		// the board relentlessly hoping for material gain.
+		// The opponent is able to chase the AI piece because
+		// the AI abides by the two squares rule, otherwise
+		// the AI piece could go back and forth between the same
+		// two squares.  This program does not enforce the two squares
+		// rule for opponents, because a human opponent can
+		// find this rule annoying or deem it as a bug.
+		// So an unskilled human or bot can chase an AI piece
+		// pretty easily, but even a skilled opponent abiding
+		// by the two squares rule can still chase an AI piece around
+		// using the proper moves.
+		//
+		// Hence, chase sequences need to be examined in more depth.
+		// So if moving a chased piece
+		// looks like the best move, then do a deep
+		// search of those pieces and any interacting pieces.
+		//
+		// The goal is that the chased piece will find a
+		// protector or at least avoid a trap or dead-end
+		// and simply outlast the chaser's patience.  If not,
+		// the opponent should be disqualified anyway.
+		// 
+		// This requires FORWARD PRUNING which is tricky
+		// to get just right.  The AI may discover many moves
+		// deep that it will lose the chase, but unless the
+		// opponent is highly skilled, the opponent will likely
+		// not realize it.  So the deep chase pruning is only
+		// used when there are a choice of squares to flee to
+		// and it should never attack a known higher numbered chaser,
+		// even if it determines that it will lose the chase
+		// anyway and the board at the end the chase is less favorable
+		// than the current one.
+
+		if (chasePiece == null
+			&& lastMovedPiece != null
+			&& lastMovedPiece.equals(lastMove.getPiece())
+			&& System.currentTimeMillis( ) > t + dur/100 ) {
+			MoveValuePair mvp = moveList.get(0);
+			for (int d : dir) {
+				int from = to + d;
+				if (from == mvp.move.getFrom()) {
+					int count = 0;
+					for (int k = moveList.size()-1; k >= 0; k--)
+						if (from == moveList.get(k).move.getFrom())
+							count++;
+					if (count >= 3) {
+					chasePiece = lastMovedPiece;
+					chasePiece.setIndex(to);
+					chasedPiece = b.getPiece(from);
+					chasedPiece.setIndex(from);
+					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
+					for (int k = moveList.size()-1; k >= 0; k--)
+						if (from != moveList.get(k).move.getFrom()
+							|| (to == moveList.get(k).move.getTo() && chasePiece.getRank().toInt() < chasedPiece.getRank().toInt()))
+							moveList.remove(k);
+					}
+					break;
+				}
+			}
+		}
+		
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
 
 			int valueB = b.getValue();
 			Piece fp = b.getPiece(mvp.move.getFrom());
+
 			Piece tp = b.getPiece(mvp.move.getTo());
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 
-			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1); 
+			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1, chasedPiece, chasePiece); 
 			// int vm = valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
 
 			mvp.value = vm;
@@ -351,22 +440,21 @@ public class AI implements Runnable
 		}
 		log.println("-+-");
 		Collections.sort(moveList);
-		MoveValuePair mvp = moveList.get(0);
-		hh[mvp.move.getFrom()][mvp.move.getTo()]+=n;
+		bestmove = moveList.get(0);
+		hh[bestmove.move.getFrom()][bestmove.move.getTo()]+=n;
 		log.println("-+++-");
 
 
 		} // iterative deepening
 
-		if (moveList.size() == 0)
+		if (bestmove == null)
 			return null;	// ai trapped
 
-		MoveValuePair mvp = moveList.get(0);
-		logMove(0, b, mvp.move, mvp.value);
+		logMove(0, b, bestmove.move, bestmove.value);
 		log.println("----");
 		log.flush();
 
-		return mvp.move;
+		return bestmove.move;
 	}
 
 	// Evaluation-Based Quiescence Search (qs)
@@ -403,8 +491,8 @@ public class AI implements Runnable
 		b.setValue(0);
 		int maxbest = 0;
 		int minbest = 0;
-		for (int j=0;j<foo;j++) {
-			int i = movable[j];
+		for (int j=0;j<92;j++) {
+			int i = Grid.getValidIndex(j);
 			Piece fp = b.getPiece(i);
 			if (fp == null)
 				continue;
@@ -498,7 +586,7 @@ public class AI implements Runnable
 	}
 
 
-	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth)
+	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece)
 	{
 		BMove bestMove = null;
 		int valueB = b.getValue();
@@ -512,8 +600,26 @@ public class AI implements Runnable
 		else
 			v = beta;
 
-		ArrayList<MoveValuePair> moveList = getMoves(b, turn);
+		if (chasePiece != null && turn == Settings.topColor) {
+			boolean chaseOver = true;
+			for (int d : dir) {
+				if (chasePiece.getIndex() == chasedPiece.getIndex() + d) {
+					chaseOver = false;
+					break;
+				}
+			}
+			if (chaseOver)
+				return ebqs(b, turn, depth);
+		}
 
+		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
+
+		// because of forward pruning, this may be a terminal
+		// node buy yet there still are moves, so just return
+		// the board position
+		if (moveList.size() == 0)
+			return ebqs(b, turn, depth);
+		
 		for (MoveValuePair mvp : moveList) {
 			mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
 		}
@@ -537,7 +643,7 @@ public class AI implements Runnable
 			else {
 				b.move(mvp.move, depth, false);
 
-				vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1);
+				vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
 				// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
 
 				b.undo(valueB);
@@ -563,8 +669,9 @@ public class AI implements Runnable
 			if (beta <= alpha)
 				break;
 		} // moveList
-		if (bestMove != null)
+		if (bestMove != null) {
 			hh[bestMove.getFrom()][bestMove.getTo()]+=n;
+		}
 		return v;
 	}
 

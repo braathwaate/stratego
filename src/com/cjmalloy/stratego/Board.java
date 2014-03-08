@@ -42,11 +42,18 @@ public class Board
         public class UndoMove extends Move
         {
                 public Piece tp = null;
+		public Piece fpcopy = null;
+		public Piece tpcopy = null;
 
 		public UndoMove(Piece fpin, Piece tpin, int f, int t)
 		{
 			super(fpin, f, t);
 			tp = tpin;
+			fpcopy = new Piece(fpin);
+			if (tp != null)
+				tpcopy = new Piece(tp);
+			else
+				tpcopy = null;
 		}
         }
 
@@ -345,6 +352,14 @@ public class Board
 		return undoList.get(undoList.size()-1);
 	}
 
+	public UndoMove getLastMove(int i)
+	{
+		int size = undoList.size();
+		if (size < i)
+			return null;
+		return undoList.get(size-i);
+	}
+
 	public boolean isProtected(int i)
 	{
 		Piece fp = getPiece(i);
@@ -363,9 +378,7 @@ public class Board
 
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		if (tp != null)
-			tp = new Piece(tp);
-		undoList.add(new UndoMove(new Piece(fp), tp, from, to));
+		UndoMove um = new UndoMove(fp, tp, from, to);
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -379,7 +392,7 @@ public class Board
 		//
 		// If a piece moves away from a known and unprotected
 		// opponent piece, it inherits a flee acting rank
-		// of the lowest rank that it fleed from.
+		// of the lowest rank that it fled from.
 		// High flee acting ranks are probably of
 		// little use because unknown low ranks may flee
 		// to prevent discovery.
@@ -424,6 +437,8 @@ public class Board
 					fp.setActingRankFlee(rank);
 			}
 		}
+
+		undoList.add(um);
 	}
 	
 	public boolean move(BMove m)
@@ -512,10 +527,13 @@ public class Board
 			return;
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
+			Piece fp = undo.getPiece();
 			Piece tp = getPiece(undo.to);
+			fp.copy(undo.fpcopy);
 			setPiece(undo.getPiece(), undo.from);
 			setPiece(undo.tp, undo.to);
 			if (undo.tp != null) {
+				undo.tp.copy(undo.tpcopy);
 				if (tp == null) {
 					tray.remove(tray.indexOf(undo.tp));
 					tray.remove(tray.indexOf(undo.getPiece()));
