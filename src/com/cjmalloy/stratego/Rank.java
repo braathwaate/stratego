@@ -52,7 +52,7 @@ public enum Rank
 	
 	public static int getRanks(int i)
 	{	
-		int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1};
+		int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
 
 		return ranks[i];
 	}

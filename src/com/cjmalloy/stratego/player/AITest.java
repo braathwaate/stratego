@@ -75,9 +75,12 @@ public class AITest extends View
 	try
 	{
 	    setup();
-            while (true) {
+	    if (Settings.topColor == Board.RED)
 		aimove.acquire();
+
+            while (true) {
 		MoveCycle();
+		aimove.acquire();
             }
 	}
 	catch (Exception e)
@@ -131,6 +134,13 @@ public class AITest extends View
 		engine.newGame();
 
 		engine.play();
+
+		// note: we really should print the board before
+		// starting the engine playing, but we need to
+		// get the ai.setup to print the board.  so it is possible
+		// that the ai will print a move before we print the board.
+		// The "engine.play()" in ai.getBoardSetup needs to be
+		// removed and we should call requestCompMove().
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
@@ -184,22 +194,6 @@ public class AITest extends View
 		int result[] = new int[2];
 		result[0] = x; result[1] = y;
 		return result;
-	}
-
-	/**
-	 * Returns the "opposite" colour to that given
-	 * @param colour Must be "RED" or "BLUE"
-	 * @returns The alternate String to colour
-	 * @throws Exception if colour is not "RED" or "BLUE"
-	 */
-	public static String OppositeColour(String colour) throws Exception
-	{
-		if (colour.compareTo("BLUE") == 0)
-			return "RED";
-		else if (colour.compareTo("RED") == 0)
-			return "BLUE";
-		else
-			throw new Exception("BasicAI.OppositeColour - Unrecognised colour " + colour);
 	}
 
 	/**

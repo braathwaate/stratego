@@ -19,6 +19,7 @@ package com.cjmalloy.stratego;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Random;
 import java.util.concurrent.locks.ReentrantLock;
 
 
@@ -44,8 +45,9 @@ public class Board
                 public Piece tp = null;
 		public Piece fpcopy = null;
 		public Piece tpcopy = null;
+		public long hash = 0;
 
-		public UndoMove(Piece fpin, Piece tpin, int f, int t)
+		public UndoMove(Piece fpin, Piece tpin, int f, int t, long h)
 		{
 			super(fpin, f, t);
 			tp = tpin;
@@ -54,6 +56,7 @@ public class Board
 				tpcopy = new Piece(tp);
 			else
 				tpcopy = null;
+			hash = h;
 		}
         }
 
@@ -76,6 +79,7 @@ public class Board
 	protected Rank[] setup = new Rank[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
 	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
+	protected long[][][][] boardHash = new long[2][2][15][92];
 	
 	public Board()
 	{
@@ -128,6 +132,14 @@ public class Board
 		tray.addAll(blue);
 
 		Collections.sort(tray);
+
+		Random rnd = new Random();
+		for ( int k = 0; k < 2; k++)
+			for ( int m = 0; m < 2; m++)
+				for ( int r = 0; r < 15; r++)
+					for ( int i = 0; i < 92; i++)
+						boardHash[k][m][r][i] = rnd.nextLong();
+						
 	}
 
 	public Board(Board b)
@@ -347,6 +359,20 @@ public class Board
 		grid.setPiece(i, p);
 	}
 
+	public boolean dejavu()
+	{
+		int size = undoList.size();
+		if (size <= 2)
+			return false;
+		long hash = undoList.get(size-1).hash;
+		for ( int k = size-3; k >= 0; k -= 2) {
+			UndoMove u = undoList.get(k);
+			if (u.hash == hash)
+				return true;
+		}
+		return false;
+	}
+
 	public UndoMove getLastMove()
 	{
 		return undoList.get(undoList.size()-1);
@@ -378,7 +404,20 @@ public class Board
 
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		UndoMove um = new UndoMove(fp, tp, from, to);
+		long hash = 0;
+		for (int i = 0; i < 92; i++) {
+			int j = Grid.getValidIndex(i);
+			Piece p = getPiece(j);
+			if (p == null)
+				continue;
+			hash ^= boardHash
+				[p.isKnown() ? 1 : 0]
+				[p.hasMoved() ? 1 : 0]
+				[p.getRank().toInt()-1]
+				[i];
+		}
+			
+		UndoMove um = new UndoMove(fp, tp, from, to, hash);
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.

@@ -212,7 +212,10 @@ public class AI implements Runnable
 			System.gc(); 
 
 			// return the actual board move
-			engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
+			if (bestMove == null)
+				engine.aiReturnMove(null);
+			else
+				engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
 		}
 		finally
 		{
@@ -345,9 +348,10 @@ public class AI implements Runnable
 		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
 
 		long t = System.currentTimeMillis( );
+		boolean timeout = false;
  		long dur = Settings.aiLevel * Settings.aiLevel * 100;
 
-		for (int n = 1; System.currentTimeMillis( ) < t + dur && n < 20; n++) {
+		for (int n = 1; !timeout && n < 20; n++) {
 
 		int alpha = -9999;
 		int beta = 9999;
@@ -382,7 +386,7 @@ public class AI implements Runnable
 		// opponent is highly skilled, the opponent will likely
 		// not realize it.  So the deep chase pruning is only
 		// used when there are a choice of squares to flee to
-		// and it should never attack a known higher numbered chaser,
+		// and it should never attack a chaser if it loses,
 		// even if it determines that it will lose the chase
 		// anyway and the board at the end the chase is less favorable
 		// than the current one.
@@ -404,18 +408,29 @@ public class AI implements Runnable
 					chasePiece.setIndex(to);
 					chasedPiece = b.getPiece(from);
 					chasedPiece.setIndex(from);
+					int result = b.winFight(chasedPiece, chasePiece);
 					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
 					for (int k = moveList.size()-1; k >= 0; k--)
 						if (from != moveList.get(k).move.getFrom()
-							|| (to == moveList.get(k).move.getTo() && chasePiece.getRank().toInt() < chasedPiece.getRank().toInt()))
+							|| (to == moveList.get(k).move.getTo() && (result == Rank.LOSES || result == Rank.UNK)))
+
 							moveList.remove(k);
 					}
 					break;
 				}
 			}
 		}
-		
+
+		if (moveList.size() == 0)
+			return null;	// ai trapped
+
 		for (MoveValuePair mvp : moveList) {
+			if (bestmove != null
+				&& System.currentTimeMillis( ) > t + dur) {
+				timeout = true;
+				break;
+			}
+
 			tmpM = mvp.move;
 
 			int valueB = b.getValue();
@@ -438,17 +453,16 @@ public class AI implements Runnable
 			}
 
 		}
-		log.println("-+-");
-		Collections.sort(moveList);
-		bestmove = moveList.get(0);
-		hh[bestmove.move.getFrom()][bestmove.move.getTo()]+=n;
-		log.println("-+++-");
 
+		if (!timeout) {
+			log.println("-+-");
+			Collections.sort(moveList);
+			bestmove = moveList.get(0);
+			hh[bestmove.move.getFrom()][bestmove.move.getTo()]+=n;
+			log.println("-+++-");
+		}
 
 		} // iterative deepening
-
-		if (bestmove == null)
-			return null;	// ai trapped
 
 		logMove(0, b, bestmove.move, bestmove.value);
 		log.println("----");

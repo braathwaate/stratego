@@ -144,11 +144,11 @@ protected static class UniqueID
 					minsteps = steps;
 					if (y > ty) {
 						if (x > tx)
-							dir = 11;
+							dir = 12;
 						else if (x == tx)
-							dir = 10;
+							dir = 11;
 						else
-							dir = 9;
+							dir = 10;
 					} else if (y == ty) {
 						if (x > tx)
 							dir = 1;
@@ -156,11 +156,11 @@ protected static class UniqueID
 							dir = -1;
 					} else {
 						if (x > tx)
-							dir = -9;
-						else if (x == tx)
 							dir = -10;
-						else
+						else if (x == tx)
 							dir = -11;
+						else
+							dir = -12;
 					}
 				}
 			}

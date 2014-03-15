@@ -184,4 +184,9 @@ public class Piece implements Comparable<Piece>
 	{
 		return (uniqueID == ((Piece)p).uniqueID);
 	}
+
+	public int winFight(Piece defender)
+	{
+		return rank.winFight(defender.rank);
+	}
 }
