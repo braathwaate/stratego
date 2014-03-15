@@ -1,8 +1,11 @@
 Download
 --------
 
-[Stratego v0.2.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.2.0/stratego_v0.2.0.jar
+[Stratego player v0.3.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.3.0/stratego_v0.3.0.jar
+
+For two person play over TCP/IP, you also need the Stratego server,
+which you need to make from source.
 
 Introduction
 ------------
@@ -65,13 +68,14 @@ Areas for improvements are:
   1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The two squares rule should be added to the Settings object.  The AI always abides by the two squares rule but does not enforce the same of the opponent.  If the box were checked, making the opponent abide by the two squares rule, then chase attacks would be much more successful and worthy of deep analysis.
   2. Heuristic.
   3. Static position analysis.
-  4. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups, .  (You can find the one that was used in the first line of ai.out.)
+  4. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
   5. Opponent bots.  Improve or add opponent bots in 
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
 Add a new View object (like the AITest object)
 to play
 [Master Of the Flag](http://www.jayoogee.com/masteroftheflag),
 a former winner of the world computer Stratego championship.
+  6. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
 
 AI Regression Testing
 ---------------------
