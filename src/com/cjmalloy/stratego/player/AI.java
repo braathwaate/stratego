@@ -321,6 +321,28 @@ public class AI implements Runnable
 		return moveList;
 	}
 
+	boolean hasMove(TestingBoard b, int turn)
+	{
+		for (int j=0;j<92;j++) {
+			int i = Grid.getValidIndex(j);
+			Piece fp = b.getPiece(i);
+			if (fp == null)
+				continue;
+			if (fp.getColor() != turn)
+				continue;
+			for (int d : dir ) {
+				int t = i + d ;
+				Piece tp = b.getPiece(t);
+				if (tp == null)
+					continue;
+				if (fp.getColor() == tp.getColor())
+					continue;
+				return true;
+			}
+		}
+		return false;
+	}
+
 
 	private BMove getBestMove(TestingBoard b)
 	{
@@ -390,29 +412,54 @@ public class AI implements Runnable
 		// even if it determines that it will lose the chase
 		// anyway and the board at the end the chase is less favorable
 		// than the current one.
+		//
+		// If the chaser is unknown, and the search determines
+		// that it will get cornered into a loss situation, then
+		// it should still flee until the loss is imminent.
+		//
+		// To implement this, the deep chase is skipped if
+		// the best move from the broad chase is to attack the
+		// chaser (which could be bluffing),
+		// but otherwise remove the move that attacks
+		// the chaser from consideration.
 
 		if (chasePiece == null
 			&& lastMovedPiece != null
 			&& lastMovedPiece.equals(lastMove.getPiece())
-			&& System.currentTimeMillis( ) > t + dur/100 ) {
-			MoveValuePair mvp = moveList.get(0);
+			&& System.currentTimeMillis( ) > t + dur/100 
+			&& bestmove != null
+			&& bestmove.move.getTo() != to) {
+			// check for possible chase
+
 			for (int d : dir) {
 				int from = to + d;
-				if (from == mvp.move.getFrom()) {
+				if (from == bestmove.move.getFrom()) {
+					// chase confirmed:
+					// bestmove is to move away
 					int count = 0;
 					for (int k = moveList.size()-1; k >= 0; k--)
 						if (from == moveList.get(k).move.getFrom())
 							count++;
 					if (count >= 3) {
+					// chased piece has at least 3 moves
 					chasePiece = lastMovedPiece;
 					chasePiece.setIndex(to);
 					chasedPiece = b.getPiece(from);
 					chasedPiece.setIndex(from);
 					int result = b.winFight(chasedPiece, chasePiece);
+					// If chased piece wins or is even
+					// continue broad search.
+					if (result == Rank.WINS
+						|| result == Rank.EVEN) {
+						chasePiece = null;
+						chasedPiece = null;
+						break;
+					}
+
 					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
 					for (int k = moveList.size()-1; k >= 0; k--)
 						if (from != moveList.get(k).move.getFrom()
-							|| (to == moveList.get(k).move.getTo() && (result == Rank.LOSES || result == Rank.UNK)))
+							|| to == moveList.get(k).move.getTo())
 
 							moveList.remove(k);
 					}
@@ -445,7 +492,7 @@ public class AI implements Runnable
 
 			mvp.value = vm;
 			b.undo(valueB);
-			logMove(n, b, tmpM, vm);
+			logMove(n, b, tmpM, valueB, vm);
 
 			if (vm > alpha)
 			{
@@ -464,7 +511,7 @@ public class AI implements Runnable
 
 		} // iterative deepening
 
-		logMove(0, b, bestmove.move, bestmove.value);
+		logMove(0, b, bestmove.move, 0, bestmove.value);
 		log.println("----");
 		log.flush();
 
@@ -483,7 +530,7 @@ public class AI implements Runnable
 	// (lesser) piece subject to attack when the loss of an existing piece
 	// is inevitable.
 	// 
-	// This version gives no credit for the best attack on a moved
+	// This version gives no credit for the best attack on a *moved*
 	// piece on the board because it is likely the opponent will move
 	// the defender the very next move.  This prevents the ai
 	// from thinking it has won or lost at the end of
@@ -510,6 +557,14 @@ public class AI implements Runnable
 			Piece fp = b.getPiece(i);
 			if (fp == null)
 				continue;
+			Rank fprank = fp.getRank();
+			// note: we need to make this check each time
+			// because the index and perhaps the rank
+			// could change.
+			if (fprank == Rank.BOMB
+				|| fprank == Rank.FLAG)
+				continue;
+
 			int min = 0;
 			int max = 0;
 			boolean minmoved = false;
@@ -629,10 +684,13 @@ public class AI implements Runnable
 		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
 
 		// because of forward pruning, this may be a terminal
-		// node buy yet there still are moves, so just return
+		// node but yet there still are moves, so just return
 		// the board position
 		if (moveList.size() == 0)
-			return ebqs(b, turn, depth);
+			if (hasMove(b, turn))
+				return ebqs(b, turn, depth);
+			else
+				return v;
 		
 		for (MoveValuePair mvp : moveList) {
 			mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
@@ -664,7 +722,7 @@ public class AI implements Runnable
 
 				for (int ii=8; ii >= n; ii--)
 					log.print("  ");
-				logMove(n, b, mvp.move, vm);
+				logMove(n, b, mvp.move, valueB, vm);
 
 			} // else
 
@@ -689,7 +747,7 @@ public class AI implements Runnable
 		return v;
 	}
 
-	void logMove(int n, Board b, BMove move, int value)
+	void logMove(int n, Board b, BMove move, int valueB, int value)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
 	char hasMoved = ' ';
@@ -703,7 +761,7 @@ public class AI implements Runnable
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + b.getPiece(move.getFrom()).getRank() + ")"
 	+ hasMoved + isKnown + " "
-	+ value);
+	+ valueB + " " + value);
 	} else {
 		char tohasMoved = ' ';
 		if (b.getPiece(move.getTo()).hasMoved())
@@ -718,13 +776,13 @@ public class AI implements Runnable
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
 	+ hasMoved + isKnown + " " + tohasMoved + toisKnown
-	+ " " + value);
+	+ " " + valueB + " " + value);
 	}
 	}
 
 	public void logMove(Move m)
 	{
-		logMove(0, board, m, 0);
+		logMove(0, board, m, 0, 0);
 	}
 
 	public void log(String s)
