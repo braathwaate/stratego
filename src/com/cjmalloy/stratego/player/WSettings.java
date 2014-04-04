@@ -52,6 +52,8 @@ public class WSettings {
 	private JLabel lblNoShowDefender = null;
 	private JCheckBox cOneTimeBombs = null;
 	private JLabel lblOneTimeBombs = null;
+	private JCheckBox twoSquares = null;
+	private JLabel lblTwoSquares = null;
 	
 	private static WSettings me = null;
 	
@@ -91,6 +93,9 @@ public class WSettings {
 			lblDefendAdvantage = new JLabel();
 			lblDefendAdvantage.setBounds(new Rectangle(45, 288, 400, 16));
 			lblDefendAdvantage.setText("Defender's advantage");
+			lblTwoSquares = new JLabel();
+			lblTwoSquares.setBounds(new Rectangle(45, 348, 400, 16));
+			lblTwoSquares.setText("Two Squares Rule");
 			lblShowAll = new JLabel();
 			lblShowAll.setBounds(new Rectangle(45, 168, 400, 16));
 			lblShowAll.setText("Show all pieces");
@@ -122,6 +127,8 @@ public class WSettings {
 			jContentPane.add(getCOneTimeBombs(), null);
 			jContentPane.add(lblOneTimeBombs, null);
 			jContentPane.add(getBSetup(), null);
+			jContentPane.add(lblTwoSquares, null);
+			jContentPane.add(getTwoSquares(), null);
 		}
 		return jContentPane;
 	}
@@ -226,6 +233,22 @@ public class WSettings {
 			});
 		}
 		return cNoMoveDefender;
+	}
+
+	private JCheckBox getTwoSquares() {
+		if (twoSquares == null) {
+			twoSquares = new JCheckBox();
+			twoSquares.setBounds(new Rectangle(15, 345, 21, 21));
+			// twoSquares.doClick();
+			twoSquares.addActionListener(new java.awt.event.ActionListener()
+			{
+				public void actionPerformed(java.awt.event.ActionEvent e)
+				{
+					Settings.twoSquares = twoSquares.isSelected();
+				}
+			});
+		}
+		return twoSquares;
 	}
 
 	private JCheckBox getCNoShowDefender() {

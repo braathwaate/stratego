@@ -199,25 +199,25 @@ public class Board
 			int result = fp.getRank().winFight(tp.getRank());
 			if (result == 1)
 			{
-				remove(m.getTo());
+				moveToTray(m.getTo());
 				setPiece(fp, m.getTo());
 				setPiece(null, m.getFrom());
 			}
 			else if (result == -1)
 			{
-				remove(m.getFrom());
-				remove(m.getTo());
+				moveToTray(m.getFrom());
+				moveToTray(m.getTo());
 			}
 			else 
 			{
 				if (Settings.bNoMoveDefender ||
 						tp.getRank() == Rank.BOMB)
-					remove(m.getFrom());
+					moveToTray(m.getFrom());
 				else if (fp.getRank() == Rank.NINE)
 					scoutLose(m);
 				else
 				{
-					remove(m.getFrom());
+					moveToTray(m.getFrom());
 					setPiece(tp, m.getFrom());
 					setPiece(null, m.getTo());
 				}
@@ -449,7 +449,6 @@ public class Board
 			Piece p = getPiece(i);
 			if (p != null
 				&& p.getColor() != fp.getColor()
-				&& p.isKnown()
 				&& !isProtected(i)) {
 				Rank rank = p.getRank();
 				Rank arank = fp.getActingRankChase();
@@ -467,7 +466,6 @@ public class Board
 			Piece p = getPiece(i);
 			if (p != null
 				&& p.getColor() != fp.getColor()
-				&& p.isKnown()
 				&& !isProtected(i)) {
 				Rank rank = p.getRank();
 				Rank arank = fp.getActingRankFlee();
@@ -506,17 +504,25 @@ public class Board
 		
 		return false;
 	}
+
+	public void moveToTray(int i)
+	{
+		assert getPiece(i) != null : "getPiece(i) null?";
+
+		getPiece(i).setShown(true);
+		getPiece(i).setKnown(false);
+
+		for (Piece p : tray) 
+			p.setKnown(true);
+
+		remove(i);
+	}
 	
 	public boolean remove(int i)
 	{
 		if (getPiece(i) == null)
 			return false;
 		
-		getPiece(i).setShown(true);
-		getPiece(i).setKnown(false);
-
-		for (Piece p : tray) 
-			p.setKnown(true);
 		tray.add(getPiece(i));
 		setPiece(null, i);
 		Collections.sort(tray);
@@ -534,20 +540,42 @@ public class Board
 	// times non-stop between the same two
 	// squares, regardless of what the opponent is doing.
 	//
-	// The restriction here is more strict.
-	// It prevents a piece from moving more than 2 times
-	// non-stop betwen the same two squares.
 	public boolean isRecentMove(BMove m)
+	{
+		int size = undoList.size();
+		if (size < 6)
+			return false;
+
+		// AI always abides by Two Squares rule
+		// even if box is not checked (AI plays nice).
+		if (Settings.twoSquares
+			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
+			BMove prev = undoList.get(size-2);
+			return (undoList.get(size-6)).equals(prev)
+				&& m.getTo() == prev.getFrom();
+		} else
+			// let opponent get away with it
+			return false;
+	}
+
+	// This is a stricter version of the Two Squares rule.
+	// It is used during move generation to forward prune
+	// repeated moves.
+	public boolean isRepeatedMove(BMove m)
 	{
 		int size = undoList.size();
 		if (size < 4)
 			return false;
 
-		// let opponent get away with it
-		if (getPiece(m.getFrom()).getColor() == Settings.bottomColor)
+		// AI always abides by Two Squares rule
+		// even if box is not checked (AI plays nice).
+		if (Settings.twoSquares
+			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
+			BMove prev = undoList.get(size-4);
+			return m.equals(prev);
+		} else
+			// let opponent get away with it
 			return false;
-
-		return m.equals(undoList.get(size-4));
 	}
 
 	// Repetition of Threatening Moves: More-Squares Rule
@@ -591,7 +619,7 @@ public class Board
 	{
 		Spot tmp = getScoutLooseFrom(m);
 
-		remove(m.getFrom());
+		moveToTray(m.getFrom());
 		setPiece(getPiece(m.getTo()), tmp);
 		setPiece(null, m.getTo());
 	}

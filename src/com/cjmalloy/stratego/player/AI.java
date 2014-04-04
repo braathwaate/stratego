@@ -233,9 +233,6 @@ public class AI implements Runnable
 		
 		BMove tmpM = new BMove(f, t);
 
-		if (b.isRecentMove(tmpM))
-			return null;
-
 		return tmpM;
 	}
 
@@ -354,11 +351,11 @@ public class AI implements Runnable
 		Piece chasedPiece = null;
 		Piece chasePiece = null;
 		Piece lastMovedPiece = null;
-		int to = 0;
+		int lastMoveTo = 0;
 		Move lastMove = b.getLastMove(1);
 		if (lastMove != null) {
-			to = lastMove.getTo();
-			lastMovedPiece = b.getPiece(to);
+			lastMoveTo = lastMove.getTo();
+			lastMovedPiece = b.getPiece(lastMoveTo);
 		}
 
 		// move history heuristic (hh)
@@ -368,6 +365,17 @@ public class AI implements Runnable
 
 
 		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
+
+		// To speed move generation, the AI does not check the
+		// Two Squares rule for each move, so we remove
+		// the move now.  During the tree evaluation, the AI
+		// calls isRepeatedMove() which discards back-and-forth
+		// moves.  Because most moves are pruned off by alpha-beta,
+		// calls to isRepeatedMove() are also pruned off,
+		// saving a heap of time.
+		for (int k = moveList.size()-1; k >= 0; k--)
+			if (b.isRecentMove(moveList.get(k).move))
+				moveList.remove(k);
 
 		long t = System.currentTimeMillis( );
 		boolean timeout = false;
@@ -428,41 +436,68 @@ public class AI implements Runnable
 			&& lastMovedPiece.equals(lastMove.getPiece())
 			&& System.currentTimeMillis( ) > t + dur/100 
 			&& bestmove != null
-			&& bestmove.move.getTo() != to) {
+			&& bestmove.move.getTo() != lastMoveTo) {
 			// check for possible chase
 
 			for (int d : dir) {
-				int from = to + d;
-				if (from == bestmove.move.getFrom()) {
-					// chase confirmed:
-					// bestmove is to move away
-					int count = 0;
-					for (int k = moveList.size()-1; k >= 0; k--)
-						if (from == moveList.get(k).move.getFrom())
-							count++;
-					if (count >= 3) {
-					// chased piece has at least 3 moves
-					chasePiece = lastMovedPiece;
-					chasePiece.setIndex(to);
-					chasedPiece = b.getPiece(from);
-					chasedPiece.setIndex(from);
-					int result = b.winFight(chasedPiece, chasePiece);
+				int from = lastMoveTo + d;
+				if (from != bestmove.move.getFrom())
+					continue;
+
+				// chase confirmed:
+				// bestmove is to move chased piece 
+				int count = 0;
+				for (int k = moveList.size()-1; k >= 0; k--)
+				if (from == moveList.get(k).move.getFrom()) {
+					int to = moveList.get(k).move.getTo();
+					Piece tp = b.getPiece(to);
+					if (tp != null) {
+					
+					int result = b.winFight(b.getPiece(from), tp);
 					// If chased piece wins or is even
 					// continue broad search.
 					if (result == Rank.WINS
 						|| result == Rank.EVEN) {
-						chasePiece = null;
-						chasedPiece = null;
+						count = 0;
 						break;
 					}
+					else 
+						continue;
+					}
+					count++;
+				}
+
+				// Note: if the chased piece has a choice of
+				// 1 open square and 1 opponent piece,
+				// broad search is continued.  Deep search
+				// is not used because the AI may discover
+				// many moves later that the open square is
+				// a bad move, leading it to attack the
+				// opponent piece. This may appear to
+				// be a bad choice, because usually the opponent
+				// is not highly skilled at pushing the
+				// chased piece for so many moves
+				// in the optimal direction.  But because
+				// the broad search is shallow, the AI can
+				// be lured into a trap by taking material.
+				// So perhaps this can be solved by doing
+				// a half-deep search?
+				if (count >= 2) {
+					// Chased piece has at least 2 moves
+					// to open squares.
+					// Pick the better path.
+					chasePiece = lastMovedPiece;
+					chasePiece.setIndex(lastMoveTo);
+					chasedPiece = b.getPiece(from);
+					chasedPiece.setIndex(from);
 
 					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
 					for (int k = moveList.size()-1; k >= 0; k--)
 						if (from != moveList.get(k).move.getFrom()
-							|| to == moveList.get(k).move.getTo())
+							|| b.getPiece(moveList.get(k).move.getTo()) != null)
 
 							moveList.remove(k);
-					}
+
 					break;
 				}
 			}
@@ -679,6 +714,20 @@ public class AI implements Runnable
 			}
 			if (chaseOver)
 				return ebqs(b, turn, depth);
+
+			// AI can end the chase by moving some other piece,
+			// allowing its chased piece to be attacked.  If it
+			// has found protection, this could be a good
+			// way to end the chase.  So the AI checks the
+			// value if it does not move the chased piece.
+			int vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
+			for (int ii=8; ii >= n; ii--)
+				log.print("  ");
+			log.println(n + ": (end chase) " + valueB + " " + vm);
+
+			if (vm > alpha) {
+				v = alpha = vm;
+			}
 		}
 
 		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
@@ -699,8 +748,13 @@ public class AI implements Runnable
 
 		for (MoveValuePair mvp : moveList) {
 			int vm = 0;
-			Piece fp = b.getPiece(mvp.move.getFrom());
-			Piece tp = b.getPiece(mvp.move.getTo());
+			BMove tmpM = mvp.move;
+			// NOTE: FORWARD TREE PRUNING (minor)
+			if (b.isRepeatedMove(tmpM))
+				continue;
+
+			Piece fp = b.getPiece(tmpM.getFrom());
+			Piece tp = b.getPiece(tmpM.getTo());
 
 			// NOTE: FORWARD TREE PRUNING
 			// We don't actually know if an unknown unmoved piece
@@ -713,7 +767,7 @@ public class AI implements Runnable
 			if (tp == null && fp.getRank() == Rank.UNKNOWN && !fp.hasMoved() && fp.moves == 1)
 				vm = beta;
 			else {
-				b.move(mvp.move, depth, false);
+				b.move(tmpM, depth, false);
 
 				vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
 				// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
@@ -722,19 +776,19 @@ public class AI implements Runnable
 
 				for (int ii=8; ii >= n; ii--)
 					log.print("  ");
-				logMove(n, b, mvp.move, valueB, vm);
+				logMove(n, b, tmpM, valueB, vm);
 
 			} // else
 
 			if (turn == Settings.topColor) {
 				if (vm > alpha) {
 					v = alpha = vm;
-					bestMove = mvp.move;
+					bestMove = tmpM;
 				}
 			} else {
 				if (vm < beta) {
 					v = beta = vm;
-					bestMove = mvp.move;
+					bestMove = tmpM;
 				}
 			}
 

@@ -88,7 +88,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		
 		if (status == Status.SETUP)
 		{
-			if (setupRemovePiece(new Spot(m.getFromX(), m.getToY())))
+			if (setupRemovePiece(new Spot(m.getFromX(), m.getFromY())))
 					setupPlacePiece(m.getPiece(), new Spot(m.getToX(), m.getToY()));
 		}
 		else

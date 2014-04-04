@@ -1,8 +1,8 @@
 Download
 --------
 
-[Stratego player v0.3.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.3.0/stratego_v0.3.0.jar
+[Stratego player v0.4.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.4.0/stratego_v0.4.0.jar
 
 For two person play over TCP/IP, you also need the Stratego server,
 which you need to make from source.
@@ -42,14 +42,16 @@ At the default depth (1 tick)
 it completes within a fraction of a second
 usally completing about 6-8 ply depending on the speed of the desktop.
 
-Evaluation heuristic is based on material gained versus lost.
-An AI piece will generally avoid unknown and unmoved opponent pieces.
-If the AI piece is invincible, it will attack all unknown moved pieces.
-Unknown pieces have a specified value,
-which is about equal to a Five,
-although this varies with play.
-This results in an eagerness to use pieces
-of ranks Six, Seven and Nine to attack opponent's pieces.
+Evaluation heuristic is based on material gained versus lost
+as well as opponent piece rank discovery.
+It weighs which pieces to attack based on the potential
+of discovering important piece ranks versus the risk of loss.
+Hence, an valuable AI piece will generally avoid unknown and unmoved opponent pieces
+whereas lesser AI pieces are eager to sacrifice themselves if the loss
+leads to key opponent piece discovery that assists in winning the game.
+Once an AI piece becomes invincible, it will attack all unknown moved pieces.
+The heuristic also derives opponent piece information based on how the
+opponent piece interacts with its pieces or whether it moves at all.
 
 Static position analysis is used to determine piece destinations.
 Success is largely dependent on the heuristic in
@@ -61,30 +63,27 @@ This is much worse with the AI, because it does not adapt.
 You need to read the code if you want to find out
 what the AI tries to accomplish.
 
-This simple algorithm results in an amateur level of play.  
+This algorithm results in an amateur level of play.  
 
 Areas for improvements are:
 
-  1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The two squares rule should be added to the Settings object.  The AI always abides by the two squares rule but does not enforce the same of the opponent.  If the box were checked, making the opponent abide by the two squares rule, then chase attacks would be much more successful and worthy of deep analysis.
+  1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the two squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the two squares rule, then chase attacks would be much more successful and worthy of deep analysis.
   2. Heuristic.
   3. Static position analysis.
   4. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
   5. Opponent bots.  Improve or add opponent bots in 
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
-Add a new View object (like the AITest object)
-to play
-[Master Of the Flag](http://www.jayoogee.com/masteroftheflag),
-a former winner of the world computer Stratego championship.
-  6. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
+  6. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does not support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
 
 AI Regression Testing
 ---------------------
 
-Stratego supports the protocol used in
+Stratego supports the interface protocol defined in
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
-This is used to test the strength of the AI.
+This is used to test the strength of the AI
+by playing the AI against the bots including itself and prior releases.
 To use Stratego with the Stratego AI Evaluator,
-use the -t option on the command line
+use the -t option on the command line.
 
 For a given set of initial setups,
 any change to the AI code must result in 100% wins against the agents.

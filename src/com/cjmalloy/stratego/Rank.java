@@ -44,15 +44,21 @@ public enum Rank
 	{
 		return ordinal();
 	}
+
+	static public Rank toRank(int rank)
+	{
+		final Rank ranks[] = {WATER, ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT, NINE, SPY, BOMB, FLAG, UNKNOWN, NIL};
+		return ranks[rank];
+	}
 	
 	static public int nRanks()
 	{
 		return Rank.NIL.ordinal();
 	}
 	
-	public static int getRanks(int i)
+	static public int getRanks(int i)
 	{	
-		int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
+		final int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
 
 		return ranks[i];
 	}

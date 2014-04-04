@@ -1,4 +1,4 @@
-/*.
+/*
     This file is part of Stratego.
 
     Stratego is free software: you can redistribute it and/or modify
@@ -55,8 +55,8 @@ public class TestingBoard extends Board
 	protected int[] piecesInTray = new int[2];
 	protected int[] piecesNotBomb = new int[2];
 	protected int avgUnkRank;	// average unknown
+	protected int[] sumValues = new int[2];
 	protected boolean looping;
-	protected boolean possibleSpy = false;
 	protected int value;	// value of board
 
 	static final int [] startValues = {
@@ -79,16 +79,18 @@ public class TestingBoard extends Board
 	int [][] values = new int[2][15];
 
 	static final int [][] bombPattern = {
-		{ 12, 13, 23, 23 },	// corner
-		{ 14, 13, 25, 15 },	// back row
-		{ 15, 14, 26, 16 },	// back row
-		{ 16, 15, 27, 17 },	// back row
-		{ 17, 16, 28, 18 },	// back row
-		{ 18, 17, 29, 19 },	// back row
-		{ 19, 18, 30, 20 },	// back row
-		{ 21, 20, 32, 32 },	// corner
-		{ 12, 35, 45, 25 },	// corner double layer
-		{ 21, 42, 54, 30 }	// corner double layer
+		{ 12, 35, 45, 25, 15, 13, 23, 0 },	// corner double layer
+		{ 21, 42, 54, 30, 18, 20, 32, 0 },	// corner double layer
+		{ 12, 13, 23, 0 },	// corner
+		{ 12, 14, 24, 34, 0 },	// corner
+		{ 14, 13, 25, 15, 0 },	// back row
+		{ 15, 14, 26, 16, 0 },	// back row
+		{ 16, 15, 27, 17, 0 },	// back row
+		{ 17, 16, 28, 18, 0 },	// back row
+		{ 18, 17, 29, 19, 0 },	// back row
+		{ 19, 18, 30, 20, 0 },	// back row
+		{ 21, 19, 31, 43, 0 },	// corner
+		{ 21, 20, 32, 0 }	// corner
 	};
 
 	static final int[][] lanes = {
@@ -125,8 +127,6 @@ public class TestingBoard extends Board
 				continue;
 			Piece p = getPiece(i);
 			if (p != null) {
-				// copy pieces to be threadsafe
-				// because piece data is updated during ai process
 				Piece np = new Piece(p);
 				grid.setPiece(i, np);
 				np.setAiValue(0);
@@ -158,6 +158,28 @@ public class TestingBoard extends Board
 			knownRank[p.getColor()][r-1]++;
 			trayRank[p.getColor()][r-1]++;
 			piecesInTray[p.getColor()]++;
+		}
+
+		// is the AI winning?
+		// if so, its pieces are worth less
+		// to encourage it to exchange ranks
+		// if not, its pieces are worth more
+		// to encourage it to avoid exchanging ranks
+
+		for (int c = RED; c <= BLUE; c++) {
+		sumValues[c] = 0;
+		for (int rank = 1; rank <= 10; rank++) {
+			int n = Rank.getRanks(rank-1) - trayRank[c][rank-1];
+			sumValues[c] += values[c][rank] * n;
+		}
+		}
+
+		for (int rank = 1; rank <= 10; rank++) {
+			long v = values[Settings.topColor][rank]/2;
+			v *= sumValues[Settings.bottomColor];
+			v /= sumValues[Settings.topColor];
+			values[Settings.topColor][rank] =
+				values[Settings.topColor][rank]/2 + (int)v;
 		}
 
 		// avgUnkRank is the average rank of the remaining
@@ -200,19 +222,6 @@ public class TestingBoard extends Board
 		}
 		}
 
-		// How to guess whether the marshal can be attacked by a spy.
-		//
-		// The most conservative approach is to assume that
-		// any unknown piece could be a spy, if the spy is
-		// still on the board.
-		//
-		// The approach taken is that if a piece
-		// has an actingRankChase, then it is not a spy.
-		// That is because it is unlikely (although possible) that
-		// that the opponent would have moved its spy into a position
-		// where it could be attacked.
-		possibleSpy = rankAtLarge(Settings.bottomColor, Rank.SPY.toInt());
-
 		// A rank becomes invincible when all lower ranking pieces
 		// are gone or *known*.
 		//
@@ -237,6 +246,10 @@ public class TestingBoard extends Board
 			if (!rankAtLarge(1-c, 1))
 				values[c][Rank.SPY.toInt()]
 					= values[c][Rank.SEVEN.toInt()];
+
+			// invincible pieces have higher value
+			for (int r = 0; r < rank; r++)
+				values[c][r+1] += 30;
 		}
 
 		// Destination Value Matrices
@@ -326,21 +339,23 @@ public class TestingBoard extends Board
 		}
 
 		// The ai considers all isolated unmoved pieces to be bombs
-		// if the opponent spy is gone or the ai one is gone.
+		// if the opponent spy is gone or the AI One is gone.
 		//
 		// bug: So one way to fool the ai is to make the flag 
 		// isolated and then the ai will not attack it.
 		//
-		if (!possibleSpy || !rankAtLarge(Settings.topColor, 1))
+		if (!hasSpy(Settings.bottomColor)
+			|| !rankAtLarge(Settings.topColor, 1))
 			possibleBomb();
 
 		possibleFlag();
 		valueLaneBombs();
 		genWinRank();
 		looping = dejavu();
+
 	}
 
-	// Chase the piece at position i using pieces of "rank" or lower.
+	// Chase the piece at position i using pieces of "chaseRank" or lower.
 	//
 	// Only 1 rank is assigned to chase an opponent piece
 	// to prevent a pile-up of ai pieces
@@ -367,36 +382,20 @@ public class TestingBoard extends Board
 			if (j > protector)
 				break;
 		}
-		if (!found) {
+		if (!found
+			&& values[1-p.getColor()][chaseRank] <=
+				values[p.getColor()][chaseRank])
 			// go for an even exchange
 			genNeededDest(1-p.getColor(), chaseRank);
-		}
 	}
 
 	// cache the winFight values for faster evaluation
 	private void genWinRank()
 	{
 		for (Rank frank : Rank.values())
-		for (Rank trank : Rank.values()) {
-			int v;
-			if (frank == Rank.UNKNOWN) {
-				// ai must be defender
-
-				// The following results are unknown
-				// but good guesses based simply on rank
-				// and some board information.
-				// The ai assumes that any unknown piece
-				// will take a bomb because of flag safety.
-				// Any piece will take a SPY
-				if (trank == Rank.BOMB && rankAtLarge(Settings.bottomColor, 8)
-					|| trank == Rank.SPY)
-					v = Rank.WINS;
-				else
-					v = frank.winFight(trank);
-			} else
-				v = frank.winFight(trank);
-			winRank[frank.toInt()][trank.toInt()] = v;
-		}
+		for (Rank trank : Rank.values())
+			winRank[frank.toInt()][trank.toInt()]
+				= frank.winFight(trank);
 	}
 
 
@@ -411,6 +410,26 @@ public class TestingBoard extends Board
 		Piece p = getPiece(j);
 
 		// assume opponent will target
+		// with all ranks
+		genDestTmp(false, p.getColor(), j, DEST_PRIORITY_DEFEND_FLAG);
+		for (int r = 1; r <= 10; r++)
+			genDestValue(1-p.getColor(), r);
+
+		// Try to protect the flag with the lowest rank(s)
+		int pd = grid.closestPieceDir(j);
+		for (int r = 1; r < 8; r++)
+			if (rankAtLarge(p.getColor(), r)) {
+				genDestTmp(false, 1 - p.getColor(), j + pd, DEST_PRIORITY_DEFEND_FLAG);
+				genNeededDest(p.getColor(), r);
+				break;
+			}
+	}
+
+	private void flagBombTarget(int j)
+	{
+		Piece p = getPiece(j);
+
+		// assume opponent will target
 		// with eights and unknown ranks
 		genDestTmp(false, p.getColor(), j, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 		genDestValue(1-p.getColor(), Rank.UNKNOWN.toInt());
@@ -420,12 +439,12 @@ public class TestingBoard extends Board
 		// then the opponent probably has guessed
 		// the location of the flag
 		// and all the other bombs
-		// Try to protect the bombs with the lowest rank(s)
+		// Try to protect the bombs with a rank that can
+		// take an eight.
 		int pd = grid.closestPieceDir(j);
-		for (int r = 1; r < 8; r++)
+		for (int r = 7; r >= 1; r--)
 			if (rankAtLarge(p.getColor(), r)) {
 				genDestTmp(false, 1 - p.getColor(), j + pd, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
-				// genDestTmp(false, 1-p.getColor(), indexb, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 				genNeededDest(p.getColor(), r);
 				break;
 			}
@@ -517,7 +536,7 @@ public class TestingBoard extends Board
 					continue;
 
 				if (p.getRank() == Rank.BOMB)
-					flagTarget(j);
+					flagBombTarget(j);
 			} // d
 		}
 	}
@@ -582,7 +601,14 @@ public class TestingBoard extends Board
 		// For an opponent attacker, it evaluates like other
 		// unknown ai bombs.
 		boolean found = true;
-		for (int j = 1; j < 4; j++) {
+		int layer = 1;
+		for (int j = 1; b[j] != 0; j++) {
+			if (j == 5 && found == false) {
+				// First layer of double layer pattern
+				// is penetrated.  Check second layer.
+				found = true;
+				layer = j;
+			}
 			Piece p = getPiece(b[j]);
 			if (p == null
 				|| (p.isKnown() && p.getRank() != Rank.BOMB)
@@ -590,6 +616,14 @@ public class TestingBoard extends Board
 				found = false;
 				continue;
 			}
+
+			// hmmm, currently we are not able to change
+			// rank or value for ai pieces
+			if (p.getRank() == Rank.UNKNOWN
+				|| p.getRank() == Rank.BOMB) {
+				p.setRank(Rank.BOMB);
+			}
+
 		}
 
 		// Remove bombs that surround a possible flag
@@ -597,8 +631,8 @@ public class TestingBoard extends Board
 		if (flagp.getColor() == Settings.bottomColor
 			&& rankAtLarge(1-flagp.getColor(), Rank.EIGHT.toInt())
 			&& found)
-			for (int k = 1; k < 4; k++)
-				destBomb(b[k]);
+			for (int j = layer; b[j] != 0; j++)
+				destBomb(b[j]);
 	}
 
 	// Scan the board setup for suspected flag pieces,
@@ -608,8 +642,8 @@ public class TestingBoard extends Board
 		int [] maybe = null;
 		int maybe_count = 0;
                 for ( int[] bp : bombPattern ) {
-			int[] b = new int[4];
-			for ( int i = 0; i < 4; i++) {
+			int[] b = new int[8];
+			for ( int i = 0; bp[i] != 0; i++) {
 				if (c == Settings.topColor)
 					b[i] = bp[i];
 				else
@@ -621,7 +655,7 @@ public class TestingBoard extends Board
 				&& !flagp.hasMoved()) {
 				boolean found = false;
 				int k;
-				for ( k = 1; k < 4; k++ ) {
+				for ( k = 1; b[k] != 0; k++ ) {
 					Piece p = getPiece(b[k]);
 					if (setup[b[k]] == Rank.BOMB
 						|| (p != null && p.getRank() == Rank.BOMB)) {
@@ -642,7 +676,7 @@ public class TestingBoard extends Board
 					maybe_count=-1;
 					break;	// only one pattern at a time
 				}
-				if (k == 4) {
+				if (b[k] == 0) {
 					// no bombs found, but it looks suspicious
 					maybe_count++;
 					maybe = b;
@@ -731,7 +765,6 @@ public class TestingBoard extends Board
 		if (p.getRank() == Rank.UNKNOWN
 			|| p.getRank() == Rank.BOMB) {
 			p.setAiValue(aiBombValue(p.getColor()));
-			p.setRank(Rank.BOMB);
 		}
 
 		// stay near but don't get in the way
@@ -753,6 +786,14 @@ public class TestingBoard extends Board
 			if (activeRank[1-p.getColor()][r-1] != 0) {
 				genNeededDest(1-p.getColor(), r);
 				break;
+		}
+
+		if (r == 0) {
+			for (r = invincibleRank[1-p.getColor()]; r >= 1; r--)
+				if (rankAtLarge(1-p.getColor(), r)) {
+					genNeededDest(1-p.getColor(), r);
+					break;
+				}
 		}
 
 		// Send the miner 
@@ -823,8 +864,15 @@ public class TestingBoard extends Board
 		while (found) {
 		found = false;
 		for (int j = 12; j <= 120; j++) {
-			if (!isValid(j) || destTmp[j] != n)
+			if (!isValid(j))
 				continue;
+
+			if (destTmp[j] != n) {
+				if (destTmp[j] == n - mult)	// 1 move penalty
+					found = true;
+				continue;
+			}
+
 			Piece p = getPiece(j);
 			if (p != null
 				&& j != to
@@ -858,7 +906,15 @@ public class TestingBoard extends Board
 				if (!isValid(i) || destTmp[i] != DEST_VALUE_NIL)
 					continue;
 				destTmp[i] = n - mult;
+
+				// if the piece blocks the way
+				// add a 1 move penalty to its neighbors
+				if (p != null && j != to) {
+					destTmp[i] -=  mult;
+					continue;
+				}
 				found = true;
+
 			}
 		}
 		n -= mult;
@@ -951,20 +1007,19 @@ public class TestingBoard extends Board
 
 				// unknown moved and unmoved pieces
 				// have bluffing value
-				if (depth != 0 && !fp.isKnown() && !isInvincible(tp))
+				if (depth != 0
+					&& !fp.isKnown()
+					&& !(isInvincible(tp)
+						|| tprank == Rank.ONE
+						&& hasSpy(Settings.topColor))
+					&& fp.getActingRankFlee() == Rank.NIL)
 					vm += aiBluffingValue(m.getTo());
 				break;
 
 			case Rank.WINS:
 				vm += aiValue(tp, m.getTo());
 
-				// Because of flag safety,
-				// the ai assumes that unknown pieces win bombs.
-				if (tprank == Rank.BOMB
-					&& fprank == Rank.UNKNOWN)
-						fp.setRank(Rank.EIGHT);
-
-				else if (!tp.isKnown()) {
+				if (!tp.isKnown()) {
 					if (tp.moves == 0) {
 					// tp is not known and has not moved
 					// so it could be a bomb
@@ -974,12 +1029,18 @@ public class TestingBoard extends Board
 					// encourage ai to not move
 					// a piece subject to attack.
 					// or attack an unmoved piece
-						if (fprank != Rank.EIGHT)
-							vm -= fpvalue;
 
 					// unknown moved pieces
 					// have bluffing value
-					} else if (depth != 0 && !isInvincible(fp))
+
+					if (fprank != Rank.EIGHT) {
+						assert tp.getColor() == Settings.topColor : "target piece not AI?";
+						vm -= fpvalue;
+					}
+
+					} else if (depth != 0
+						&& !isInvincible(fp)
+						&& tp.getActingRankFlee() == Rank.NIL)
 						vm -= aiBluffingValue(m.getTo());
 				}
 
@@ -991,9 +1052,40 @@ public class TestingBoard extends Board
 				int tpvalue = aiValue(tp, m.getTo());
 
 				// fp or tp is unknown
-				if (tp.getColor() == Settings.topColor) {
-					// ai is defender (tp)
+				if (fp.getColor() == Settings.topColor) {
+					// AI is attacker (fp)
 					vm = outcomeUnknown(fp, tp, fprank, tprank, fpvalue, tpvalue);
+
+				// AI is defender (tp)
+
+				// The ai assumes that any unknown piece
+				// will take a non-worthless bomb
+				// because of flag safety.
+				} else if (tprank == Rank.BOMB
+					&& tp.aiValue() != 0
+					&& rankAtLarge(Settings.bottomColor, 8)) {
+					fp.setRank(Rank.EIGHT);
+					vm += tpvalue;
+					vm += makeKnown(fp);
+					setPiece(fp, m.getTo());	// attacker wins
+				} else {
+					// Outcome is the negation as if ai
+					// were the attacker.
+					//
+					// But note that the resulting value
+					// of AI PIECE X OPP PIECE !=
+					// OPP PIECE X AI PIECE,
+					// because the former uses the
+					// actual AI piece value and the
+					// latter uses an unknown piece value.
+
+					// TBD
+					// if !fp.hasMoved()
+					// adjust fpvalue based on the
+					// probability that fp is a bomb
+					// and cannot move
+
+					vm = -outcomeUnknown(tp, fp, tprank, fprank, tpvalue, fpvalue);
 					// If the AI appears to make
 					// an obviously bad move, often it
 					// is because it did not guess correctly
@@ -1009,22 +1101,35 @@ public class TestingBoard extends Board
 					// thinking, because the piece
 					// could be a bomb.
 
-					// defender piece has moved
-					// assume worst case for ai
-					// defender loses
-					if (tp.hasMoved())
+					// AI piece has moved.
+					// Assume worst case for AI.
+					// AI loses.
+					// Attacker becomes a known piece.
+					// (This helps the ai protect
+					// an another ai piece from an
+					// unknown attacker, because
+					// if the attacker takes the other
+					// ai piece, the ai has a good	
+					// shot at taking it.  Of course,
+					// the attacker could be much stronger,
+					// so the ai could make a serious
+					// error as well.)
+					if (tp.hasMoved()) {
 						setPiece(fp, m.getTo());	// attacker wins
-				} else {
-					// ai is attacker (fp)
-					// outcome is the same as if it
-					// were the defender
-					vm = -outcomeUnknown(tp, fp, tprank, fprank, tpvalue, fpvalue);
+						if (tprank != Rank.ONE)
+							fp.setRank(Rank.toRank(tprank.toInt()-1));
+					}
 				}
 				break;
 			} // switch
 
-			// prefer early attacks for both ai and opponent
-			vm -= depth;
+			// prefer early successful attacks
+			// for both ai and opponent
+			if (vm > 0)
+				vm -= depth;
+			else
+			// otherwise delay it
+				vm += depth;
 
 		} // else attack
 
@@ -1038,7 +1143,7 @@ public class TestingBoard extends Board
 	public int outcomeUnknown(Piece fp, Piece tp, Rank fprank, Rank tprank, int fpvalue, int tpvalue)
 	{
 		int vm = 0;
-		assert fp.getRank() == Rank.UNKNOWN : "from piece is known?";
+		assert tp.getRank() == Rank.UNKNOWN : "target piece is known?";
 		// fp or tp is unknown
 
 		// Note: Acting Rank Chase is an
@@ -1046,17 +1151,31 @@ public class TestingBoard extends Board
 		// It is easy to get suckered into thinking
 		// that a bluffing piece is a low rank and
 		// then sacrificing material to avoid it.
-		//
-		// So there is some chance that the unknown attacker
-		// will lose the attack so we reduce fpvalue
-		// (i.e. UNKNOWN value) by half rather than completely.
-		if (fp.getActingRankChase() != Rank.NIL
-			&& fp.getActingRankChase().toInt() <= tp.getRank().toInt())
-			fpvalue /= 2;
+
+		// If a Spy has a shot at a unknown piece acting like a One,
+		// it must be careful, because the piece could be bluffing,
+		// or it could be a Two that chased the ai Two.
+		// if ((tp.getActingRankChase() == Rank.ONE
+		// 	|| tp.getActingRankChase() == Rank.TWO)
+		// 	&& fp.getRank() == Rank.SPY)
+		// 	tpvalue =?
+
+		// Any piece will take a SPY
+		// || trank == Rank.SPY)
+
+		// As there is some chance that the unknown defender
+		// with a high actingRankChase will lose an attack,
+		// (because of bluffing)
+		// the UNKNOWN value is halved rather than zeroed.
+		if (tp.getActingRankChase() != Rank.NIL
+			&& (tp.getActingRankChase().toInt() <= fp.getRank().toInt()
+				|| tp.getActingRankChase() == Rank.UNKNOWN))
+			tpvalue /= 2;
+
 		else if (tp.hasMoved()) {
-			int diff = tprank.toInt() - avgUnkRank;
-			tpvalue = tpvalue * (20 + diff) / 20;
-			fpvalue = fpvalue * (20 - diff) / 20;
+			int diff = fprank.toInt() - avgUnkRank;
+			tpvalue = tpvalue * (20 - diff) / 20;
+			fpvalue = fpvalue * (20 + diff) / 20;
 		}
 
 		vm += tpvalue - fpvalue;
@@ -1066,7 +1185,7 @@ public class TestingBoard extends Board
 		// pieces, because if attacker wins
 		// then it is subject to attack
 		// by unknown ai pieces.
-		vm += makeKnown(fp);
+		vm += makeKnown(fp) - makeKnown(tp);
 
 		return vm;
 	}
@@ -1411,9 +1530,22 @@ public class TestingBoard extends Board
 			// and do not subtract the fp value (which we do in
 			// the case of an unknown exchange).
 
+			// How to guess whether the marshal will win or lose
+			// when attacked by an unknown piece.
+			//
+			// The most conservative approach is to assume that
+			// any unknown piece could be a spy, if the spy is
+			// still on the board.
+			//
+			// The approach taken is that if a piece
+			// has an actingRankChase, then it is not a spy.
+			// That is because it is unlikely (although possible) that
+			// that the opponent would have moved its spy into a position
+			// where it could be attacked.
+
 			if (isInvincible(tp)
 			&& !(tprank == Rank.ONE
-				&& possibleSpy
+				&& hasSpy(Settings.bottomColor)
 				&& (fp.getActingRankChase() == Rank.NIL || fp.getActingRankChase() != Rank.ONE))
 			|| (fp.getActingRankFlee() != Rank.NIL
 				&& fp.getActingRankFlee().toInt() >= fp.getRank().toInt()
@@ -1430,6 +1562,12 @@ public class TestingBoard extends Board
 		}
 		}
 		return result;
+	}
+
+
+	boolean hasSpy(int color)
+	{
+		return rankAtLarge(color, Rank.SPY.toInt());
 	}
 
 }
