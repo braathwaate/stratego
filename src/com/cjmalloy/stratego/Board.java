@@ -79,11 +79,11 @@ public class Board
 	protected Rank[] setup = new Rank[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
 	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
-	protected long[][][][] boardHash = new long[2][2][15][92];
+	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
+	protected long hash = 0;
 	
 	public Board()
 	{
-
 		//create pieces
 		red.add(new Piece(UniqueID.get(), RED, Rank.FLAG));
 		red.add(new Piece(UniqueID.get(), RED, Rank.SPY));
@@ -135,10 +135,11 @@ public class Board
 
 		Random rnd = new Random();
 		for ( int k = 0; k < 2; k++)
-			for ( int m = 0; m < 2; m++)
-				for ( int r = 0; r < 15; r++)
-					for ( int i = 0; i < 92; i++)
-						boardHash[k][m][r][i] = rnd.nextLong();
+		for ( int m = 0; m < 2; m++)
+		for ( int c = RED; c <= BLUE; c++)
+		for ( int r = 0; r < 15; r++)
+		for ( int i = 11; i <= 120; i++)
+			boardHash[k][m][c][r][i] = rnd.nextLong();
 						
 	}
 
@@ -149,6 +150,7 @@ public class Board
 		tray.addAll(b.tray);
 		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
+		hash = b.hash;
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -166,7 +168,7 @@ public class Board
 			
 		if (getPiece(s) == null)
 		{
-			grid.setPiece(s.getX(), s.getY(), p);
+			setPiece(p, s);
 			tray.remove(p);
 			return true;
 		}
@@ -183,20 +185,20 @@ public class Board
 			moveHistory(fp, tp, m.getFrom(), m.getTo());
 
 			fp.setShown(true);
-			fp.setKnown(true);
-			tp.setKnown(true);
+			fp.makeKnown();
+			tp.makeKnown();
 			fp.setMoved(true);
 			fp.moves++;
-			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
+			if (!Settings.bNoShowDefender || fp.getActualRank() == Rank.NINE) {
 				tp.setShown(true);
 			}
 
 			// TBD: store original setup location
 			// after each discovery
-			if (tp.getRank() == Rank.BOMB)
+			if (tp.getActualRank() == Rank.BOMB)
 				setup[m.getTo()] = Rank.BOMB;
 			
-			int result = fp.getRank().winFight(tp.getRank());
+			int result = fp.getActualRank().winFight(tp.getActualRank());
 			if (result == 1)
 			{
 				moveToTray(m.getTo());
@@ -211,9 +213,9 @@ public class Board
 			else 
 			{
 				if (Settings.bNoMoveDefender ||
-						tp.getRank() == Rank.BOMB)
+						tp.getActualRank() == Rank.BOMB)
 					moveToTray(m.getFrom());
-				else if (fp.getRank() == Rank.NINE)
+				else if (fp.getActualRank() == Rank.NINE)
 					scoutLose(m);
 				else
 				{
@@ -234,7 +236,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (getPiece(i, j) != null)
-			if (getPiece(i, j).getRank().equals(Rank.FLAG))
+			if (getPiece(i, j).getActualRank().equals(Rank.FLAG))
 			{
 				flagColor = grid.getPiece(i,j).getColor();
 				flags++;
@@ -250,8 +252,8 @@ public class Board
 			{
 				if (getPiece(i, j) != null)
 				if (getPiece(i, j).getColor() == k)
-				if (!getPiece(i, j).getRank().equals(Rank.FLAG))
-				if (!getPiece(i, j).getRank().equals(Rank.BOMB))
+				if (!getPiece(i, j).getActualRank().equals(Rank.FLAG))
+				if (!getPiece(i, j).getActualRank().equals(Rank.BOMB))
 				if (getPiece(i+1, j) == null ||
 					getPiece(i+1, j).getColor() == (k+1)%2||
 					getPiece(i, j+1) == null ||
@@ -290,6 +292,8 @@ public class Board
 
 		for (int i = 11; i <=120; i++)
 			setup[i] = Rank.UNKNOWN;
+
+		hash = 0;
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -351,21 +355,48 @@ public class Board
 	
 	public void setPiece(Piece p, Spot s)
 	{
-		grid.setPiece(s.getX(),s.getY(),p);
+		setPiece(p, Grid.getIndex(s.getX(),s.getY()));
+	}
+
+	// Zobrist hashing.
+	// Used to determine redundant board positions.
+	//
+	// TBD: Unknown opponent pieces have UNKNOWN rank.  Hence, if two
+	// UNKNOWN pieces swap positions, the board is considered
+	// to be the same.  However, the AI does not consider all
+	// UNKNOWN pieces to be the same, because the AI bases rank
+	// rank predictions based on setup and the movement of the piece.
+	// So for UNKNOWN pieces, the rank should instead be the
+	// predicted rank.
+	public void rehash(Piece p, int i)
+	{
+		hash ^= boardHash
+			[p.isKnown() ? 1 : 0]
+			[p.hasMoved() ? 1 : 0]
+			[p.getColor()]
+			[p.getRank().toInt()-1]
+			[i];
 	}
 	
 	public void setPiece(Piece p, int i)
 	{
+		Piece bp = getPiece(i);
+		if (bp != null)
+			rehash(bp, i);
+
 		grid.setPiece(i, p);
+		if (p != null)
+			rehash(p, i);
 	}
 
+	// return TRUE if the current board position
+	// has been seen before
 	public boolean dejavu()
 	{
 		int size = undoList.size();
 		if (size <= 2)
 			return false;
-		long hash = undoList.get(size-1).hash;
-		for ( int k = size-3; k >= 0; k -= 2) {
+		for ( int k = size-2; k >= 0; k -= 2) {
 			UndoMove u = undoList.get(k);
 			if (u.hash == hash)
 				return true;
@@ -404,19 +435,6 @@ public class Board
 
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		long hash = 0;
-		for (int i = 0; i < 92; i++) {
-			int j = Grid.getValidIndex(i);
-			Piece p = getPiece(j);
-			if (p == null)
-				continue;
-			hash ^= boardHash
-				[p.isKnown() ? 1 : 0]
-				[p.hasMoved() ? 1 : 0]
-				[p.getRank().toInt()-1]
-				[i];
-		}
-			
 		UndoMove um = new UndoMove(fp, tp, from, to, hash);
 
 		// Acting rank is a historical property of the known
@@ -425,11 +443,11 @@ public class Board
 		// Acting rank is calculated factually, but is of
 		// questionable use in the heuristic because of bluffing.
 		//
-		// If an unprotected piece moves next to a known opponent piece, 
+		// If an unprotected piece moves next to a opponent piece, 
 		// it inherits a chase acting rank
-		// of a equal to or lower than the known piece.
+		// of a equal to or lower than the piece.
 		//
-		// If a piece moves away from a known and unprotected
+		// If a piece moves away from an unprotected
 		// opponent piece, it inherits a flee acting rank
 		// of the lowest rank that it fled from.
 		// High flee acting ranks are probably of
@@ -488,15 +506,16 @@ public class Board
 			Piece fp = getPiece(m.getFrom());
 			moveHistory(fp, null, m.getFrom(), m.getTo());
 
-			setPiece(fp, m.getTo());
 			setPiece(null, m.getFrom());
+			setPiece(fp, m.getTo());
 			fp.setMoved(true);
 			fp.moves++;
 			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
 				Math.abs(m.getToY() - m.getFromY()) > 1) {
 				//scouts reveal themselves by moving more than one place
 				fp.setShown(true);
-				fp.setKnown(true);
+				fp.setRank(Rank.NINE);
+				fp.makeKnown();
 			}
 
 			return true;
@@ -540,7 +559,7 @@ public class Board
 	// times non-stop between the same two
 	// squares, regardless of what the opponent is doing.
 	//
-	public boolean isRecentMove(BMove m)
+	public boolean isTwoSquares(BMove m)
 	{
 		int size = undoList.size();
 		if (size < 6)
@@ -556,6 +575,33 @@ public class Board
 		} else
 			// let opponent get away with it
 			return false;
+	}
+
+	// return TRUE if cyclic move
+	public boolean isMoreSquares()
+	{
+		int size = undoList.size();
+		if (size < 2)
+			return false;
+		BMove aimove = undoList.get(size-1);
+		BMove oppmove = undoList.get(size-2);
+
+		for (int d : dir) {
+			int i = oppmove.getTo() + d;
+			if (!isValid(i))
+				continue;
+			if (i == aimove.getTo()) {
+				// chase confirmed
+				return dejavu();
+			}
+			// we are being chased, so repetitive moves OK
+			if (i == aimove.getFrom())
+				return false;
+		}
+		// no chases
+		// return false;
+		// prevent looping
+		return dejavu();
 	}
 
 	// This is a stricter version of the Two Squares rule.
@@ -644,8 +690,7 @@ public class Board
 	
 	protected boolean validAttack(BMove m)
 	{
-		if (m.getToX()<0||m.getToX()>9||
-			m.getToY()<0||m.getToY()>9)
+		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
 			return false;
 		if (getPiece(m.getTo()) == null)
 			return false;
@@ -654,8 +699,6 @@ public class Board
 		if (getPiece(m.getFrom()).getColor() ==
 			getPiece(m.getTo()).getColor())
 			return false;
-		if (getPiece(m.getTo()).getRank().equals(Rank.WATER))
-			return false;
 
 		return validMove(m);
 	}
@@ -663,18 +706,17 @@ public class Board
 	// TRUE if piece moves to legal square
 	public boolean validMove(BMove m)
 	{
-		if (m.getToX()<0||m.getToX()>9||
-			m.getToY()<0||m.getToY()>9)
+		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
 			return false;
 		Piece fp = getPiece(m.getFrom());
 		if (fp == null)
 			return false;
 		
 		//check for rule: "a player may not move their piece back and fourth.." or something
-		if (isRecentMove(m))
+		if (isTwoSquares(m))
 			return false;
 
-		switch (fp.getRank())
+		switch (fp.getActualRank())
 		{
 		case FLAG:
 		case BOMB:
@@ -688,7 +730,8 @@ public class Board
 			if (Math.abs(m.getFromX() - m.getToX()) == 1)
 				return true;
 
-		if (fp.getRank().equals(Rank.NINE))
+		if (fp.getActualRank().equals(Rank.NINE)
+			|| fp.getActualRank().equals(Rank.UNKNOWN))
 			return validScoutMove(m.getFromX(), m.getFromY(), m.getToX(), m.getToY(), fp);
 
 		return false;

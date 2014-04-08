@@ -121,7 +121,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	{
 		if (m==null || m.getPiece()==null)
 		{
-			//AI trapped
+			ai.log("AI trapped");
 			status = Status.STOPPED;
 			board.showAll();
 			view.setPlayMode();

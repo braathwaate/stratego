@@ -144,7 +144,8 @@ public class AITest extends View
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
-			p.setRank(Rank.NINE);	// all moves valid for 9
+			// p.setRank(Rank.NINE);	// all moves valid for 9
+			p.setRank(Rank.UNKNOWN);
 			p.setShown(false);
 		}
 		printBoard();
@@ -300,28 +301,6 @@ public class AITest extends View
 
 		// System.out.println(attacker.getRank() + " to " + p[0] + " " + p[1]);
 		return new Move(attacker, new Spot(x, y), new Spot(p[0], p[1]));
-
-		/*
-		if (outcome.compareTo("OK") == 0)
-			engine.setBoardPiece(attacker, new Spot(p[0], p[1]));
-		else if (outcome.compareTo("KILLS") == 0)
-		{
-			engine.setBoardPiece(attacker, new Spot(p[0], p[1]));
-		}
-		else if (outcome.compareTo("DIES") == 0)
-		{
-		}
-		else if (outcome.compareTo("BOTHDIE") == 0)
-		{
-			engine.setBoardPiece(null, new Spot(p[0], p[1]));
-		}
-		else
-		{
-			System.exit(0); //Game over
-		}
-		*/
-		
-
 	}
 
 	public void moveInit(Move m)
@@ -344,14 +323,6 @@ public class AITest extends View
 			dirIndex = 2;
 		if (m.getFromX() < m.getToX())
 			dirIndex = 3;
-/*
-		if (Settings.topColor == Board.BLUE) {
-			if (dirIndex == 2)
-				dirIndex = 3;
-			else if (dirIndex == 3)
-				dirIndex = 2;
-		}
-*/
 		System.out.print(""+m.getFromX() + " " + fromy + " " + directions[dirIndex]);
 		int ydiff = Math.abs(fromy - toy);
 		int xdiff = Math.abs(m.getFromX() - m.getToX());

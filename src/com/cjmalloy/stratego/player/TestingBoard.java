@@ -56,7 +56,6 @@ public class TestingBoard extends Board
 	protected int[] piecesNotBomb = new int[2];
 	protected int avgUnkRank;	// average unknown
 	protected int[] sumValues = new int[2];
-	protected boolean looping;
 	protected int value;	// value of board
 
 	static final int [] startValues = {
@@ -130,10 +129,7 @@ public class TestingBoard extends Board
 				Piece np = new Piece(p);
 				grid.setPiece(i, np);
 				np.setAiValue(0);
-				if (!p.isKnown()) {
-					if (p.getColor() == Settings.bottomColor)
-						np.setRank(Rank.UNKNOWN);
-			 	} else {
+				if (p.isKnown()) {
 					int r = p.getRank().toInt();
 					knownRank[p.getColor()][r-1]++;
 				}
@@ -277,7 +273,7 @@ public class TestingBoard extends Board
 
  			if (rank == Rank.FLAG) {
 				// ai flag discovery
-				flagSafety(i);
+				aiFlagSafety(i);
 				continue;
 			}
 
@@ -351,7 +347,6 @@ public class TestingBoard extends Board
 		possibleFlag();
 		valueLaneBombs();
 		genWinRank();
-		looping = dejavu();
 
 	}
 
@@ -405,21 +400,22 @@ public class TestingBoard extends Board
 	}
 
 
-	private void flagTarget(int j)
+	// Target ai or opponent flag
+	private void flagTarget(int flag)
 	{
-		Piece p = getPiece(j);
+		Piece p = getPiece(flag);
 
-		// assume opponent will target
-		// with all ranks
-		genDestTmp(false, p.getColor(), j, DEST_PRIORITY_DEFEND_FLAG);
+		// Assume attacker will target flag with all ranks
+		genDestTmp(false, p.getColor(), flag, DEST_PRIORITY_DEFEND_FLAG);
 		for (int r = 1; r <= 10; r++)
 			genDestValue(1-p.getColor(), r);
 
-		// Try to protect the flag with the lowest rank(s)
-		int pd = grid.closestPieceDir(j);
+		// Assume defender will try
+		// to protect the flag with the strongest rank(s)
+		int pd = grid.closestPieceDir(flag);
 		for (int r = 1; r < 8; r++)
 			if (rankAtLarge(p.getColor(), r)) {
-				genDestTmp(false, 1 - p.getColor(), j + pd, DEST_PRIORITY_DEFEND_FLAG);
+				genDestTmp(false, 1 - p.getColor(), flag + pd, DEST_PRIORITY_DEFEND_FLAG);
 				genNeededDest(p.getColor(), r);
 				break;
 			}
@@ -450,15 +446,11 @@ public class TestingBoard extends Board
 			}
 	}
 
-	private void flagSafety(int flag)
+	private void aiFlagSafety(int flag)
 	{
 		Piece pflag = getPiece(flag);
 
-		// ai only code
-		if (pflag.getColor() != Settings.topColor)
-			return;
-
-		assert pflag.getColor() == Settings.topColor : "flag routines only for ai";
+		assert pflag.getColor() == Settings.topColor : "flag routines only for ai flag";
 		pflag.setAiValue(aiFlagValue(pflag.getColor()));
 
 		// Setting the flag to always known is questionable
@@ -635,7 +627,17 @@ public class TestingBoard extends Board
 				destBomb(b[j]);
 	}
 
-	// Scan the board setup for suspected flag pieces,
+	// Scan the board setup for suspected flag pieces.
+	//
+	// This code is designed primarily to detect the opponent flag,
+	// but by also scanning the AI's own pieces, it can second
+	// guess the opponent where the opponent may think
+	// the AI flag may be located.  This tells the AI whether
+	// to step up protection on its own flag, and possibly to
+	// step up protection on a alternate location in an effort
+	// to create a realistic deception that the flag is at
+	// the alternate location, but really isn't.
+
 	private void possibleFlag()
 	{
 		for (int c = RED; c <= BLUE; c++) {
@@ -702,7 +704,9 @@ public class TestingBoard extends Board
 					b = i;
 				else
 					b = 132 - i;
-				destBomb(b);
+				Piece p = getPiece(b);
+				if (p != null && !p.isKnown())
+					flagTarget(b);
 			}
 				
 		}
@@ -936,11 +940,12 @@ public class TestingBoard extends Board
 	public void move(BMove m, int depth, boolean unknownScoutFarMove)
 	{
 		Piece fp = getPiece(m.getFrom());
-		Rank fprank = fp.getRank();
 		Piece tp = getPiece(m.getTo());
-		setPiece(null, m.getFrom());
 		moveHistory(fp, tp, m);
+
+		setPiece(null, m.getFrom());
 		fp.setIndex(m.getTo());
+		Rank fprank = fp.getRank();
 		int vm = 0;
 		int r = fprank.toInt()-1;
 		int color = fp.getColor();
@@ -1034,7 +1039,7 @@ public class TestingBoard extends Board
 					// have bluffing value
 
 					if (fprank != Rank.EIGHT) {
-						assert tp.getColor() == Settings.topColor : "target piece not AI?";
+						assert tp.getColor() == Settings.topColor : "from " + fprank + " X target " + tprank + " not AI?";
 						vm -= fpvalue;
 					}
 
@@ -1192,7 +1197,7 @@ public class TestingBoard extends Board
 
         protected void moveHistory(Piece fp, Piece tp, BMove m)
         {
-                undoList.add(new UndoMove(fp, tp, m.getFrom(), m.getTo(), 0L));
+                undoList.add(new UndoMove(fp, tp, m.getFrom(), m.getTo(), hash));
 	}
 
 
@@ -1204,8 +1209,9 @@ public class TestingBoard extends Board
 		fp.copy(um.fpcopy);
 		if (um.tp != null)
 			um.tp.copy(um.tpcopy);
-		setPiece(fp, um.getFrom());
+
 		setPiece(um.tp, um.getTo());
+		setPiece(fp, um.getFrom());
 		undoList.remove(undoList.size()-1);
 	}
 	
@@ -1294,9 +1300,6 @@ public class TestingBoard extends Board
 
 	private int aiMovedValue(Piece p)
 	{
-		if (looping)
-			return 0;
-
 		Rank r = p.getRank();
 		if (neededRank[p.getColor()][r.toInt()-1])
 			return 1;

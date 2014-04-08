@@ -366,16 +366,28 @@ public class AI implements Runnable
 
 		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
 
-		// To speed move generation, the AI does not check the
+		// To speed move generation, the search tree does not check the
 		// Two Squares rule for each move, so we remove
-		// the move now.  During the tree evaluation, the AI
-		// calls isRepeatedMove() which discards back-and-forth
-		// moves.  Because most moves are pruned off by alpha-beta,
-		// calls to isRepeatedMove() are also pruned off,
-		// saving a heap of time.
-		for (int k = moveList.size()-1; k >= 0; k--)
-			if (b.isRecentMove(moveList.get(k).move))
+		// the move now.
+		for (int k = moveList.size()-1; k >= 0; k--) {
+			if (b.isTwoSquares(moveList.get(k).move))
 				moveList.remove(k);
+			else {
+				MoveValuePair mvp = moveList.get(k);
+				tmpM = mvp.move;
+				if (b.isRepeatedMove(tmpM))
+					continue;
+				b.move(tmpM, 0, mvp.unknownScoutFarMove);
+				// More Squares Rule
+				if (b.isMoreSquares())
+				// To prevent looping, the AI always
+				// avoids repeated positions.
+				// This is stricter than the More Squares Rule
+				// if (b.dejavu())
+					moveList.remove(k);
+				b.undo(0);
+			}
+		}
 
 		long t = System.currentTimeMillis( );
 		boolean timeout = false;
@@ -390,11 +402,13 @@ public class AI implements Runnable
 		// Some opponent AI bots like to chase pieces around
 		// the board relentlessly hoping for material gain.
 		// The opponent is able to chase the AI piece because
-		// the AI abides by the two squares rule, otherwise
+		// the AI always abides by the Two Squares Rule, otherwise
 		// the AI piece could go back and forth between the same
-		// two squares.  This program does not enforce the two squares
-		// rule for opponents, because a human opponent can
-		// find this rule annoying or deem it as a bug.
+		// two squares.  If the Settings Two Squares Rule box
+		// is left unchecked, this program does not enforce the
+		// rule for opponents. This is a huge advantage for the
+		// opponent, but is a good beginner setting.
+		//
 		// So an unskilled human or bot can chase an AI piece
 		// pretty easily, but even a skilled opponent abiding
 		// by the two squares rule can still chase an AI piece around
@@ -750,6 +764,12 @@ public class AI implements Runnable
 			int vm = 0;
 			BMove tmpM = mvp.move;
 			// NOTE: FORWARD TREE PRUNING (minor)
+			// isRepeatedMove() discards back-and-forth moves.
+			// This is done now rather than during move
+			// generation because most moves
+			// are pruned off by alpha-beta,
+			// so calls to isRepeatedMove() are also pruned off,
+			// saving a heap of time.
 			if (b.isRepeatedMove(tmpM))
 				continue;
 

@@ -124,16 +124,16 @@ public class PieceButton extends JButton implements MouseListener,
 				if (piece.getColor()%2 == 0)
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
-						setIcon(skin.redASkins[piece.getRank().ordinal()]);
+						setIcon(skin.redASkins[piece.getActualRank().ordinal()]);
 					else
-						setIcon(skin.redSkins[piece.getRank().ordinal()]);
+						setIcon(skin.redSkins[piece.getActualRank().ordinal()]);
 				}
 				else
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
-						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
+						setIcon(skin.blueASkins[piece.getActualRank().ordinal()]);
 					else
-						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
+						setIcon(skin.blueSkins[piece.getActualRank().ordinal()]);
 				}
 			}
 		}
@@ -168,21 +168,21 @@ public class PieceButton extends JButton implements MouseListener,
 				if (piece.getColor()%2 == 0)
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
-						pc = skin.redASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redASkins[piece.getActualRank().ordinal()].getImage();
 					else if (piece.hasMoved() && !Settings.bShowAll)
-						pc = skin.redAASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redAASkins[piece.getActualRank().ordinal()].getImage();
 					else
-						pc = skin.redSkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redSkins[piece.getActualRank().ordinal()].getImage();
 				}
 				else
 				{
 					if (piece.isKnown() && !Settings.bShowAll)
-						pc = skin.blueASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueASkins[piece.getActualRank().ordinal()].getImage();
 					else if (piece.hasMoved() && !Settings.bShowAll)
-						pc = skin.blueAASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueAASkins[piece.getActualRank().ordinal()].getImage();
 					else
 
-						pc = skin.blueSkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueSkins[piece.getActualRank().ordinal()].getImage();
 				}
 			}
 
@@ -215,7 +215,7 @@ public class PieceButton extends JButton implements MouseListener,
 			resized = false;
 			
 			if (piece != null &&
-					skin.scaledSkins[piece.getRank().ordinal()] != null)
+					skin.scaledSkins[piece.getActualRank().ordinal()] != null)
 			{
 				refreshIcon();
 			}
@@ -232,9 +232,9 @@ public class PieceButton extends JButton implements MouseListener,
 			mouseDown = true;
 			mouseFrom = spot;
 			mousePiece = piece;
-			if (piece != null && skin.scaledSkins[piece.getRank().ordinal()] != null)
+			if (piece != null && skin.scaledSkins[piece.getActualRank().ordinal()] != null)
 			{
-				dragIcon = piece.getRank().ordinal();
+				dragIcon = piece.getActualRank().ordinal();
 			}
 		}
 	}

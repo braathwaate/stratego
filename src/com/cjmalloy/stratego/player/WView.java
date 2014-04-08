@@ -100,7 +100,7 @@ public class WView extends View implements MoveListener
 	{
 		if (s == Board.IN_TRAY)
 		{
-			if (p.getRank().equals(Rank.NIL))
+			if (p.getActualRank().equals(Rank.NIL))
 			{
 				if (p.getColor()%2 == 1)
 					trayUser[p.getID()].setPiece(null);

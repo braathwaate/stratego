@@ -21,6 +21,7 @@ public class Piece implements Comparable<Piece>
 {
 	private int uniqueID = 0;
 	private int color = 0;
+
 	private Rank rank = null;
 
 	private boolean shown = false;	// visible on screen
@@ -45,17 +46,7 @@ public class Piece implements Comparable<Piece>
 
 	public Piece(Piece p) 
 	{
-		uniqueID = p.uniqueID;
-		color = p.color;
-		moved = p.moved;
-		moves = p.moves;
-		rank = p.rank;
-		known = p.known;
-		shown = p.shown;
-		actingRankFlee = p.actingRankFlee;
-		actingRankChase = p.actingRankChase;
-		value = p.value;
-		index = p.index;
+		copy(p);
 	}
 
 	public void copy(Piece p) 
@@ -88,6 +79,13 @@ public class Piece implements Comparable<Piece>
 	public void setRank(Rank r)
 	{
 		rank = r;
+		actingRankChase = Rank.NIL;
+		actingRankFlee = Rank.NIL;
+	}
+
+	public void makeKnown()
+	{
+		known = true;
 	}
 
 	public int getColor() 
@@ -95,7 +93,21 @@ public class Piece implements Comparable<Piece>
 		return color;
 	}
 
+	// If a player is playing using the GUI,
+	// then the program knows the "actual rank" of the player's pieces.
+	// This is useful for checking the validity of the player's moves
+	// or displaying the player's pieces.
+	// However, if the player is playing the AI, the AI should be unaware
+	// of the player's pieces.
 	public Rank getRank() 
+	{
+		if (color == Settings.bottomColor && !known)
+			return Rank.UNKNOWN;
+		else
+			return rank;
+	}
+	
+	public Rank getActualRank() 
 	{
 		return rank;
 	}
