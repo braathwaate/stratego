@@ -124,10 +124,8 @@ protected static class UniqueID
 		}
 	}
 
-	public int closestPieceDir(int to)
+	public int closestPieceDir(int tpcolor, int to)
 	{
-		Piece tp = getPiece(to);
-		int tpcolor = tp.getColor();
 		int tx = Grid.getX(to);
 		int ty = Grid.getY(to);
 	

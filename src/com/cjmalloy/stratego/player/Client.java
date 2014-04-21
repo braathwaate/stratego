@@ -116,7 +116,7 @@ public class Client implements MessageHandler
 			conn.writeInt(m.getFromY());
 			conn.writeInt(m.getToX());
 			conn.writeInt(m.getToY());
-			conn.writeInt(m.getPiece().getActualRank().ordinal());
+			conn.writeInt(m.getPiece().getRank().ordinal());
 		}
 		finally
 		{

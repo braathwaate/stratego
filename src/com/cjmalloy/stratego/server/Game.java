@@ -189,13 +189,13 @@ public class Game
 						if (engine.getBoardPiece(j, k).isShown())
 						{
 							player[i].writeInt(engine.getBoardPiece(j, k).getColor()+2);
-							player[i].writeInt(engine.getBoardPiece(j, k).getActualRank().ordinal());
+							player[i].writeInt(engine.getBoardPiece(j, k).getRank().ordinal());
 						}
 						else
 						{
 							player[i].writeInt(engine.getBoardPiece(j, k).getColor());
 							if (engine.getBoardPiece(j, k).getColor() == i)
-								player[i].writeInt(engine.getBoardPiece(j, k).getActualRank().ordinal());
+								player[i].writeInt(engine.getBoardPiece(j, k).getRank().ordinal());
 							else
 								player[i].writeInt(Rank.UNKNOWN.ordinal());
 						}
@@ -221,13 +221,13 @@ public class Game
 					if (engine.getTrayPiece(j).isShown())
 					{
 						player[i].writeInt(engine.getTrayPiece(j).getColor()+2);
-						player[i].writeInt(engine.getTrayPiece(j).getActualRank().ordinal());
+						player[i].writeInt(engine.getTrayPiece(j).getRank().ordinal());
 					}
 					else
 					{
 						player[i].writeInt(engine.getTrayPiece(j).getColor());
 						if (engine.getTrayPiece(j).getColor() == i)
-							player[i].writeInt(engine.getTrayPiece(j).getActualRank().ordinal());
+							player[i].writeInt(engine.getTrayPiece(j).getRank().ordinal());
 						else
 							player[i].writeInt(Rank.UNKNOWN.ordinal());
 					}

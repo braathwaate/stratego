@@ -138,7 +138,7 @@ public class Board
 		for ( int m = 0; m < 2; m++)
 		for ( int c = RED; c <= BLUE; c++)
 		for ( int r = 0; r < 15; r++)
-		for ( int i = 11; i <= 120; i++)
+		for ( int i = 12; i <= 120; i++)
 			boardHash[k][m][c][r][i] = rnd.nextLong();
 						
 	}
@@ -189,16 +189,16 @@ public class Board
 			tp.makeKnown();
 			fp.setMoved(true);
 			fp.moves++;
-			if (!Settings.bNoShowDefender || fp.getActualRank() == Rank.NINE) {
+			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
 			}
 
 			// TBD: store original setup location
 			// after each discovery
-			if (tp.getActualRank() == Rank.BOMB)
+			if (tp.getRank() == Rank.BOMB)
 				setup[m.getTo()] = Rank.BOMB;
 			
-			int result = fp.getActualRank().winFight(tp.getActualRank());
+			int result = fp.getRank().winFight(tp.getRank());
 			if (result == 1)
 			{
 				moveToTray(m.getTo());
@@ -213,9 +213,9 @@ public class Board
 			else 
 			{
 				if (Settings.bNoMoveDefender ||
-						tp.getActualRank() == Rank.BOMB)
+						tp.getRank() == Rank.BOMB)
 					moveToTray(m.getFrom());
-				else if (fp.getActualRank() == Rank.NINE)
+				else if (fp.getRank() == Rank.NINE)
 					scoutLose(m);
 				else
 				{
@@ -236,7 +236,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (getPiece(i, j) != null)
-			if (getPiece(i, j).getActualRank().equals(Rank.FLAG))
+			if (getPiece(i, j).getRank().equals(Rank.FLAG))
 			{
 				flagColor = grid.getPiece(i,j).getColor();
 				flags++;
@@ -252,8 +252,8 @@ public class Board
 			{
 				if (getPiece(i, j) != null)
 				if (getPiece(i, j).getColor() == k)
-				if (!getPiece(i, j).getActualRank().equals(Rank.FLAG))
-				if (!getPiece(i, j).getActualRank().equals(Rank.BOMB))
+				if (!getPiece(i, j).getRank().equals(Rank.FLAG))
+				if (!getPiece(i, j).getRank().equals(Rank.BOMB))
 				if (getPiece(i+1, j) == null ||
 					getPiece(i+1, j).getColor() == (k+1)%2||
 					getPiece(i, j+1) == null ||
@@ -290,7 +290,7 @@ public class Board
 
 		undoList.clear();
 
-		for (int i = 11; i <=120; i++)
+		for (int i = 12; i <=120; i++)
 			setup[i] = Rank.UNKNOWN;
 
 		hash = 0;
@@ -370,11 +370,16 @@ public class Board
 	// predicted rank.
 	public void rehash(Piece p, int i)
 	{
+		Rank rank;
+		if (p.getColor() == Settings.topColor)
+			rank = p.getRank();
+		else
+			rank = p.getApparentRank();
 		hash ^= boardHash
 			[p.isKnown() ? 1 : 0]
 			[p.hasMoved() ? 1 : 0]
 			[p.getColor()]
-			[p.getRank().toInt()-1]
+			[rank.toInt()-1]
 			[i];
 	}
 	
@@ -417,15 +422,17 @@ public class Board
 		return undoList.get(size-i);
 	}
 
-	public boolean isProtected(int i)
+	// Return true if the chase piece could possibly be
+	// protected.
+	public boolean isProtected(Piece fp, int i)
 	{
-		Piece fp = getPiece(i);
 		for (int d : dir) {
 			int j = i + d;
 			if (!isValid(j))
 				continue;
 			Piece p = getPiece(j);
 			if (p != null
+				&& p != fp
 				&& p.getColor() == fp.getColor()) {
 				return true;
 			}
@@ -443,12 +450,12 @@ public class Board
 		// Acting rank is calculated factually, but is of
 		// questionable use in the heuristic because of bluffing.
 		//
-		// If an unprotected piece moves next to a opponent piece, 
+		// If an unprotected attacker moves next to a opponent piece, 
 		// it inherits a chase acting rank
 		// of a equal to or lower than the piece.
 		//
 		// If a piece moves away from an unprotected
-		// opponent piece, it inherits a flee acting rank
+		// opponent attacker, it inherits a flee acting rank
 		// of the lowest rank that it fled from.
 		// High flee acting ranks are probably of
 		// little use because unknown low ranks may flee
@@ -458,17 +465,28 @@ public class Board
 		// the more likely that the piece rank
 		// really is equal to or greater than the flee acting rank,
 		// because low ranks are irresistable captures.
+		//
+		// 
 
 		// movement towards
 		for (int d : dir) {
-			int i = to + d;
-			if (!isValid(i))
+			int chased = to + d;
+			if (!isValid(chased))
 				continue;
-			Piece p = getPiece(i);
-			if (p != null
-				&& p.getColor() != fp.getColor()
-				&& !isProtected(i)) {
-				Rank rank = p.getRank();
+			Piece chasedPiece = getPiece(chased);
+			if (chasedPiece != null
+				&& chasedPiece.getColor() != fp.getColor()) {
+				// chase confirmed
+					
+				Rank rank = chasedPiece.getApparentRank();
+				if (rank == Rank.BOMB)
+					continue;
+				// if the chase piece is protected,
+				// it is even less likely that the piece
+				// is a lower ranked piece.
+				if (isProtected(fp, to))
+					rank = Rank.UNKNOWN;
+
 				Rank arank = fp.getActingRankChase();
 				if (arank == Rank.NIL
 				|| arank.toInt() > rank.toInt())
@@ -478,18 +496,60 @@ public class Board
 
 		// movement aways
 		for (int d : dir) {
-			int i = from + d;
-			if (!isValid(i))
+			int chaser = from + d;
+			if (!isValid(chaser))
 				continue;
-			Piece p = getPiece(i);
-			if (p != null
-				&& p.getColor() != fp.getColor()
-				&& !isProtected(i)) {
-				Rank rank = p.getRank();
+			Piece chasePiece = getPiece(chaser);
+			if (chasePiece != null
+				&& chasePiece.getColor() != fp.getColor()) {
+				// chase confirmed
+				Rank rank = chasePiece.getApparentRank();
+				if (rank == Rank.BOMB)
+					continue;
+
+				// if the chase piece is protected,
+				// it is even less likely that the piece
+				// is a lower ranked piece.
+				if (isProtected(chasePiece, chaser))
+					rank = Rank.UNKNOWN;
+
 				Rank arank = fp.getActingRankFlee();
 				if (arank == Rank.NIL
 				|| arank.toInt() > rank.toInt())
 					fp.setActingRankFlee(rank);
+			}
+		}
+
+		// Flee acting rank is also set implicitly if
+		// the piece neglects to capture an adjacent opponent
+		// piece and the immediate player move was not a capture
+		// (NOT IMPLEMENTED: or a capture of a less valuable piece).  
+		for ( int i = 12; i <= 120; i++) {
+			if (i == from)
+				continue;
+			Piece fleeTp = getPiece(i);
+			if (fleeTp == null
+				|| fleeTp.isKnown()
+				|| fleeTp.getColor() != fp.getColor())
+				continue;
+			
+			for (int d : dir) {
+				int j = i + d;
+				if (!isValid(j))
+					continue;
+				Piece op = getPiece(j);
+				if (op != null
+					&& op.getColor() != fp.getColor()
+					&& !isProtected(op, j)
+					&& tp == null) {
+					Rank rank = op.getApparentRank();
+					if (rank == Rank.BOMB)
+						continue;
+					Rank arank = fleeTp.getActingRankFlee();
+					if (arank == Rank.NIL
+					|| arank.toInt() > rank.toInt())
+						fleeTp.setActingRankFlee(rank);
+				}
 			}
 		}
 
@@ -577,6 +637,13 @@ public class Board
 			return false;
 	}
 
+	// Repetition of Threatening Moves: More-Squares Rule
+	// It is not allowed to continuously chase one or
+	// more pieces of the opponent endlessly. The
+	// continuous chaser may not play a chasing
+	// move which would lead to a position on the
+	// board which has already taken place.
+
 	// return TRUE if cyclic move
 	public boolean isMoreSquares()
 	{
@@ -623,15 +690,6 @@ public class Board
 			// let opponent get away with it
 			return false;
 	}
-
-	// Repetition of Threatening Moves: More-Squares Rule
-	// It is not allowed to continuously chase one or
-	// more pieces of the opponent endlessly. The
-	// continuous chaser may not play a chasing
-	// move which would lead to a position on the
-	// board which has already taken place.
-	// TBD: need a transposition table
-	// TBD
 
 	public void undoLastMove()
 	{
@@ -716,7 +774,7 @@ public class Board
 		if (isTwoSquares(m))
 			return false;
 
-		switch (fp.getActualRank())
+		switch (fp.getRank())
 		{
 		case FLAG:
 		case BOMB:
@@ -730,8 +788,8 @@ public class Board
 			if (Math.abs(m.getFromX() - m.getToX()) == 1)
 				return true;
 
-		if (fp.getActualRank().equals(Rank.NINE)
-			|| fp.getActualRank().equals(Rank.UNKNOWN))
+		if (fp.getRank().equals(Rank.NINE)
+			|| fp.getRank().equals(Rank.UNKNOWN))
 			return validScoutMove(m.getFromX(), m.getFromY(), m.getToX(), m.getToY(), fp);
 
 		return false;

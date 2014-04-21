@@ -87,7 +87,7 @@ public class ServerEngine extends Engine
 			if (m.getFrom() == 0) // Board.IN_TRAY
 			{
 				for (int i=0;i<board.getTraySize();i++)
-					if (board.getTrayPiece(i).getActualRank().equals(m.getPiece().getActualRank()))
+					if (board.getTrayPiece(i).getRank().equals(m.getPiece().getRank()))
 						setupPlacePiece(board.getTrayPiece(i), new Spot(m.getToX(), m.getToY()));
 			}
 			else if (m.getTo() == 0) // Board.IN_TRAY

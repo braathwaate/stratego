@@ -1,10 +1,10 @@
 Download
 --------
 
-[Stratego player v0.4.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.4.0/stratego_v0.4.0.jar
+[Stratego player v0.5.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.5.0/stratego_v0.5.0.jar
 
-For two person play over TCP/IP, you also need the Stratego server,
+For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
 
 Introduction
@@ -40,9 +40,9 @@ for move ordering to increase pruning success.
 The search time is adjustable with the Settings menu.
 At the default depth (1 tick)
 it completes within a fraction of a second
-usally completing about 6-8 ply depending on the speed of the desktop.
+usally completing about 6 ply depending on the speed of the desktop.
 
-Evaluation heuristic is based on material gained versus lost
+The evaluation function is based on material gained versus lost
 as well as opponent piece rank discovery.
 It weighs which pieces to attack based on the potential
 of discovering important piece ranks versus the risk of loss.
@@ -50,12 +50,11 @@ Hence, an valuable AI piece will generally avoid unknown and unmoved opponent pi
 whereas lesser AI pieces are eager to sacrifice themselves if the loss
 leads to key opponent piece discovery that assists in winning the game.
 Once an AI piece becomes invincible, it will attack all unknown moved pieces.
-The heuristic also derives opponent piece information based on how the
+The AI derives opponent piece information based on how the
 opponent piece interacts with its pieces or whether it moves at all.
 
 Static position analysis is used to determine piece destinations.
-Success is largely dependent on the heuristic in
-gaining opponent piece information.
+Success is largely dependent on the AI in gaining opponent piece information.
 I won't tell you how it works here because it is a bit of a spoiler.
 As with human opponents, once you know their strategy
 it is easy to thwart it.
@@ -63,7 +62,8 @@ This is much worse with the AI, because it does not adapt.
 You need to read the code if you want to find out
 what the AI tries to accomplish.
 
-This algorithm results in an amateur level of play.  
+This algorithm results in a modest amateur level of play,
+able to defeat most casual human players.
 
 Areas for improvements are:
 
@@ -81,12 +81,12 @@ AI Regression Testing
 Stratego supports the interface protocol defined in
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
 This is used to test the strength of the AI
-by playing the AI against the bots including itself and prior releases.
+by playing the AI against the bots including itself and the prior release.
 To use Stratego with the Stratego AI Evaluator,
 use the -t option on the command line.
 
 For a given set of initial setups,
-any change to the AI code must result in 100% wins against the agents.
+each new version of the AI must result in 100% wins against the agents.
 In addition, the number of moves to reach the win
 are totaled.
 The sum of the number of moves for all the games played against each agent
@@ -95,6 +95,7 @@ In other words,
 while a modified AI may take more moves to win any individual game
 (and it must win all games against all agents),
 the aggregate of all moves to win a set of games must be less.
+Finally, a new release must win a majority of games against the prior release.
 
 References
 ----------

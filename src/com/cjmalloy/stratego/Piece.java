@@ -79,8 +79,6 @@ public class Piece implements Comparable<Piece>
 	public void setRank(Rank r)
 	{
 		rank = r;
-		actingRankChase = Rank.NIL;
-		actingRankFlee = Rank.NIL;
 	}
 
 	public void makeKnown()
@@ -93,21 +91,15 @@ public class Piece implements Comparable<Piece>
 		return color;
 	}
 
-	// If a player is playing using the GUI,
-	// then the program knows the "actual rank" of the player's pieces.
-	// This is useful for checking the validity of the player's moves
-	// or displaying the player's pieces.
-	// However, if the player is playing the AI, the AI should be unaware
-	// of the player's pieces.
-	public Rank getRank() 
+	public Rank getApparentRank() 
 	{
-		if (color == Settings.bottomColor && !known)
+		if (!known)
 			return Rank.UNKNOWN;
 		else
 			return rank;
 	}
 	
-	public Rank getActualRank() 
+	public Rank getRank() 
 	{
 		return rank;
 	}
@@ -159,6 +151,8 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankChase()
 	{
+		if (known)
+			return rank;
 		return actingRankChase;
 	}
 
@@ -169,6 +163,8 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankFlee()
 	{
+		if (known)
+			return rank;
 		return actingRankFlee;
 	}
 
