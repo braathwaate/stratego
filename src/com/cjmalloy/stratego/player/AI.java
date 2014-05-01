@@ -237,23 +237,16 @@ public class AI implements Runnable
 	}
 
 
-	public boolean getMoves(ArrayList<MoveValuePair> moveList, TestingBoard b, int turn, int i)
+	public boolean getMoves(ArrayList<MoveValuePair> moveList, TestingBoard b, int turn, Piece fp)
 	{
 		boolean hasMove = false;
-		Piece fp = b.getPiece(i);
-		if (fp == null)
-			return false;
-		if (fp.getColor() != turn)
+		int i = fp.getIndex();
+
+		// if the piece is no longer on the board, ignore it
+		if (b.getPiece(i) != fp)
 			return false;
 
 		Rank fprank = fp.getRank();
-
-		// note: we need to make this check each time
-		// because the index and perhaps the rank
-		// could change.
-		if (fprank == Rank.BOMB
-			|| fprank == Rank.FLAG)
-			return false;
 
 		for (int d : dir ) {
 			int t = i + d ;
@@ -311,11 +304,14 @@ public class AI implements Runnable
 		// only examine moves adjacent to chase and chased pieces
 		// as they chase around the board
 		if (chasePiece != null) {
-			getMoves(moveList, b, turn, chasedPiece.getIndex());
+			getMoves(moveList, b, turn, chasedPiece);
 			for (int d : dir ) {
 				int i = chasePiece.getIndex() + d;
-				if (i != chasedPiece.getIndex())
-					getMoves(moveList, b, turn, i );
+				if (i != chasedPiece.getIndex() && b.isValid(i)) {
+					Piece p = b.getPiece(i);
+					if (p != null)
+						getMoves(moveList, b, turn, p );
+				}
 			}
 
 			// AI can end the chase by moving some other piece,
@@ -327,18 +323,9 @@ public class AI implements Runnable
 
 		} else {
 		boolean hasMove = false;
-		for (int j=0;j<92;j++) {
-			// order the move evaluation to consider
-			// the pieces furthest down the board first because
-			// already moved pieces have the highest scores.
-			// This results in the most alpha-beta pruning.
-			int i;
-			if (turn == Settings.topColor)
-				i = 132 - Grid.getValidIndex(j);
-			else
-				i = Grid.getValidIndex(j);
-
-			if (getMoves(moveList, b, turn, i))
+		int np = b.npieces[turn];
+		for (int j=0;j<np;j++) {
+			if (getMoves(moveList, b, turn, b.pieces[turn][j]))
 				hasMove = true;
 		}
 
@@ -350,29 +337,6 @@ public class AI implements Runnable
 
 		return moveList;
 	}
-
-	boolean hasMove(TestingBoard b, int turn)
-	{
-		for (int j=0;j<92;j++) {
-			int i = Grid.getValidIndex(j);
-			Piece fp = b.getPiece(i);
-			if (fp == null)
-				continue;
-			if (fp.getColor() != turn)
-				continue;
-			for (int d : dir ) {
-				int t = i + d ;
-				Piece tp = b.getPiece(t);
-				if (tp == null)
-					continue;
-				if (fp.getColor() == tp.getColor())
-					continue;
-				return true;
-			}
-		}
-		return false;
-	}
-
 
 	private BMove getBestMove(TestingBoard b)
 	{
@@ -616,8 +580,9 @@ public class AI implements Runnable
 	// return true if a piece is safely movable.
 	// Safely movable means it has an open space
 	// or can attack a known piece of lesser rank.
-	private boolean isMovable(TestingBoard b, Piece p, int i)
+	private boolean isMovable(TestingBoard b, int i)
 	{
+		Piece p = b.getPiece(i);
 		Rank rank = p.getRank();
 		if (rank == Rank.FLAG || rank == Rank.BOMB)
 			return false;
@@ -664,32 +629,29 @@ public class AI implements Runnable
 	// likely that the the opponent would just move the valuable piece
 	// away until the Two Squares or More Squares rule kicks in.
 	//
-	// bug: is that if one piece can attack two pieces,
-	// credit is given for both attacks, unless one of the
-	// attacks is the "best attack" on the board.
-	//
 	private int ebqs(TestingBoard b, int turn, int depth)
 	{
 		int qs = b.getValue();
 		b.setValue(0);
-		int maxbest = 0;
-		int minbest = 0;
-		for (int j=0;j<92;j++) {
-			int i = Grid.getValidIndex(j);
-			Piece tp = b.getPiece(i);
-			if (tp == null)
+
+		// c is the color of the defender
+		for (int c = Board.RED; c <= Board.BLUE; c++) {
+		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
+		int np = b.npieces[c];
+
+		// search for all the pieces on the board under attack
+		for (int j=0;j<np;j++) {
+			Piece tp = b.pieces[c][j];
+			int i = tp.getIndex();
+			if (tp != b.getPiece(i))
 				continue;
 
-			int min = 0;
-			int max = 0;
-			boolean minmovable = false;
-			boolean maxmovable = false;
 			for (int d : dir ) {
-				int f = i + d;
+				int f = i + d;	
 				if (!b.isValid(f))
 					continue;
-				Piece fp = b.getPiece(f);
-				if (fp == null || tp.getColor() == fp.getColor())
+				Piece fp = b.getPiece(f); // attacker
+				if (fp == null || c == fp.getColor())
 					continue;
 				// note: we need to make this check each time
 				// because the index and perhaps the rank
@@ -698,38 +660,74 @@ public class AI implements Runnable
 				if (fprank == Rank.BOMB
 					|| fprank == Rank.FLAG)
 					continue;
-				b.move(new BMove(f, i), depth, false);
+				BMove tmpM = new BMove(f, i);
+				b.move(tmpM, depth, false);
 				int vm = b.getValue();
 
-				if (vm > max) {
-					vm = recapture(b, i, depth, true);
-					if (vm > max) {
-						max = vm;
-					}
-				}
-				if (vm < min) {
-					vm = recapture(b, i, depth, false);
-					if (vm < min) {
-						min = vm;
-					}
+				if (c == Settings.bottomColor) {
+					if (vm > 0) // worthwhile attack
+						vm = recapture(b, i, depth, true);
+				} else {
+					if (vm < 0) // worthwhile attack
+						vm = recapture(b, i, depth, false);
+					vm = -vm;
 				}
 				b.undo(0);
+
+				// save worthwhile attack
+				if (vm > 0)
+					moveList.add(new MoveValuePair(tmpM, vm, false));
+			} // d
+		} // j
+
+		// sort the attacks by highest value
+		// sum only the best attacks
+		Collections.sort(moveList);
+		boolean best = false;
+		int nmoves = moveList.size();
+		for (int k = 0; k < nmoves; k++) {
+			MoveValuePair mvp = moveList.get(k);
+			int vm = mvp.value;
+			if (vm == 0)
+				continue;
+			int from = mvp.move.getFrom();
+			int to = mvp.move.getTo();
+
+			// No credit for best move if not the player's turn
+			// because opponent can move the piece
+			// under attack.
+			//
+			// TBD: this should be an option on the
+			// opponents move list and be sorted accordingly
+			//
+			if (turn == c && !best && isMovable(b,to)) {
+				best = true;
+				continue;
 			}
-			if (tp.getColor() == Settings.bottomColor) {
-				qs += max;
-				if (max > maxbest && isMovable(b,tp,i))
-					maxbest = max;
-			} else {
-				qs += min;
-				if (min < minbest && isMovable(b,tp,i))
-					minbest = min;
+
+			// sum the attacks
+			if (c == Settings.bottomColor)
+				qs += vm;
+			else
+				qs -= vm;
+
+			// Clear any lesser attacks
+			// so if one piece can attack two pieces
+			// (or two pieces attack a single piece)
+			// no credit is given for both attacks
+			//
+			for (int k2 = k+1; k2 < nmoves; k2++) {
+				mvp = moveList.get(k2);
+				if (mvp.move.getFrom() == from
+					|| mvp.move.getTo() == to)
+					mvp.value = 0;
 			}
+
 		}
 
-		if (turn == Settings.topColor)
-			return qs - minbest;
-		else
-			return qs - maxbest;
+		} // c
+
+		return qs;
 	}
 
 	// ebqs recaptures
@@ -841,7 +839,7 @@ public class AI implements Runnable
 			Piece fp = b.getPiece(tmpM.getFrom());
 			Piece tp = b.getPiece(tmpM.getTo());
 
-			b.move(tmpM, depth, false);
+			b.move(tmpM, depth, mvp.unknownScoutFarMove);
 
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
 			// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);

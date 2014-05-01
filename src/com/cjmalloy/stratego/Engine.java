@@ -60,6 +60,7 @@ public abstract class Engine
 			Piece fp = m.getPiece();
 			Piece tp = board.getPiece(m.getTo());
 			if (tp != null && fp.getColor() == Settings.topColor && !fp.isShown()) {
+				boolean shown = fp.isShown();
 				fp.setShown(true);
 				update();
 				try {
@@ -69,6 +70,7 @@ public abstract class Engine
 				{
 					e.printStackTrace();
 				}
+				fp.setShown(shown);
 			}
 
 			if (board.attack(m))

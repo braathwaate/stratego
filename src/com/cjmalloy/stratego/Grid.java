@@ -26,7 +26,6 @@ public class Grid
 	// so that illegal moves are easily discarded
 
 private Piece[] grid = new Piece[133];
-private static int validIndex[] = new int[92];
 private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
 
 protected static class UniqueID
@@ -59,9 +58,6 @@ protected static class UniqueID
 		for (int i = 121; i < 133; i++)
 			setPiece(i,water);
 		int j = 0;
-		for (int i = 11; i <=120; i++)
-			if (isValid(i))
-				validIndex[j++] = i;
 	}
 
 	public Grid(Grid g)
@@ -77,11 +73,6 @@ protected static class UniqueID
 	public Piece getPiece(int i) 
 	{
 		return grid[i];
-	}
-
-	static public int getValidIndex(int i) 
-	{
-		return validIndex[i];
 	}
 
 	static public int getX(int i)
@@ -124,42 +115,51 @@ protected static class UniqueID
 		}
 	}
 
-	public int closestPieceDir(int tpcolor, int to)
+	// search for closest relevant piece to Piece p
+	public int closestPieceDir(Piece p, boolean isBombed)
 	{
-		int tx = Grid.getX(to);
-		int ty = Grid.getY(to);
+		int tx = Grid.getX(p.getIndex());
+		int ty = Grid.getY(p.getIndex());
 	
 		int minsteps = 99;
 		int dir = 0;
 		for (int y = 0; y < 10; y++)
 		for (int x = 0; x < 10; x++) {
 			Piece fp = getPiece(x,y);
-			if (fp != null
-				&& fp.hasMoved()
-				&& fp.getColor() != tpcolor) {
-				int steps = Math.abs(ty - y) + Math.abs(tx - x);
-				if (steps < minsteps) {
-					minsteps = steps;
-					if (y > ty) {
-						if (x > tx)
-							dir = 12;
-						else if (x == tx)
-							dir = 11;
-						else
-							dir = 10;
-					} else if (y == ty) {
-						if (x > tx)
-							dir = 1;
-						else
-							dir = -1;
-					} else {
-						if (x > tx)
-							dir = -10;
-						else if (x == tx)
-							dir = -11;
-						else
-							dir = -12;
-					}
+			if (fp == null
+				|| !fp.hasMoved()
+				||  fp.getColor() == p.getColor())
+				continue;
+
+			// when looking for the closest relevant piece
+			// to a bomb, only look for eights and unknowns
+			if (isBombed
+				&& fp.getApparentRank() != Rank.UNKNOWN
+				&& fp.getApparentRank() != Rank.EIGHT)
+				continue;
+
+			int steps = Math.abs(ty - y) + Math.abs(tx - x);
+			if (steps < minsteps) {
+				minsteps = steps;
+				if (y > ty) {
+					if (x > tx)
+						dir = 12;
+					else if (x == tx)
+						dir = 11;
+					else
+						dir = 10;
+				} else if (y == ty) {
+					if (x > tx)
+						dir = 1;
+					else
+						dir = -1;
+				} else {
+					if (x > tx)
+						dir = -10;
+					else if (x == tx)
+						dir = -11;
+					else
+						dir = -12;
 				}
 			}
 		}
