@@ -53,6 +53,7 @@ public class AI implements Runnable
 	private int mmax;
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
+	private final int QSMAX = 3;	// maximum qs search depth
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
@@ -323,9 +324,10 @@ public class AI implements Runnable
 
 		} else {
 		boolean hasMove = false;
-		int np = b.npieces[turn];
-		for (int j=0;j<np;j++) {
-			if (getMoves(moveList, b, turn, b.pieces[turn][j]))
+		for (Piece np : b.pieces[turn]) {
+			if (np == null)	// end of list
+				break;
+			if (getMoves(moveList, b, turn, np))
 				hasMove = true;
 		}
 
@@ -603,15 +605,11 @@ public class AI implements Runnable
 	}
 			
 
-	// Evaluation-Based Quiescence Search (qs)
-	// Quiescence Search for Stratego
-	//	Maarten P.D. Schadd Mark H.M. Winands
-	// A faster and more effective method than
-	// deepening the tree to evaluate captures for qs.
+	// Quiescence Search (qs)
+	// Deepening the tree to evaluate captures for qs.
 	// 
-	// The reason why ebqs is more effective is that it sums
-	// all the pieces under attack.  This prevents a
-	// single level horizon effect where the ai places another
+	// This prevents a single level horizon effect
+	// where the ai places another
 	// (lesser) piece subject to attack when the loss of an existing piece
 	// is inevitable.
 	// 
@@ -619,7 +617,7 @@ public class AI implements Runnable
 	// piece on the board because it is likely the opponent will move
 	// the defender the very next move.  This prevents the ai
 	// from thinking it has won or lost at the end of
-	// a chase sequence, because otherwise the ebqs would give value when
+	// a chase sequence, because otherwise the qs would give value when
 	// (usually, unless cornered) the chase sequence can be extended
 	// indefinitely without any material loss or gain.
 	//
@@ -629,149 +627,123 @@ public class AI implements Runnable
 	// likely that the the opponent would just move the valuable piece
 	// away until the Two Squares or More Squares rule kicks in.
 	//
-	private int ebqs(TestingBoard b, int turn, int depth)
+	// qs can handle complicated evaluations:
+	// -- -- --
+	// -- R7 --
+	// R4 B3 R3
+	//
+	// Red is AI and has the move.
+	//
+	// 1. Fleeing is considered first.  Fleeing will return a negative
+	// board position (B3xR7) because the best that Red can do is to move
+	// R4.
+	//
+	// 2. The captures R4xB3, R3xB3 and R7xB3 are then evaluated,
+	// along with the Blue responses.  
+	//
+	// Because R3xB3 removes B3 from the board, the board position
+	// after blue response will be zero.
+	//
+	// Hence, the capture board position (0) is greater than the flee board
+	// position (-), so qs will return zero.
+	//
+	// I had tried to use Evaluation Based Quiescence Search
+	// as suggested by Schaad, but found that it often returned
+	// inaccurate results, even when recaptures were considered.
+	// Ebqs returns a negative qs for the example board position
+	// because it sums B3xR4 and B3xR7 and Red has no positive
+	// attacks.
+	//
+	// I tested the two versions of qs against each other in many
+	// games. Although ebqs was indeed faster and resulted in
+	// comparable (but lesser) strength for a 5-ply tree, its inaccuracy
+	// makes tuning the evaluation function difficult, because
+	// of widely varying results as the tree deepens.  I suspect
+	// that as the tree is deepened further by coding improvements,
+	// the difference in strength will become far more noticeable,
+	// because accuracy is necessary for optimal alpha-beta pruning.
+	
+	private int qs(TestingBoard b, int turn, int depth, int n, boolean flee)
 	{
-		int qs = b.getValue();
-		b.setValue(0);
+		int valueB = b.getValue();
+		if (n < 1)
+			return valueB;
 
-		// c is the color of the defender
-		for (int c = Board.RED; c <= Board.BLUE; c++) {
-		ArrayList<MoveValuePair> moveList = new ArrayList<MoveValuePair>();
-		int np = b.npieces[c];
+		int best = valueB;
 
-		// search for all the pieces on the board under attack
-		for (int j=0;j<np;j++) {
-			Piece tp = b.pieces[c][j];
-			int i = tp.getIndex();
-			if (tp != b.getPiece(i))
+		boolean bestFlee = false;
+		int nextBest = best;
+
+		if (!flee) {
+			// try fleeing
+			int vm = qs(b, 1-turn, ++depth, n-1, true);
+
+			// "best" is board value after
+			// opponent's best attack if player can flee.
+			// So usually this is valueB, unless the
+			// opponent has two good attacks or the player
+			// piece under attack is cornered.
+			best = vm;
+		}
+
+		for (Piece fp : b.pieces[turn]) {
+			if (fp == null)	// end of list
+				break;
+			int i = fp.getIndex();
+			if (fp != b.getPiece(i))
+				continue;
+
+			// note: we need to make this check each time
+			// because the index and perhaps the rank
+			// could change.
+			Rank fprank = fp.getRank();
+			if (fprank == Rank.BOMB
+				|| fprank == Rank.FLAG)
 				continue;
 
 			for (int d : dir ) {
-				int f = i + d;	
-				if (!b.isValid(f))
+				boolean canFlee = false;
+				int t = i + d;	
+				if (!b.isValid(t))
 					continue;
-				Piece fp = b.getPiece(f); // attacker
-				if (fp == null || c == fp.getColor())
+				Piece tp = b.getPiece(t); // defender
+				if (tp == null || turn == tp.getColor())
 					continue;
-				// note: we need to make this check each time
-				// because the index and perhaps the rank
-				// could change.
-				Rank fprank = fp.getRank();
-				if (fprank == Rank.BOMB
-					|| fprank == Rank.FLAG)
-					continue;
-				BMove tmpM = new BMove(f, i);
+
+				if (flee && isMovable(b, t))
+					canFlee = true;
+
+				BMove tmpM = new BMove(i, t);
 				b.move(tmpM, depth, false);
-				int vm = b.getValue();
 
-				if (c == Settings.bottomColor) {
-					if (vm > 0) // worthwhile attack
-						vm = recapture(b, i, depth, true);
-				} else {
-					if (vm < 0) // worthwhile attack
-						vm = recapture(b, i, depth, false);
-					vm = -vm;
+				int vm = qs(b, 1-turn, ++depth, n-1, false);
+
+				b.undo(valueB);
+
+				// Save worthwhile attack (vm > best)
+				// (if vm < best, the player will play
+				// some other move)
+				if (turn == Settings.topColor) {
+				if (vm > best) {
+					nextBest = best;
+					best = vm;
+					bestFlee = canFlee;
 				}
-				b.undo(0);
+				} else {
+				if (vm < best) {
+					nextBest = best;
+					best = vm;
+					bestFlee = canFlee;
+				}
+				}
+			} // dir
+		} // pieces
 
-				// save worthwhile attack
-				if (vm > 0)
-					moveList.add(new MoveValuePair(tmpM, vm, false));
-			} // d
-		} // j
+		if (bestFlee)
+			best = nextBest;
 
-		// sort the attacks by highest value
-		// sum only the best attacks
-		Collections.sort(moveList);
-		boolean best = false;
-		int nmoves = moveList.size();
-		for (int k = 0; k < nmoves; k++) {
-			MoveValuePair mvp = moveList.get(k);
-			int vm = mvp.value;
-			if (vm == 0)
-				continue;
-			int from = mvp.move.getFrom();
-			int to = mvp.move.getTo();
-
-			// No credit for best move if not the player's turn
-			// because opponent can move the piece
-			// under attack.
-			//
-			// TBD: this should be an option on the
-			// opponents move list and be sorted accordingly
-			//
-			if (turn == c && !best && isMovable(b,to)) {
-				best = true;
-				continue;
-			}
-
-			// sum the attacks
-			if (c == Settings.bottomColor)
-				qs += vm;
-			else
-				qs -= vm;
-
-			// Clear any lesser attacks
-			// so if one piece can attack two pieces
-			// (or two pieces attack a single piece)
-			// no credit is given for both attacks
-			//
-			for (int k2 = k+1; k2 < nmoves; k2++) {
-				mvp = moveList.get(k2);
-				if (mvp.move.getFrom() == from
-					|| mvp.move.getTo() == to)
-					mvp.value = 0;
-			}
-
-		}
-
-		} // c
-
-		return qs;
+		return best;
 	}
-
-	// ebqs recaptures
-	// this gives a better ebqs when a piece can be won
-	// but the attacking piece can be recaptured by a lower
-	// piece. e.g.:
-	// R2 B3
-	//    B1
-	// Red 2 can take Blue 3, but Blue 1 will take Red 2.
-	//
-	int recapture(TestingBoard b, int t, int depth, boolean ismax)
-	{
-		int qs = b.getValue();
-		b.setValue(0);
-		Piece tp = b.getPiece(t);
-		if (tp == null)
-			return qs;
-		int min = 0;
-		int max = 0;
-		for (int d : dir ) {
-			int f = t + d;
-			if (!b.isValid(f))
-				continue;
-			Piece fp = b.getPiece(f);
-			if (fp == null
-				|| tp.getColor() == fp.getColor()
-				|| fp.getRank() == Rank.BOMB
-				|| fp.getRank() == Rank.FLAG)
-				continue;
-			b.move(new BMove(f, t), depth, false);
-			int vm = b.getValue();
-			b.undo(0);
-
-			if (vm > max)
-				max = vm;
-			if (vm < min)
-				min = vm;
-		}
-		if (ismax)
-			return qs + min;
-		else
-			return qs + max;
-	}
-
 
 	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece)
 	{
@@ -779,7 +751,7 @@ public class AI implements Runnable
 		int valueB = b.getValue();
 		int v;
 		if (n < 1) {
-			return ebqs(b, turn, depth);
+			return qs(b, turn, depth, QSMAX, false);
 		}
 
 		if (turn == Settings.topColor)
@@ -797,7 +769,7 @@ public class AI implements Runnable
 				}
 			}
 			if (chaseOver)
-				return ebqs(b, turn, depth);
+				return qs(b, turn, depth, QSMAX, false);
 		}
 
 		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
@@ -807,7 +779,7 @@ public class AI implements Runnable
 		// the board position
 		// if (moveList.size() == 0)
 		// 	if (hasMove(b, turn))
-		// 		return ebqs(b, turn, depth);
+		// 		return qs(b, turn, depth);
 		// 	else
 		// 		return v;
 		
@@ -835,9 +807,6 @@ public class AI implements Runnable
 			// saving a heap of time.
 			if (b.isRepeatedMove(tmpM))
 				continue;
-
-			Piece fp = b.getPiece(tmpM.getFrom());
-			Piece tp = b.getPiece(tmpM.getTo());
 
 			b.move(tmpM, depth, mvp.unknownScoutFarMove);
 
@@ -900,6 +869,9 @@ public class AI implements Runnable
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
+	+ "[" + b.getPiece(move.getFrom()).getActingRankChase()
+	+ "," + b.getPiece(move.getFrom()).getActingRankFlee() + "]"
+	+ X
 	+ "[" + b.getPiece(move.getTo()).getActingRankChase()
 	+ "," + b.getPiece(move.getTo()).getActingRankFlee() + "]"
 	+ hasMoved + isKnown + " " + tohasMoved + toisKnown

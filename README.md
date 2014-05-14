@@ -103,5 +103,3 @@ References
 
 [Invincible. A Stratego Bot, V. de Boer](http://www.kbs.twi.tudelft.nl/Publications/MSc/2008-deBoer-Msc.html).
 
-[Quiescence Search for Stratego. M. P.D. Schadd, M. H.M. Winands, 2009](http://www.personeel.unimaas.nl/Maarten-Schadd/Papers/2009StrategoBNAIC1.pdf).
-
