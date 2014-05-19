@@ -422,9 +422,49 @@ public class Board
 		return undoList.get(size-i);
 	}
 
-	// Return true if the chase piece could possibly be
-	// protected.
-	public boolean isProtected(Piece fp, Piece tp, int i)
+	// Return true if the chase piece is obviously protected.
+	//
+	// Examples:
+	// If unknown Blue moves towards Red 3 and Blue 8,
+	// the piece is not protected.
+	// R3 -- B?
+	// -- B8 --
+	//
+	// If unknown Blue moves towards unknown Red and Blue 8,
+	// the piece is not protected.
+	// R? -- B?
+	// -- B8 --
+	//
+	// If unknown Blue moves towards Red 3 and Blue 2,
+	// the piece is protected.
+	// R3 -- B?
+	// -- B2 --
+	//
+	// If unknown Blue moves towards Red 3 and unknown Blue,
+	// the piece is unprotected.
+	// R3 -- B?
+	// -- B? --
+	//
+	public boolean isProtectedChase(Piece fp, Piece tp, int i)
+	{
+		for (int d : dir) {
+			int j = i + d;
+			if (!isValid(j))
+				continue;
+			Piece p = getPiece(j);
+			if (p != null
+				&& p != fp
+				&& p.getColor() == fp.getColor()
+				&& tp.isKnown()
+				&& p.getApparentRank().toInt() < tp.getApparentRank().toInt()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// return if fleeing piece could be protected
+	public boolean isProtectedFlee(Piece fp, Piece tp, int i)
 	{
 		for (int d : dir) {
 			int j = i + d;
@@ -435,7 +475,7 @@ public class Board
 				&& p != fp
 				&& p.getColor() == fp.getColor()
 				&& (p.getApparentRank() == Rank.UNKNOWN
-					|| p.getApparentRank().toInt() <= tp.getApparentRank().toInt())) {
+					|| p.getApparentRank().toInt() < tp.getApparentRank().toInt())) {
 				return true;
 			}
 		}
@@ -467,7 +507,6 @@ public class Board
 		// the more likely that the piece rank
 		// really is equal to or greater than the flee acting rank,
 		// because low ranks are irresistable captures.
-		//
 		// 
 
 		// movement towards
@@ -483,10 +522,11 @@ public class Board
 				Rank rank = chasedPiece.getApparentRank();
 				if (rank == Rank.BOMB)
 					continue;
+
 				// if the chase piece is protected,
-				// it is even less likely that the piece
-				// is a lower ranked piece.
-				if (isProtected(fp, chasedPiece, to))
+				// it is less likely (although possible)
+				// that the piece is a lower ranked piece.
+				if (isProtectedChase(fp, chasedPiece, to))
 					continue;
 
 				Rank arank = fp.getActingRankChase();
@@ -517,7 +557,7 @@ public class Board
 				// a low ranked piece that wants to attack
 				// the chase piece, but does not because
 				// of the protection.
-				if (isProtected(chasePiece, fp, chaser))
+				if (isProtectedFlee(chasePiece, fp, chaser))
 					continue;
 
 				Rank arank = fp.getActingRankFlee();
@@ -547,7 +587,7 @@ public class Board
 				Piece op = getPiece(j);
 				if (op != null
 					&& op.getColor() != fp.getColor()
-					&& !isProtected(op, fleeTp, j)
+					&& !isProtectedFlee(op, fleeTp, j)
 					&& tp == null) {
 					Rank rank = op.getApparentRank();
 					if (rank == Rank.BOMB)

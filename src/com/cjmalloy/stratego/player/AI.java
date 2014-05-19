@@ -869,10 +869,12 @@ public class AI implements Runnable
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
-	+ "[" + b.getPiece(move.getFrom()).getActingRankChase()
+	+ "[" + b.getPiece(move.getFrom()).getSuspectedRank()
+	+ "," + b.getPiece(move.getFrom()).getActingRankChase()
 	+ "," + b.getPiece(move.getFrom()).getActingRankFlee() + "]"
 	+ X
-	+ "[" + b.getPiece(move.getTo()).getActingRankChase()
+	+ "[" + b.getPiece(move.getTo()).getSuspectedRank()
+	+ "," + b.getPiece(move.getTo()).getActingRankChase()
 	+ "," + b.getPiece(move.getTo()).getActingRankFlee() + "]"
 	+ hasMoved + isKnown + " " + tohasMoved + toisKnown
 	+ " " + b.getPiece(move.getTo()).aiValue() + " " + valueB + " " + value);
