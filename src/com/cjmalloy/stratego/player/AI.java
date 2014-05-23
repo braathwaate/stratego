@@ -369,23 +369,22 @@ public class AI implements Runnable
 		// Two Squares rule for each move, so we remove
 		// the move now.
 		for (int k = moveList.size()-1; k >= 0; k--) {
-			if (b.isTwoSquares(moveList.get(k).move))
+
+		// Two Squares Rule
+			if (b.isTwoSquares(moveList.get(k).move)) {
 				moveList.remove(k);
-			else {
-				MoveValuePair mvp = moveList.get(k);
-				tmpM = mvp.move;
-				if (b.isRepeatedMove(tmpM))
-					continue;
-				b.move(tmpM, 0, mvp.unknownScoutFarMove);
-				// More Squares Rule
-				if (b.isMoreSquares())
-				// To prevent looping, the AI always
-				// avoids repeated positions.
-				// This is stricter than the More Squares Rule
-				// if (b.dejavu())
-					moveList.remove(k);
-				b.undo(0);
+				continue;
 			}
+
+		// More Squares Rule
+			MoveValuePair mvp = moveList.get(k);
+			tmpM = mvp.move;
+			b.move(tmpM, 0, mvp.unknownScoutFarMove);
+
+			if (b.isMoreSquares())
+				moveList.remove(k);
+
+			b.undo(0);
 		}
 
 		long t = System.currentTimeMillis( );
@@ -676,7 +675,7 @@ public class AI implements Runnable
 
 		if (!flee) {
 			// try fleeing
-			int vm = qs(b, 1-turn, ++depth, n-1, true);
+			int vm = qs(b, 1-turn, depth+1, n-1, true);
 
 			// "best" is board value after
 			// opponent's best attack if player can flee.
@@ -716,7 +715,7 @@ public class AI implements Runnable
 				BMove tmpM = new BMove(i, t);
 				b.move(tmpM, depth, false);
 
-				int vm = qs(b, 1-turn, ++depth, n-1, false);
+				int vm = qs(b, 1-turn, depth+1, n-1, false);
 
 				b.undo(valueB);
 
@@ -761,15 +760,17 @@ public class AI implements Runnable
 
 		if (chasePiece != null && turn == Settings.bottomColor) {
 			Move move = b.getLastMove();
-			boolean chaseOver = true;
-			for (int d : dir) {
-				if (chasePiece.getIndex() + d == move.getFrom()) {
-					chaseOver = false;
-					break;
+			if (move != null) {
+				boolean chaseOver = true;
+				for (int d : dir) {
+					if (chasePiece.getIndex() + d == move.getFrom()) {
+						chaseOver = false;
+						break;
+					}
 				}
+				if (chaseOver)
+					return qs(b, turn, depth, QSMAX, false);
 			}
-			if (chaseOver)
-				return qs(b, turn, depth, QSMAX, false);
 		}
 
 		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
@@ -793,7 +794,9 @@ public class AI implements Runnable
 			int vm = 0;
 			BMove tmpM = mvp.move;
 			if (tmpM == null) {
+			b.pushNullMove();	// because of isRepeatedMove()
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
+			b.popMove();
 			for (int ii=8; ii >= n; ii--)
 				log.print("  ");
 			log.println(n + ": (null move) " + valueB + " " + vm);
@@ -869,11 +872,11 @@ public class AI implements Runnable
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
-	+ "[" + b.getPiece(move.getFrom()).getSuspectedRank()
+	+ "[" + b.getPiece(move.getFrom()).isSuspectedRank()
 	+ "," + b.getPiece(move.getFrom()).getActingRankChase()
 	+ "," + b.getPiece(move.getFrom()).getActingRankFlee() + "]"
 	+ X
-	+ "[" + b.getPiece(move.getTo()).getSuspectedRank()
+	+ "[" + b.getPiece(move.getTo()).isSuspectedRank()
 	+ "," + b.getPiece(move.getTo()).getActingRankChase()
 	+ "," + b.getPiece(move.getTo()).getActingRankFlee() + "]"
 	+ hasMoved + isKnown + " " + tohasMoved + toisKnown

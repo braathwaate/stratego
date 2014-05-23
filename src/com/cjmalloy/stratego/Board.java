@@ -732,6 +732,8 @@ public class Board
 		if (Settings.twoSquares
 			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
 			BMove prev = undoList.get(size-4);
+			if (prev == null)
+				return false;
 			return m.equals(prev);
 		} else
 			// let opponent get away with it
