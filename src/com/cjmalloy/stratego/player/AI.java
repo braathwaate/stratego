@@ -54,6 +54,8 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
 	private final int QSMAX = 3;	// maximum qs search depth
+	MoveValuePair bestMove = null;
+	long stopTime = 0;
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
@@ -203,23 +205,29 @@ public class AI implements Runnable
 
 	public void run() 
 	{
-		BMove bestMove = null;
 		aiLock.lock();
                 try
                 {
-	
-			bestMove = getBestMove(new TestingBoard(board));
+			getBestMove(new TestingBoard(board));
+		} catch (InterruptedException e) {
+                }
+		finally
+		{
 			System.runFinalization();
 			System.gc(); 
 
-			// return the actual board move
 			if (bestMove == null)
 				engine.aiReturnMove(null);
-			else
-				engine.aiReturnMove(new Move(board.getPiece(bestMove.getFrom()), bestMove));
-		}
-		finally
-		{
+
+			assert bestMove.move != null : "bestMove.move is null?";
+			assert board.getPiece(bestMove.move.getFrom()) != null : "bestMove at " + bestMove.move.getFrom() + " from piece is null?";
+
+			logMove(0, board, bestMove.move, 0, bestMove.value);
+			log.println("----");
+			log.flush();
+
+			// return the actual board move
+			engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			aiLock.unlock();
 		}
 	}
@@ -340,10 +348,9 @@ public class AI implements Runnable
 		return moveList;
 	}
 
-	private BMove getBestMove(TestingBoard b)
+	private void getBestMove(TestingBoard b) throws InterruptedException
 	{
 		BMove tmpM = null;
-		MoveValuePair bestmove = null;
 		final int CHASE_RANK_NIL = 99;
 
 		// chase variables
@@ -387,11 +394,17 @@ public class AI implements Runnable
 			b.undo(0);
 		}
 
-		long t = System.currentTimeMillis( );
-		boolean timeout = false;
- 		long dur = Settings.aiLevel * Settings.aiLevel * 100;
+		// Settings tick marks:
+		// 1: .1 sec
+		// 2: .4 sec
+		// 3: .9 sec
+		// 4: 1.6 sec
+		// 5: 2.5 sec
+		// etc, etc
+		stopTime = System.currentTimeMillis( )
+ 			+ Settings.aiLevel * Settings.aiLevel * 100;
 
-		for (int n = 1; !timeout && n < 20; n++) {
+		for (int n = 1; n < 20; n++) {
 
 		int alpha = -9999;
 		int beta = 9999;
@@ -449,27 +462,27 @@ public class AI implements Runnable
 
 			// Begin chase after 2 iterations of broad search
 			&& n >= 3
-			&& bestmove != null
+			&& bestMove != null
 
 			// Chase is skipped if best move from broad search
 			// is to attack a piece (perhaps the chaser)
-			&& b.getPiece(bestmove.move.getTo()) == null
+			&& b.getPiece(bestMove.move.getTo()) == null
 
 			// Limit deep chase to superior pieces.
 			// Using deep chase can be risky if the
 			// objective of the chaser is not be the chased
 			// piece, but some other piece, like a flag or
 			// flag bomb.
-			&& b.getPiece(bestmove.move.getFrom()).getRank().toInt() <= 4 ) {
+			&& b.getPiece(bestMove.move.getFrom()).getRank().toInt() <= 4 ) {
 
 			// check for possible chase
 			for (int d : dir) {
 				int from = lastMoveTo + d;
-				if (from != bestmove.move.getFrom())
+				if (from != bestMove.move.getFrom())
 					continue;
 
 				// chase confirmed:
-				// bestmove is to move chased piece 
+				// bestMove is to move chased piece 
 				int count = 0;
 				for (int k = moveList.size()-1; k >= 0; k--)
 				if (from == moveList.get(k).move.getFrom()) {
@@ -528,15 +541,9 @@ public class AI implements Runnable
 		}
 
 		if (moveList.size() == 0)
-			return null;	// ai trapped
+			return;		// ai trapped
 
 		for (MoveValuePair mvp : moveList) {
-			if (bestmove != null
-				&& System.currentTimeMillis( ) > t + dur) {
-				timeout = true;
-				break;
-			}
-
 			tmpM = mvp.move;
 
 			int valueB = b.getValue();
@@ -560,21 +567,13 @@ public class AI implements Runnable
 
 		}
 
-		if (!timeout) {
-			log.println("-+-");
-			Collections.sort(moveList);
-			bestmove = moveList.get(0);
-			hh[bestmove.move.getFrom()][bestmove.move.getTo()]+=n;
-			log.println("-+++-");
-		}
+		log.println("-+-");
+		Collections.sort(moveList);
+		bestMove = moveList.get(0);
+		hh[bestMove.move.getFrom()][bestMove.move.getTo()]+=n;
+		log.println("-+++-");
 
 		} // iterative deepening
-
-		logMove(0, b, bestmove.move, 0, bestmove.value);
-		log.println("----");
-		log.flush();
-
-		return bestmove.move;
 	}
 
 
@@ -744,14 +743,18 @@ public class AI implements Runnable
 		return best;
 	}
 
-	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece)
+	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece) throws InterruptedException
 	{
-		BMove bestMove = null;
+		BMove bestmove = null;
 		int valueB = b.getValue();
 		int v;
-		if (n < 1) {
+		if (n < 1)
 			return qs(b, turn, depth, QSMAX, false);
-		}
+
+		if (bestMove != null
+			&& System.currentTimeMillis( ) > stopTime)
+			throw new InterruptedException();
+
 
 		if (turn == Settings.topColor)
 			v = alpha;
@@ -826,20 +829,20 @@ public class AI implements Runnable
 			if (turn == Settings.topColor) {
 				if (vm > alpha) {
 					v = alpha = vm;
-					bestMove = tmpM;
+					bestmove = tmpM;
 				}
 			} else {
 				if (vm < beta) {
 					v = beta = vm;
-					bestMove = tmpM;
+					bestmove = tmpM;
 				}
 			}
 
 			if (beta <= alpha)
 				break;
 		} // moveList
-		if (bestMove != null) {
-			hh[bestMove.getFrom()][bestMove.getTo()]+=n;
+		if (bestmove != null) {
+			hh[bestmove.getFrom()][bestmove.getTo()]+=n;
 		}
 		return v;
 	}

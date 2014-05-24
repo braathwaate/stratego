@@ -19,6 +19,7 @@ do
 	r=$color$outcome
 	if [ "$r" != "REDVICTORY" ] \
 		&& [ "$r" != "BLUESURRENDER" ] \
+		&& [ "$r" != "BLUEILLEGAL" ] \
 		&& [ "$outcome" != "DRAW_DEFAULT" ]
 	then
 		exit
