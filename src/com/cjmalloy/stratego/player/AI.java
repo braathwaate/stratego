@@ -791,11 +791,33 @@ public class AI implements Runnable
 			if (mvp.move != null)
 				mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
 		}
-		Collections.sort(moveList);
 
-		for (MoveValuePair mvp : moveList) {
+		for (int i = 0; i <  moveList.size(); i++) {
+
+		// Sort the move list.
+		// Because alpha-beta can prunes off most of the list,
+		// most game playing programs use a selection sort.
+		//
+		// concept:
+		// Collections.sort(moveList);
+		// for (MoveValuePair mvp : moveList) {
+		//
+		// implementation: selection sort
+
+			MoveValuePair mvp = moveList.get(i);
+			MoveValuePair max = mvp;
+			int tj = i;
+			for (int j = i + 1; j < moveList.size(); j++) {
+				MoveValuePair tmvp = moveList.get(j);
+				if (tmvp.value > max.value) {
+					max = tmvp;
+					tj = j;
+				}
+			}
+			moveList.set(tj, mvp);
+			BMove tmpM = max.move;
+
 			int vm = 0;
-			BMove tmpM = mvp.move;
 			if (tmpM == null) {
 			b.pushNullMove();	// because of isRepeatedMove()
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
