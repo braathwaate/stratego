@@ -1,8 +1,8 @@
 Download
 --------
 
-[Stratego player v0.6.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.6.0/stratego_v0.6.0.jar
+[Stratego player v0.7.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.7.0/stratego_v0.7.0.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
