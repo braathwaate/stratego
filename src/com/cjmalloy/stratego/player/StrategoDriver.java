@@ -16,6 +16,7 @@
 */
 
 package com.cjmalloy.stratego.player;
+import com.cjmalloy.stratego.Settings;
 
 
 
@@ -24,9 +25,16 @@ public class StrategoDriver
 	//main entry point
 	public static void main(String[] args)
 	{
+		boolean graphics = false;
 		for(String arg:args)
-		    if (arg.equals("-t")) {
-			new AITest();
+		    if (arg.equals("-g"))
+			graphics = true;
+		    else if (arg.equals("-t")) {
+			new AITest(graphics);
+			return;
+		    } else if (arg.equals("-t2")) {
+			Settings.twoSquares = true;
+			new AITest(graphics);
 			return;
 		    }
 		

@@ -69,8 +69,8 @@ public class Board
 	
 	protected Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
-	protected static ArrayList<Piece> red = new ArrayList<Piece>();
-	protected static ArrayList<Piece> blue = new ArrayList<Piece>();
+	protected ArrayList<Piece> red = new ArrayList<Piece>();
+	protected ArrayList<Piece> blue = new ArrayList<Piece>();
 	// setup contains the original locations of Pieces
 	// as they are discovered.
 	// this is used to guess flags and other bombs
@@ -81,6 +81,16 @@ public class Board
 	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
 	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
 	protected long hash = 0;
+
+	static {
+		Random rnd = new Random();
+		for ( int k = 0; k < 2; k++)
+		for ( int m = 0; m < 2; m++)
+		for ( int c = RED; c <= BLUE; c++)
+		for ( int r = 0; r < 15; r++)
+		for ( int i = 12; i <= 120; i++)
+			boardHash[k][m][c][r][i] = rnd.nextLong();
+	}
 	
 	public Board()
 	{
@@ -132,15 +142,6 @@ public class Board
 		tray.addAll(blue);
 
 		Collections.sort(tray);
-
-		Random rnd = new Random();
-		for ( int k = 0; k < 2; k++)
-		for ( int m = 0; m < 2; m++)
-		for ( int c = RED; c <= BLUE; c++)
-		for ( int r = 0; r < 15; r++)
-		for ( int i = 12; i <= 120; i++)
-			boardHash[k][m][c][r][i] = rnd.nextLong();
-						
 	}
 
 	public Board(Board b)

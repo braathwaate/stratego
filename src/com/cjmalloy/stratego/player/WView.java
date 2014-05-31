@@ -368,6 +368,20 @@ public class WView extends View implements MoveListener
 		}
 	}
 
+	public void showBoard(Board b)
+	{
+		if (splashed)
+		{
+			splashed = false;
+			resize();
+			getJContentPane().setVisible(true);
+		}
+		warn = true;
+		engine = new AIEngine(this, b);
+		Settings.bShowAll=true;
+		update();
+	}
+
 	private void play() 
 	{
 		if (splashed)
@@ -398,6 +412,7 @@ public class WView extends View implements MoveListener
 			else
 			{
 				warn = true;
+				engine.play();
 				engine.play();
 			}
 		}

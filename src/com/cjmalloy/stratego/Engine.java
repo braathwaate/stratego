@@ -103,7 +103,6 @@ public abstract class Engine
 			board.showAll();
 	}
 
-
 	protected boolean requestMove(Move m, boolean noCheckOppPieces)
 	{
 		assert m != null : "m is null?";

@@ -200,7 +200,7 @@ public class AI implements Runnable
 			engine.aiReturnPlace(p, new Spot(i, j));
 		}
 	
-		engine.play();
+		// engine.play();
 	}
 
 	public void run() 

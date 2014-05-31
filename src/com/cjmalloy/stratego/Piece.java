@@ -212,7 +212,10 @@ public class Piece implements Comparable<Piece>
 
 	public int compareTo(Piece p)
 	{
-		return uniqueID - p.uniqueID;
+		// uniqueID sorting works if all pieces are known
+		// but not if opponent pieces are unknown
+		// return uniqueID - p.uniqueID;
+		return rank.toInt() - p.rank.toInt();
 	}
 	
 	public boolean equals(Object p)

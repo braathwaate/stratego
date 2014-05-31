@@ -41,6 +41,7 @@ public class AITest extends View
 	private Scanner scan;
 	private Semaphore aimove = new Semaphore(0);
 	private boolean active = false;
+	private WView wview = null;
 
         private String colour; //Colour of the AI
         private String opponentName; //Name of the AI's opponent
@@ -68,15 +69,23 @@ public class AITest extends View
 	};
 
 
-	public AITest() 
+	public AITest(boolean graphics) 
 	{
+		engine = new AIEngine(this);
+		if (graphics)
+			wview = new WView();
                 scan = new Scanner(System.in);
 
 	try
 	{
 	    setup();
-	    if (Settings.topColor == Board.RED)
+	    if (Settings.topColor == Board.RED) {
+		// flush START and board
+		for (int i = 0; i < 11; i++)
+			scan.nextLine();
+		engine.play();
 		aimove.acquire();
+	    }
 
             while (true) {
 		MoveCycle();
@@ -100,6 +109,8 @@ public class AITest extends View
 		for (int i = 0; i < 10; i++)
 			scan.nextLine();
 		engine.requestUserMove(move);	// make the move on board
+		if (wview != null)
+			wview.update();
         }
 
 	/**
@@ -129,18 +140,10 @@ public class AITest extends View
 			Settings.bottomColor = Board.RED;
 		}
 		active = true;
-		if (engine == null)
-			engine = new AIEngine(this);
 		engine.newGame();
 
-		engine.play();
+		engine.play();	 // this runs ai setup
 
-		// note: we really should print the board before
-		// starting the engine playing, but we need to
-		// get the ai.setup to print the board.  so it is possible
-		// that the ai will print a move before we print the board.
-		// The "engine.play()" in ai.getBoardSetup needs to be
-		// removed and we should call requestCompMove().
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
@@ -148,6 +151,8 @@ public class AITest extends View
 			p.setRank(Rank.UNKNOWN);
 			p.setShown(false);
 		}
+		if (wview != null)
+			wview.showBoard(engine.getBoard());
 		printBoard();
 	}
 
@@ -227,19 +232,6 @@ public class AITest extends View
 		if (result.elementAt(0).compareTo("NO_MOVE") == 0)
 			return null;
 
-		// we don't wait for START
-		// so move is already in progress.
-		// so we have to flush the START and the opening
-		// board position.
-		if (result.elementAt(0).compareTo("START") == 0) {
-			// board
-			for (int i = 0; i < 10; i++)
-				scan.nextLine();
-			input = scan.nextLine();	// CONFIRMATION
-			result = readTokens(input);
-		    }
-
-
 		if (result.size() < 4)
 		{
 			throw new Exception("BasicAI.InterpretResult - Expect at least 4 tokens, got " + result.size() + ":" + input);
@@ -254,12 +246,6 @@ public class AITest extends View
 				direction = "DOWN";
 			else if (direction.compareTo("DOWN") == 0)
 				direction = "UP";
-/*
-			else if (direction.compareTo("RIGHT") == 0)
-				direction = "LEFT";
-			else if (direction.compareTo("LEFT") == 0)
-				direction = "RIGHT";
-*/
 		}
 
 		int multiplier = 1;
@@ -289,13 +275,17 @@ public class AITest extends View
 			for ( i = 0; i < rank.length; i++)
 				if (rankchar[i] == attackerrank)
 					break;
-			attacker.setRank(rank[i]);
+			assert attacker.getRank() == Rank.UNKNOWN || attacker.getRank() == rank[i] : "Rank " + attacker.getRank() + " != " + rank[i] + " " + x + " " + y + " " + attackerrank;
+			if (attacker.getRank() == Rank.UNKNOWN)
+				attacker.setRank(rank[i]);
 
 			char defenderrank = result.elementAt(outIndex+2).charAt(0); //ranks are 1 char long
 			for ( i = 0; i < rank.length; i++)
 				if (rankchar[i] == defenderrank)
 					break;
-			defender.setRank(rank[i]);
+			assert defender.getRank() == Rank.UNKNOWN || defender.getRank() == rank[i] : "Rank " + defender.getRank() + " != " + rank[i] + " " + x + " " + y + " " + defenderrank;
+			if (defender.getRank() == Rank.UNKNOWN)
+				defender.setRank(rank[i]);
 			
 		}
 
@@ -343,6 +333,8 @@ public class AITest extends View
 
 	public synchronized void moveComplete(Move m)
 	{
+		if (wview != null)
+			wview.update();
 		aimove.release();
 	}
 

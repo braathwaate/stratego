@@ -44,6 +44,17 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		ai = new AI(board, this);
 	}
 	
+	public AIEngine(View v, Board b)
+	{
+		view = v;
+		board = b;
+	}
+
+	public Board getBoard()
+	{
+		return board;
+	}
+
 	public void play()
 	{
                 if (status == Status.PLAYING) {

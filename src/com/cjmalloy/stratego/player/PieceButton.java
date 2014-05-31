@@ -36,6 +36,7 @@ import javax.swing.ImageIcon;
 import javax.swing.JButton;
 
 import com.cjmalloy.stratego.Board;
+import com.cjmalloy.stratego.Rank;
 import com.cjmalloy.stratego.Move;
 import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Settings;
@@ -103,9 +104,10 @@ public class PieceButton extends JButton implements MouseListener,
 				return;
 			}
 			
-			if (piece.isShown()==false && 
+			if ((piece.isShown()==false && 
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
+				|| piece.getRank() == Rank.UNKNOWN)
 			{
 				if (piece.getColor()%2 == 0) {
 					if (piece.hasMoved())
@@ -123,14 +125,14 @@ public class PieceButton extends JButton implements MouseListener,
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isKnown() && !Settings.bShowAll)
+					if (piece.isKnown())
 						setIcon(skin.redASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.redSkins[piece.getRank().ordinal()]);
 				}
 				else
 				{
-					if (piece.isKnown() && !Settings.bShowAll)
+					if (piece.isKnown())
 						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
@@ -147,9 +149,10 @@ public class PieceButton extends JButton implements MouseListener,
 			}
 
 			Image pc;
-			if (piece.isShown()==false && 
+			if ((piece.isShown()==false && 
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
+				|| piece.getRank() == Rank.UNKNOWN)
 			{
 				if (piece.getColor()%2 == 0) {
 					if (piece.hasMoved())
@@ -167,18 +170,18 @@ public class PieceButton extends JButton implements MouseListener,
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isKnown() && !Settings.bShowAll)
+					if (piece.isKnown())
 						pc = skin.redASkins[piece.getRank().ordinal()].getImage();
-					else if (piece.hasMoved() && !Settings.bShowAll)
+					else if (piece.hasMoved())
 						pc = skin.redAASkins[piece.getRank().ordinal()].getImage();
 					else
 						pc = skin.redSkins[piece.getRank().ordinal()].getImage();
 				}
 				else
 				{
-					if (piece.isKnown() && !Settings.bShowAll)
+					if (piece.isKnown())
 						pc = skin.blueASkins[piece.getRank().ordinal()].getImage();
-					else if (piece.hasMoved() && !Settings.bShowAll)
+					else if (piece.hasMoved())
 						pc = skin.blueAASkins[piece.getRank().ordinal()].getImage();
 					else
 
@@ -215,7 +218,7 @@ public class PieceButton extends JButton implements MouseListener,
 			resized = false;
 			
 			if (piece != null &&
-					skin.scaledSkins[piece.getRank().ordinal()] != null)
+					(piece.getRank() == Rank.UNKNOWN || skin.scaledSkins[piece.getRank().ordinal()] != null))
 			{
 				refreshIcon();
 			}
