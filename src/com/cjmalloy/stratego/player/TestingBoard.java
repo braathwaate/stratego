@@ -64,6 +64,7 @@ public class TestingBoard extends Board
 	protected int value;	// value of board
 	protected Piece[] flag = new Piece[2];	// flags
 	protected int[] unmovedValue = new int[121];	// unmoved value
+	protected int[][] valueStealth = new int[2][15];
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -175,6 +176,7 @@ public class TestingBoard extends Board
 				trayRank[c][j] = 0;
 				neededRank[c][j] = false;
 				values[c][j] = startValues[j];
+				valueStealth[c][j] = 0;
 			}
 		}
 
@@ -339,6 +341,7 @@ public class TestingBoard extends Board
 		possibleFlag();
 		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
+		genValueStealth();
 
 		for (int i=12;i<=120;i++) {
 			if (!isValid(i))
@@ -466,6 +469,70 @@ public class TestingBoard extends Board
 
 		pieces[0][npieces[0]++]=null;	 // null terminate list
 		pieces[1][npieces[1]++]=null;	 // null terminate list
+	}
+
+	// Stealth value for pieces (1-5) is slightly less than
+	// the average value of the opponent higher ranked pieces
+	// still on the board plus the players known higher ranked
+	// (but non-invincible) pieces.
+	//
+	// Perhaps the key and most complex decision in Stratego is whether
+	// to lose stealth and capture a piece.  The decision is based on the
+	// probability of capturing a yet lower ranked piece or preventing
+	// the capture of one of its lower ranked pieces by maintaining
+	// continued stealth.
+	//
+	// For example, an unknown Marshal should not take a Four
+	// (if the opponent still has a Two and two Threes),
+	// but certainly a Three is tempting.
+	// An unknown General should not take a Five, but a Four
+	// would be tempting.
+	//
+	// Stealth value for pieces (6-9) derives not from opponent piece value,
+	// but from the possibility that they can be mistaken for
+	// lower ranked unknown pieces.
+	//
+	// If a piece is invincible without compare (it always wins
+	// any attack), it has no stealth, because we want to encourage
+	// the AI to use it to clean up the last remaining opponent
+	// pieces on the board.
+	//
+
+	private void genValueStealth()
+	{
+		for (int c = RED; c <= BLUE; c++)
+		for (int r = 1; r <= 10; r++) {
+		int v = 0;
+		if (r <= invincibleWinRank[c])
+			v = 0;
+		else if (r >= 6) 
+			v = values[c][r-1]/6;
+		else {
+
+			int count = 0;
+			int rs;
+			for (rs = r+1;rs<8;rs++) {
+				int n = rankAtLarge(1-c, rs);
+				v += values[1-c][rs] * n;
+				count += n;
+
+				if (rs > invincibleRank[c]) {
+					n = knownRankAtLarge(c, rs);
+					v += values[c][rs] * n;
+					count += n;
+				}
+
+				if (count >= 6)
+					break;
+			}
+
+			if (rs == 8)
+				v = values[c][r-1]/6;
+			else
+				v = v/count - 10;
+		}
+		valueStealth[c][r-1] = v;
+		}
 	}
 
 	void valuePieces()
@@ -652,7 +719,7 @@ public class TestingBoard extends Board
 			// chasing one opponent piece that is protected
 			// by an unknown and possibly lower piece.
 			//
-			} else if (!found && knownRankAtLarge(1-p.getColor(),j)) {
+			} else if (!found && knownRankAtLarge(1-p.getColor(),j) != 0) {
 				genNeededPlanA(1-p.getColor(), j);
 				found = true;
 			}
@@ -667,7 +734,7 @@ public class TestingBoard extends Board
 		// so that is why it will only chase a known piece
 		// with another known piece of the same rank).
 		if (p.isKnown()
-			&& knownRankAtLarge(1-p.getColor(),chaseRank)
+			&& knownRankAtLarge(1-p.getColor(),chaseRank) != 0
 			&& values[1-p.getColor()][chaseRank] <=
 				values[p.getColor()][chaseRank])
 			// go for an even exchange
@@ -690,9 +757,9 @@ public class TestingBoard extends Board
 			- knownRank[color][r-1];
 	}
 
-	private boolean knownRankAtLarge(int color, int r)
+	private int knownRankAtLarge(int color, int r)
 	{
-		return (knownRank[color][r-1] != 0);
+		return knownRank[color][r-1];
 	}
 
 	private int rankAtLarge(int color, int rank)
@@ -2146,31 +2213,6 @@ public class TestingBoard extends Board
 	}
 
 
-	// Stealth value is expressed as a percentage of the piece's
-	// actual value.  An unknown Marshal should not take a Six
-	// or even a Five, but certainly a Four is worthwhile.
-	// An unknown General should not take a Six, but a Five
-	// would be tempting.
-	//
-	// If a piece has moved, then much is probably guessed about
-	// the piece already, so it has half of its stealth value.
-	//
-	// TBD: stealth value changes as lower ranked pieces are 
-	// discovered on or removed from the board.
-
-	private int stealthValue(int color, Rank rank)
-	{
-		int r = rank.toInt();
-		if (r <= invincibleWinRank[color])
-			return 0;
-
-		// stealth is worth slight less than a Four to a Marshal
-		// (to other pieces, a percentage equal to Four / Marshal)
-		long v = values[color][r];
-		v *= (startValues[4]-5);	// Four
-		v /= startValues[1];	// Marshal
-		return (int)v;
-	}
 
 	private int stealthValue(Piece p)
 	{
@@ -2180,9 +2222,9 @@ public class TestingBoard extends Board
 		// (1) the ai usually overestimates the rank
 		// (2) the ai already has guessed the rank
 		else if (p.isSuspectedRank())
-			return stealthValue(p.getColor(), p.getRank()) / 3;
+			return valueStealth[p.getColor()][p.getRank().toInt()-1] / 3;
 		else
-			return stealthValue(p.getColor(), p.getRank());
+			return valueStealth[p.getColor()][p.getRank().toInt()-1];
 	}
 
 	private int makeKnown(Piece p)
@@ -2259,7 +2301,7 @@ public class TestingBoard extends Board
 			more = values[color][Rank.FOUR.toInt()];
 
 		return values[1-color][8]
-			+ stealthValue(1-color, Rank.EIGHT)
+			+ valueStealth[1-color][Rank.EIGHT.toInt()-1]
 			+ more;
 	}
 
@@ -2478,7 +2520,7 @@ public class TestingBoard extends Board
 		// it could take a valuable unknown.
 
 				Random rnd = new Random();
-				v += stealthValue(p.getColor(), actualRank)
+				v += valueStealth[p.getColor()][actualRank.toInt()-1]
 
 				// discourage stalling
 				// TBD: stalling factor should only

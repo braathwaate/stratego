@@ -19,6 +19,7 @@ package com.cjmalloy.stratego;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Random;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -652,7 +653,10 @@ public class Board
 		
 		tray.add(getPiece(i));
 		setPiece(null, i);
-		Collections.sort(tray);
+		Collections.sort(tray,new Comparator<Piece>(){
+				     public int compare(Piece p1,Piece p2){
+					return p1.getRank().toInt() - p2.getRank().toInt();
+				     }});
 		return true;
 	}
 

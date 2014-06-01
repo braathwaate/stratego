@@ -511,6 +511,8 @@ function saveSetup()
 			rank[type] += String.fromCharCode(row);
 		}
 	}
+	stream.write(rank["Flag"]);
+	stream.write(rank["One"]);
 	stream.write(rank["Ten"]);
 	stream.write(rank["Nine"]);
 	stream.write(rank["Eight"]);
@@ -520,9 +522,7 @@ function saveSetup()
 	stream.write(rank["Four"]);
 	stream.write(rank["Three"]);
 	stream.write(rank["Two"]);
-	stream.write(rank["One"]);
 	stream.write(rank["Bomb"]);
-	stream.write(rank["Flag"]);
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////
