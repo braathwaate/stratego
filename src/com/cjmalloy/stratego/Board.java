@@ -226,6 +226,7 @@ public class Board
 					setPiece(null, m.getTo());
 				}
 			}
+			genChaseRank(fp.getColor());
 			return true;
 		}
 		return false;
@@ -370,6 +371,17 @@ public class Board
 	// rank predictions based on setup and the movement of the piece.
 	// So for UNKNOWN pieces, the rank should instead be the
 	// predicted rank.
+	//
+	// Should "known" be included in the hash?  At first glance,
+	// a known piece creates a different board position from
+	// one with an unknown piece.  However, for a piece to become known,
+	// (1) another piece must have attacked it and lost
+	// (2) a nine moved more than one square.
+	// If (1), the board position is different because of the missing
+	// piece.  If (2) and an opponent nine moved more than the one
+	// square, its apparent rank would also change.  The only case
+	// worth distinguishing is an unknown AI Nine moving more than one
+	// square.
 	public void rehash(Piece p, int i)
 	{
 		Rank rank;
@@ -424,47 +436,6 @@ public class Board
 		return undoList.get(size-i);
 	}
 
-	// Return true if the chase piece is obviously protected.
-	//
-	// Examples:
-	// If unknown Blue moves towards Red 3 and Blue 8,
-	// the piece is not protected.
-	// R3 -- B?
-	// -- B8 --
-	//
-	// If unknown Blue moves towards unknown Red and Blue 8,
-	// the piece is not protected.
-	// R? -- B?
-	// -- B8 --
-	//
-	// If unknown Blue moves towards Red 3 and Blue 2,
-	// the piece is protected.
-	// R3 -- B?
-	// -- B2 --
-	//
-	// If unknown Blue moves towards Red 3 and unknown Blue,
-	// the piece is unprotected.
-	// R3 -- B?
-	// -- B? --
-	//
-	public boolean isProtectedChase(Piece fp, Piece tp, int i)
-	{
-		for (int d : dir) {
-			int j = i + d;
-			if (!isValid(j))
-				continue;
-			Piece p = getPiece(j);
-			if (p != null
-				&& p != fp
-				&& p.getColor() == fp.getColor()
-				&& tp.isKnown()
-				&& p.getApparentRank().toInt() < tp.getApparentRank().toInt()) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	// return if fleeing piece could be protected
 	public boolean isProtectedFlee(Piece fp, Piece tp, int i)
 	{
@@ -484,6 +455,8 @@ public class Board
 		return false;
 	}
 
+	// stores the state prior to the move
+	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
 		UndoMove um = new UndoMove(fp, tp, from, to, hash);
@@ -493,10 +466,6 @@ public class Board
 		//
 		// Acting rank is calculated factually, but is of
 		// questionable use in the heuristic because of bluffing.
-		//
-		// If an unprotected attacker moves next to a opponent piece, 
-		// it inherits a chase acting rank
-		// of a equal to or lower than the piece.
 		//
 		// If a piece moves away from an unprotected
 		// opponent attacker, it inherits a flee acting rank
@@ -510,33 +479,6 @@ public class Board
 		// really is equal to or greater than the flee acting rank,
 		// because low ranks are irresistable captures.
 		// 
-
-		// movement towards
-		for (int d : dir) {
-			int chased = to + d;
-			if (!isValid(chased))
-				continue;
-			Piece chasedPiece = getPiece(chased);
-			if (chasedPiece != null
-				&& chasedPiece.getColor() != fp.getColor()) {
-				// chase confirmed
-					
-				Rank rank = chasedPiece.getApparentRank();
-				if (rank == Rank.BOMB)
-					continue;
-
-				// if the chase piece is protected,
-				// it is less likely (although possible)
-				// that the piece is a lower ranked piece.
-				if (isProtectedChase(fp, chasedPiece, to))
-					continue;
-
-				Rank arank = fp.getActingRankChase();
-				if (arank == Rank.NIL
-				|| arank.toInt() > rank.toInt())
-					fp.setActingRankChase(rank);
-			}
-		}
 
 		// movement aways
 		for (int d : dir) {
@@ -604,7 +546,170 @@ public class Board
 
 		undoList.add(um);
 	}
+
+	// Return true if the chase piece is obviously protected.
+	//
+	// Examples:
+	// If unknown Blue moves towards Red 3 and Blue 8,
+	// the piece is not protected.
+	// R3 -- B?
+	// -- B8 --
+	//
+	// If unknown Blue moves towards unknown Red and Blue 8,
+	// the piece is not protected.
+	// R? -- B?
+	// -- B8 --
+	//
+	// If unknown Blue moves towards Red 3 and Blue 2,
+	// the piece is protected.
+	// R3 -- B?
+	// -- B2 --
+	//
+	// If unknown Blue moves towards Red 3 and unknown Blue,
+	// the piece could be protected, or it could be a lower
+	// ranked piece.  This is a difficult case to evaluate.
+	// R3 -- B?
+	// -- B? --
+	//
+	// Below is the same case. Both the Blue Seven and Blue Spy
+	// are unknown.  If one of the unknown Blue pieces moves
+	// towards Red 1, was it the Spy or was it the Seven?  If
+	// B7 moves towards Red 1, and if this code assigned a chase rank,
+	// the chase rank would be One.  R1xB1 removes both pieces from
+	// the board.  But because B7 is not B1, Blue Spy takes Red 1.
+	// R1 -- BS
+	// -- B7 --
+	//
+	// So this code considers the attacker to be protected.  This prevents
+	// the piece from obtaining an erroneous chase rank.
+	//
+	// In the following example, all the pieces are unknown.  One of the
+	// blue pieces moves towards Unknown Red.  Nothing can be
+	// be determined.
+	// R? -- B?
+	// -- B? --
+	//
+	// Either the chaser or the chased must be known in order for any result
+	// to be determined.
+	//
+	public void isProtectedChase(Piece chaser, Piece chased, int i)
+	{
+		if (!chaser.isKnown() && !chased.isKnown())
+			return;
+		assert getPiece(i) == chased : "chased not at i?";
+		Piece knownProtector = null;
+		Piece unknownProtector = null;
+		for (int d : dir) {
+			int j = i + d;
+			if (!isValid(j))
+				continue;
+			Piece p = getPiece(j);
+			if (p == null || p.getColor() == chaser.getColor())
+				continue;
+
+			if (p.isKnown()
+				&& p.getRank() != Rank.BOMB
+				&& (knownProtector == null
+					|| knownProtector.getRank().toInt() > p.getRank().toInt()))
+				knownProtector = p;
+			else if (unknownProtector != null) {
+				// more than one unknown protector
+				return;
+			} else
+				unknownProtector= p;
+		}
+
+		if (unknownProtector != null
+			&& knownProtector == null) {
+			// strong unknown protector confirmed
+			int r = chased.getRank().toInt();
+			if (chaser.getApparentRank().toInt() < r)
+				r = chaser.getApparentRank().toInt();
+		// One cannot be protected.
+			else if (r == 1)
+				return;
+			else
+				r--;
+			r--;
+
+		// Only a Spy can protect a piece attacked by a One.
+			Rank rank;
+			if (r == 0)
+				rank = Rank.SPY;
+			else
+				rank = Rank.toRank(r);
+
+			Rank arank = unknownProtector.getActingRankChase();
+			if (arank == Rank.NIL || arank.toInt() > r)
+				unknownProtector.setActingRankChase(rank);
+		}
+
+		// set chase rank
+
+		if (unknownProtector != null
+			|| (knownProtector != null
+				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
+			return;
+			
+		Rank arank = chased.getActingRankChase();
+		if (arank == Rank.NIL
+			|| arank.toInt() > chaser.getRank().toInt())
+			chased.setActingRankChase(chaser.getRank());
+	}
+
+	// Example 1:
+	// -- -- R7
+	// -- B? --
+	// B5 B? --
+	//
+	// Known Red Seven moves left.  No chase rank set because
+	// Blue has the move.
+	//
+	//
+
+	void genChaseRank(int turn)
+	{
+		// Chase acting rank is set implicitly if
+		// a known piece under attack does not move
+		// and it has only one possible unknown defender.
+		//
+		// (This is how the ai can guess the spy: if the
+		// a known Two is attacked by an ai piece, and it
+		// does not move or another piece moves to protect it)
+		//
+		for ( int i = 12; i <= 120; i++) {
+			if (!isValid(i))
+				continue;
+			Piece chased = getPiece(i);
 	
+			if (chased == null
+				|| !chased.hasMoved()
+				|| chased.getRank() == Rank.FLAG
+				|| chased.getRank() == Rank.BOMB
+				|| chased.getRank() == Rank.ONE)
+				continue;
+
+			for (int d : dir) {
+				int j = i + d;
+				if (!isValid(j))
+					continue;
+				Piece chaser = getPiece(j);
+				if (chaser == null
+					|| !chaser.hasMoved()
+					|| chaser.getRank() == Rank.FLAG
+					|| chaser.getRank() == Rank.BOMB)
+					continue;
+
+				if (chaser.getColor() != chased.getColor()) {
+					if (turn == chaser.getColor())
+						isProtectedChase(chased, chaser, j);
+					else
+						isProtectedChase(chaser, chased, i);
+				}
+			} // d
+		} // i
+	}
+
 	public boolean move(BMove m)
 	{
 		if (getPiece(m.getTo()) != null)
@@ -626,7 +731,7 @@ public class Board
 				fp.setRank(Rank.NINE);
 				fp.makeKnown();
 			}
-
+			genChaseRank(fp.getColor());
 			return true;
 		}
 		
@@ -875,5 +980,15 @@ public class Board
 
 		return false;
 	}
+
+	public int rankInTray(int color, Rank rank)
+	{
+		int count = 0;
+		for (Piece p : tray)
+			if (p.getColor() == color && p.getRank() == rank)
+				count++;
+		return count;
+	}
 }
+
 

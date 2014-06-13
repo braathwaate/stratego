@@ -752,7 +752,7 @@ public class WView extends View implements MoveListener
 			{
 				public void actionPerformed(ActionEvent e)
 				{
-					play();
+					engine.play();
 				}
 			});
 		}

@@ -29,11 +29,11 @@ public class StrategoDriver
 		for(String arg:args)
 		    if (arg.equals("-g"))
 			graphics = true;
-		    else if (arg.equals("-t")) {
-			new AITest(graphics);
-			return;
-		    } else if (arg.equals("-t2")) {
+		    else if (arg.equals("-2"))
 			Settings.twoSquares = true;
+		    else if (arg.substring(0,2).equals("-l"))
+			Settings.aiLevel = Integer.parseInt(arg.substring(2));
+		    else if (arg.equals("-t")) {
 			new AITest(graphics);
 			return;
 		    }

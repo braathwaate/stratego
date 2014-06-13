@@ -35,6 +35,12 @@ public class BMove
 		to = t.getX() + 1 + (t.getY() + 1) * 11 ;
 	}
 
+	public void set(BMove m)
+	{
+	    from = m.from;
+	    to = m.to;
+	}
+
 	public int getFrom()
 	{
 		return from;

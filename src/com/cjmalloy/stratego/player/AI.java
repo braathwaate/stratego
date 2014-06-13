@@ -49,8 +49,8 @@ public class AI implements Runnable
 	private Board board = null;
 	private CompControls engine = null;
 	private PrintWriter log;
+	private int ninesAtLarge;	// if the opponent still has Nines
 
-	private int mmax;
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
 	private final int QSMAX = 3;	// maximum qs search depth
@@ -59,9 +59,10 @@ public class AI implements Runnable
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
-		Integer value = 0;
+		int value = 0;
+		int value1 = 0;
 		boolean unknownScoutFarMove = false;
-		MoveValuePair(BMove m, Integer v, boolean s) {
+		MoveValuePair(BMove m, int v, boolean s) {
 			move = m;
 			value = v;
 			unknownScoutFarMove = s;
@@ -219,6 +220,7 @@ public class AI implements Runnable
 			if (bestMove == null)
 				engine.aiReturnMove(null);
 
+			assert bestMove != null  : "bestMove is null?";
 			assert bestMove.move != null : "bestMove.move is null?";
 			assert board.getPiece(bestMove.move.getFrom()) != null : "bestMove at " + bestMove.move.getFrom() + " from piece is null?";
 
@@ -257,20 +259,49 @@ public class AI implements Runnable
 
 		Rank fprank = fp.getRank();
 
+		// Known bombs are removed from pieces[] but
+		// a bomb could become known in the search
+		// tree.  We need to generate moves for suspected
+		// bombs because the bomb might actually be
+		// some other piece, but once the bomb becomes
+		// known, it ceases to move.
+		if (fprank == Rank.BOMB && fp.isKnown())
+			return false;
+
 		for (int d : dir ) {
 			int t = i + d ;
 
-			// NOTE: FORWARD TREE PRUNING
-			// We don't actually know if an unknown unmoved piece
-			// can or will move, but usually we don't care
-			// unless they can attack an AI piece during the search.
-			//
-			// TBD: determine in advance which opponent pieces
-			// are able to attack an AI piece within the search window.
-			// For now, we just discard all unmoved unknown piece moves
-			// to an open square.
-			if (b.getPiece(t) == null && fp.getRank() == Rank.UNKNOWN && !fp.hasMoved()) {
-				hasMove = true;
+		// NOTE: FORWARD TREE PRUNING
+		// We don't actually know if an unknown unmoved piece
+		// can or will move, but usually we don't care
+		// unless they can attack an AI piece during the search.
+		//
+		// TBD: determine in advance which opponent pieces
+		// are able to attack an AI piece within the search window.
+		// For now, we just discard all unmoved unknown piece moves
+		// to an open square.
+			if (b.getPiece(t) == null
+				&& (fprank == Rank.UNKNOWN || fprank == Rank.BOMB || fprank == Rank.FLAG)
+				&& !fp.hasMoved()) {
+		// ai bombs or flags cannot move
+				if (fp.getColor() == Settings.bottomColor)
+					hasMove = true;
+
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks by unknown pieces
+		// if there is no nines (or only one) left, don't bother
+				if (ninesAtLarge > 1 && fprank == Rank.UNKNOWN) {
+					while (b.getPiece(t) == null)
+						t += d;
+					if (t != i + d) {
+						if (b.isValid(t)) {
+							BMove tmpM = getMove(b, fp, i, t);
+							if (tmpM != null)
+								moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+						} // attack
+					} // far move
+				} // nine
+
 				continue;
 			}
 
@@ -279,9 +310,9 @@ public class AI implements Runnable
 				continue;
 
 			moveList.add(new MoveValuePair(tmpM, 0, false));
-			// NOTE: FORWARD PRUNING
-			// generate scout far moves
-			// only for captures and far rank
+
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks and far rank
 			if (fprank == Rank.NINE) {
 				while (b.getPiece(t) == null)
 					t += d;
@@ -291,8 +322,8 @@ public class AI implements Runnable
 					tmpM = getMove(b, fp, i, t);
 					if (tmpM != null)
 						moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
-				}
-			} // valid move
+				} // far move
+			} // nine
 		} // d
 
 		return hasMove;
@@ -351,7 +382,7 @@ public class AI implements Runnable
 	private void getBestMove(TestingBoard b) throws InterruptedException
 	{
 		BMove tmpM = null;
-		final int CHASE_RANK_NIL = 99;
+		bestMove = null;
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -369,29 +400,51 @@ public class AI implements Runnable
 		for (int k=12; k<=120; k++)
 			hh[j][k] = 0;
 
+		ninesAtLarge = Rank.getRanks(Rank.NINE)
+			- b.rankInTray(Settings.bottomColor, Rank.NINE);
 
+		for (Piece p : b.pieces[Settings.bottomColor])
+			if (p == null)	// end of list
+				break;
+			else if (p.getRank() == Rank.NINE)
+				ninesAtLarge--;
+			
 		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
-
 		// To speed move generation, the search tree does not check the
 		// Two Squares rule for each move, so we remove
 		// the move now.
 		for (int k = moveList.size()-1; k >= 0; k--) {
 
+			MoveValuePair mvp = moveList.get(k);
+			tmpM = mvp.move;
+
 		// Two Squares Rule
-			if (b.isTwoSquares(moveList.get(k).move)) {
+			if (b.isTwoSquares(tmpM)) {
+				moveList.remove(k);
+				continue;
+			}
+
+
+		// Immobile Pieces
+		// Bombs and the Flag are not legal moves.  However,
+		// the AI generates moves for unknown bombs because
+		// the apparent rank is unknown to the opponent, so
+		// these pieces can protect another piece as a bluff.
+			Piece p = b.getPiece(tmpM.getFrom());
+			if (p.getRank() == Rank.BOMB
+				|| p.getRank() == Rank.FLAG) {
 				moveList.remove(k);
 				continue;
 			}
 
 		// More Squares Rule
-			MoveValuePair mvp = moveList.get(k);
-			tmpM = mvp.move;
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 			if (b.isMoreSquares())
 				moveList.remove(k);
 
 			b.undo(0);
+
 		}
 
 		// Settings tick marks:
@@ -401,6 +454,8 @@ public class AI implements Runnable
 		// 4: 1.6 sec
 		// 5: 2.5 sec
 		// etc, etc
+		log("Settings.aiLevel:" + Settings.aiLevel);
+		log("Settings.twoSquares:" + Settings.twoSquares);
 		stopTime = System.currentTimeMillis( )
  			+ Settings.aiLevel * Settings.aiLevel * 100;
 
@@ -546,19 +601,41 @@ public class AI implements Runnable
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
 
-			int valueB = b.getValue();
+	// To negate the horizon effect where the ai
+	// plays a losing move to delay a negative result
+	// discovered deep in the tree, the value from iteration 1
+	// is added to the value from the last iteration.
+	// For example,
+	// B5 R4
+	// B3 --
+	//
+	// If the ai discovers a winning sequence of moves for Blue
+	// deep in the tree, the ai would play R4xB5 because it assumes
+	// Blue will play the winning sequence of moves.  But Blue will
+	// simply play B3xR4 and play the winning sequence on its next
+	// move.
+	//
+	// By adding in the iteration 1 value, the ai sees that R4xB5
+	// is a loss, even if R4xB4 delays the Blue winning sequence
+	// past the horizon.
+
+			if (bestMove != null)
+				b.setValue(mvp.value1);
+
 			Piece fp = b.getPiece(mvp.move.getFrom());
 
 			Piece tp = b.getPiece(mvp.move.getTo());
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-
-			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1, chasedPiece, chasePiece); 
-			// int vm = valueNMoves(b, n-1, -9999, 9999, Settings.bottomColor, 1); 
+			int vm = valueNMoves(b, n-1, alpha, beta, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
 
 			mvp.value = vm;
-			b.undo(valueB);
-			logMove(n, b, tmpM, valueB, vm);
+
+			if (bestMove == null)
+				mvp.value1=vm;
+
+			b.undo(0);
+			logMove(n, b, tmpM, mvp.value1, vm);
 
 			if (vm > alpha)
 			{
@@ -673,14 +750,14 @@ public class AI implements Runnable
 		int nextBest = best;
 
 		if (!flee) {
-			// try fleeing
+		// try fleeing
 			int vm = qs(b, 1-turn, depth+1, n-1, true);
 
-			// "best" is board value after
-			// opponent's best attack if player can flee.
-			// So usually this is valueB, unless the
-			// opponent has two good attacks or the player
-			// piece under attack is cornered.
+		// "best" is board value after
+		// opponent's best attack if player can flee.
+		// So usually this is valueB, unless the
+		// opponent has two good attacks or the player
+		// piece under attack is cornered.
 			best = vm;
 		}
 
@@ -691,13 +768,15 @@ public class AI implements Runnable
 			if (fp != b.getPiece(i))
 				continue;
 
-			// note: we need to make this check each time
-			// because the index and perhaps the rank
-			// could change.
+		// Known bombs are removed from pieces[] but
+		// a bomb could become known in the search
+		// tree.  We need to generate moves for suspected
+		// bombs because the bomb might actually be
+		// some other piece, but once the bomb becomes
+		// known, it ceases to move.
 			Rank fprank = fp.getRank();
-			if (fprank == Rank.BOMB
-				|| fprank == Rank.FLAG)
-				continue;
+			if (fprank == Rank.BOMB && fp.isKnown())
+			 	continue;
 
 			for (int d : dir ) {
 				boolean canFlee = false;
@@ -718,9 +797,9 @@ public class AI implements Runnable
 
 				b.undo(valueB);
 
-				// Save worthwhile attack (vm > best)
-				// (if vm < best, the player will play
-				// some other move)
+		// Save worthwhile attack (vm > best)
+		// (if vm < best, the player will play
+		// some other move)
 				if (turn == Settings.topColor) {
 				if (vm > best) {
 					nextBest = best;
@@ -743,7 +822,7 @@ public class AI implements Runnable
 		return best;
 	}
 
-	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece) throws InterruptedException
+	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
 	{
 		BMove bestmove = null;
 		int valueB = b.getValue();
@@ -752,6 +831,7 @@ public class AI implements Runnable
 			return qs(b, turn, depth, QSMAX, false);
 
 		if (bestMove != null
+			&& stopTime != 0
 			&& System.currentTimeMillis( ) > stopTime)
 			throw new InterruptedException();
 
@@ -776,23 +856,42 @@ public class AI implements Runnable
 			}
 		}
 
-		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
+		// Try the killer move before move generation
+		// to save time if the killer move causes ab pruning
+		int kfrom = killerMove.getFrom();
+		int kto = killerMove.getTo();
+		Piece fp = b.getPiece(kfrom);
+		Piece tp = b.getPiece(kto);
+		if (fp != null
+			&& fp.getColor() == turn
+			&& fp.getRank() != Rank.NINE
+			&& (tp == null || tp.getColor() != turn)) {
+			BMove tmpM = new BMove(kfrom, kto);
+			b.move(tmpM, depth, false);
 
-		// because of forward pruning, this may be a terminal
-		// node but yet there still are moves, so just return
-		// the board position
-		// if (moveList.size() == 0)
-		// 	if (hasMove(b, turn))
-		// 		return qs(b, turn, depth);
-		// 	else
-		// 		return v;
-		
-		for (MoveValuePair mvp : moveList) {
-			if (mvp.move != null)
-				mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
+			int vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+
+			b.undo(valueB);
+
+			logMove(n, b, tmpM, valueB, vm);
+
+			if (turn == Settings.topColor) {
+				if (vm > alpha) {
+					v = alpha = vm;
+					bestmove = tmpM;
+				}
+			} else {
+				if (vm < beta) {
+					v = beta = vm;
+					bestmove = tmpM;
+				}
+			}
+
+			if (beta <= alpha) {
+				hh[kfrom][kto]+=n;
+				return vm;
+			}
 		}
-
-		for (int i = 0; i <  moveList.size(); i++) {
 
 		// Sort the move list.
 		// Because alpha-beta can prunes off most of the list,
@@ -804,7 +903,21 @@ public class AI implements Runnable
 		//
 		// implementation: selection sort
 
+		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
+		for (MoveValuePair mvp : moveList) {
+			if (mvp.move != null)
+				mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
+		}
+
+		for (int i = 0; i < moveList.size(); i++) {
 			MoveValuePair mvp = moveList.get(i);
+
+		// skip killer move
+			if (mvp.move != null
+				&& mvp.move.getFrom() == kfrom
+				&& mvp.move.getTo() == kto)
+				continue;
+
 			MoveValuePair max = mvp;
 			int tj = i;
 			for (int j = i + 1; j < moveList.size(); j++) {
@@ -820,10 +933,8 @@ public class AI implements Runnable
 			int vm = 0;
 			if (tmpM == null) {
 			b.pushNullMove();	// because of isRepeatedMove()
-			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
+			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 			b.popMove();
-			for (int ii=8; ii >= n; ii--)
-				log.print("  ");
 			log.println(n + ": (null move) " + valueB + " " + vm);
 			} else {
 			// NOTE: FORWARD TREE PRUNING (minor)
@@ -838,13 +949,10 @@ public class AI implements Runnable
 
 			b.move(tmpM, depth, mvp.unknownScoutFarMove);
 
-			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece);
-			// vm = valueNMoves(b, n-1, -9999, 9999, 1 - turn, depth + 1);
+			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo(valueB);
 
-			for (int ii=8; ii >= n; ii--)
-				log.print("  ");
 			logMove(n, b, tmpM, valueB, vm);
 			}
 
@@ -863,10 +971,27 @@ public class AI implements Runnable
 			if (beta <= alpha)
 				break;
 		} // moveList
+
 		if (bestmove != null) {
 			hh[bestmove.getFrom()][bestmove.getTo()]+=n;
+			killerMove.set(bestmove);
 		}
 		return v;
+	}
+
+	String logPiece(Piece p)
+	{
+		Rank rank = p.getRank();
+		if (p.getColor() == Settings.bottomColor
+			&& !p.isKnown()
+			&& (p.isSuspectedRank()
+			|| p.getActingRankFlee() != Rank.NIL
+			|| p.getActingRankChase() != Rank.NIL))
+			return p.getRank() + "[" + p.isSuspectedRank()
+				+ "," + p.getActingRankChase()
+				+ "," + p.getActingRankFlee() + "]";
+
+		return "" + p.getRank();
 	}
 
 	void logMove(int n, Board b, BMove move, int valueB, int value)
@@ -881,7 +1006,7 @@ public class AI implements Runnable
 	if (b.getPiece(move.getTo()) == null) {
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-+ " (" + b.getPiece(move.getFrom()).getRank() + ")"
++ " (" + logPiece(b.getPiece(move.getFrom())) + ")"
 	+ hasMoved + isKnown + " "
 	+ valueB + " " + value);
 	} else {
@@ -896,14 +1021,7 @@ public class AI implements Runnable
 			X = 'X';
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
-+ " (" + b.getPiece(move.getFrom()).getRank() + X + b.getPiece(move.getTo()).getRank() + ")"
-	+ "[" + b.getPiece(move.getFrom()).isSuspectedRank()
-	+ "," + b.getPiece(move.getFrom()).getActingRankChase()
-	+ "," + b.getPiece(move.getFrom()).getActingRankFlee() + "]"
-	+ X
-	+ "[" + b.getPiece(move.getTo()).isSuspectedRank()
-	+ "," + b.getPiece(move.getTo()).getActingRankChase()
-	+ "," + b.getPiece(move.getTo()).getActingRankFlee() + "]"
++ " (" + logPiece(b.getPiece(move.getFrom())) + X + logPiece(b.getPiece(move.getTo())) + ")"
 	+ hasMoved + isKnown + " " + tohasMoved + toisKnown
 	+ " " + b.getPiece(move.getTo()).aiValue() + " " + valueB + " " + value);
 	}

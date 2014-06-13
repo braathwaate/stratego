@@ -5,8 +5,11 @@ cd "`dirname "$CANNONPATH"`"
 # use this for running the gui
 # OPTIONS=
 
+# use this for playing mof
+OPTIONS="-g -2 -l3 -t"
+
 # use this for playing against itself
-OPTIONS="-g -t2"
+# OPTIONS="-g -2 -t"
 
 # use this for playing agents
 # OPTIONS="-t"

@@ -56,11 +56,11 @@ public enum Rank
 		return Rank.NIL.ordinal();
 	}
 	
-	static public int getRanks(int i)
+	static public int getRanks(Rank rank)
 	{	
-		final int[] ranks = {1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
+		final int[] ranks = {0, 1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
 
-		return ranks[i];
+		return ranks[rank.toInt()];
 	}
 
 
