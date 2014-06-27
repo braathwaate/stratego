@@ -650,9 +650,26 @@ public class Board
 			|| (knownProtector != null
 				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
 			return;
-			
+
+	       // If an unknown piece has been fleeing,
+		// and gets trapped in some way, it may just give up.
+		// So do not assign a chase rank equal to the flee rank.
+
+		if (chased.getActingRankFlee() == chaser.getRank())
+			return;
+
+		// Chasing an unknown sets the chase rank to UNKNOWN.
+		// Once set, the chase rank
+		// is never changed again because if  a piece chases an Unknown,
+		// it could be a bluffing high rank that will chase anything or
+		// less likely, but possible, it could be an invincible
+		// piece.  Its real identity can be determined only
+		// through attack.
+
 		Rank arank = chased.getActingRankChase();
-		if (arank == Rank.NIL
+		if ((arank == Rank.NIL
+			&& arank != Rank.UNKNOWN)
+			|| chaser.getRank() == Rank.UNKNOWN
 			|| arank.toInt() > chaser.getRank().toInt())
 			chased.setActingRankChase(chaser.getRank());
 	}
@@ -681,13 +698,18 @@ public class Board
 			if (!isValid(i))
 				continue;
 			Piece chased = getPiece(i);
+
+		// start out by finding a chased piece of the opposite color
 	
 			if (chased == null
-				|| !chased.hasMoved()
+				|| chased.getColor() == turn
 				|| chased.getRank() == Rank.FLAG
 				|| chased.getRank() == Rank.BOMB
 				|| chased.getRank() == Rank.ONE)
 				continue;
+
+		// then find a chaser piece of the same color
+		// that just moved adjacent to the chaser
 
 			for (int d : dir) {
 				int j = i + d;
@@ -695,17 +717,57 @@ public class Board
 					continue;
 				Piece chaser = getPiece(j);
 				if (chaser == null
+					|| chaser.getColor() != turn
 					|| !chaser.hasMoved()
+					|| (chased.isKnown() && chaser.getRank().toInt() <= chased.getRank().toInt())
 					|| chaser.getRank() == Rank.FLAG
 					|| chaser.getRank() == Rank.BOMB)
 					continue;
 
-				if (chaser.getColor() != chased.getColor()) {
-					if (turn == chaser.getColor())
-						isProtectedChase(chased, chaser, j);
-					else
-						isProtectedChase(chaser, chased, i);
-				}
+		// Now this is the tricky part.
+		// The roles of chaser and chased are swapped
+		// in isProtectedChase(), becaused the chased piece
+		// tries to determine if it can win the chaser piece
+		// based on its protection.  This can result in actingRankChase
+		// assignment to a piece that is protecting the actual
+		// attacker rather than the attacker.
+		// For example:
+		// B3 R4 -- R2
+		//
+		// Unknown Red Two moves towards known Red Four.
+		// Red is the chaser because it had the move.
+		// The same result occurs in the example below, where
+		// Red Four moves between Blue Three and unknown Red Two:
+		// B3 -- R2
+		// -- R4 --
+		// 
+		// The usual case is usually simpler, such when unknown Red
+		// approaches Blue Three in the example below.  Then
+		// unknown Red gets an actingRankChase because it has
+		// no protection.
+		// B3 -- R?
+		// 
+		// In the following example, Red Four is known but all
+		// other pieces are unknown.  Unknown chase rank is set because
+		// it is unclear whether the unknown Blue piece is chasing
+		// the Four or just bluffing, trying to get past to attack
+		// an unknown piece.
+		// RB RS
+		// R4 --
+		// -- B?
+		//
+		// This also can happen when an Eight bluffs to get at a flag
+		// bomb.  The example below is a common bluff because Blue knows
+		// that Red Five has to attack its unknown Blue piece
+		// (if Blue has any unknown Eights), even if Blue has
+		// unknown lower ranks (e.g. Blue Four).
+		// RB RF
+		// -- RB
+		// R5 --
+		// -- B?
+		//
+
+				isProtectedChase(chased, chaser, j);
 			} // d
 		} // i
 	}
@@ -788,6 +850,7 @@ public class Board
 			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
 			BMove prev = undoList.get(size-2);
 			return (undoList.get(size-6)).equals(prev)
+				&& m.getFrom() == prev.getTo()
 				&& m.getTo() == prev.getFrom();
 		} else
 			// let opponent get away with it

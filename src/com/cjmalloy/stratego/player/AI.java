@@ -274,56 +274,66 @@ public class AI implements Runnable
 		// NOTE: FORWARD TREE PRUNING
 		// We don't actually know if an unknown unmoved piece
 		// can or will move, but usually we don't care
-		// unless they can attack an AI piece during the search.
+		// unless it can attack an AI piece during the search.
 		//
 		// TBD: determine in advance which opponent pieces
 		// are able to attack an AI piece within the search window.
 		// For now, we just discard all unmoved unknown piece moves
 		// to an open square.
-			if (b.getPiece(t) == null
-				&& (fprank == Rank.UNKNOWN || fprank == Rank.BOMB || fprank == Rank.FLAG)
-				&& !fp.hasMoved()) {
+			if (b.getPiece(t) == null) {
+				if ((fprank == Rank.UNKNOWN || fprank == Rank.BOMB || fprank == Rank.FLAG)
+					&& !fp.hasMoved()) {
 		// ai bombs or flags cannot move
-				if (fp.getColor() == Settings.bottomColor)
-					hasMove = true;
+					if (fp.getColor() == Settings.bottomColor)
+						hasMove = true;
+				} else {
+
+		// move to open square
+					BMove tmpM = new BMove(i, t);
+					moveList.add(new MoveValuePair(tmpM, 0, false));
+				}
+
 
 		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks by unknown pieces
-		// if there is no nines (or only one) left, don't bother
+		// generate scout far moves only for attacks by unknown
+		// valuable pieces.
+		// if there are no nines (or only one) left, don't bother
 				if (ninesAtLarge > 1 && fprank == Rank.UNKNOWN) {
-					while (b.getPiece(t) == null)
+					Piece p;
+					do {
 						t += d;
-					if (t != i + d) {
-						if (b.isValid(t)) {
-							BMove tmpM = getMove(b, fp, i, t);
-							if (tmpM != null)
-								moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
-						} // attack
-					} // far move
-				} // nine
-
-				continue;
-			}
-
-			BMove tmpM = getMove(b, fp, i, t);
-			if (tmpM == null)
-				continue;
-
-			moveList.add(new MoveValuePair(tmpM, 0, false));
+						p = b.getPiece(t);
+					} while (p == null);
+					if (!p.isKnown()
+						&& p.getColor() == 1 - fp.getColor()
+						&& b.isValuable(p)) {
+						BMove tmpM = getMove(b, fp, i, t);
+						if (tmpM != null)
+							moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+					} // attack
 
 		// NOTE: FORWARD PRUNING
 		// generate scout far moves only for attacks and far rank
-			if (fprank == Rank.NINE) {
-				while (b.getPiece(t) == null)
+
+				} else if (fprank == Rank.NINE) {
 					t += d;
-				if (t != i + d) {
+					if (!b.isValid(t))
+						continue;
+					while (b.getPiece(t) == null)
+						t += d;
 					if (!b.isValid(t))
 						t -= d;
-					tmpM = getMove(b, fp, i, t);
+					BMove tmpM = getMove(b, fp, i, t);
 					if (tmpM != null)
 						moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
-				} // far move
-			} // nine
+				} // nine
+			} else {
+
+		// attack
+				BMove tmpM = getMove(b, fp, i, t);
+				if (tmpM != null)
+					moveList.add(new MoveValuePair(tmpM, 0, false));
+			}
 		} // d
 
 		return hasMove;
@@ -857,14 +867,17 @@ public class AI implements Runnable
 		}
 
 		// Try the killer move before move generation
-		// to save time if the killer move causes ab pruning
+		// to save time if the killer move causes ab pruning.
+		// TBD: killer move can be multi-hop, but then
+		// checking for a legal move requires checking all squares
 		int kfrom = killerMove.getFrom();
 		int kto = killerMove.getTo();
 		Piece fp = b.getPiece(kfrom);
 		Piece tp = b.getPiece(kto);
+		int d = kto - kfrom;
 		if (fp != null
 			&& fp.getColor() == turn
-			&& fp.getRank() != Rank.NINE
+			&& (d == 1 || d == -1 || d == -11 || d == 11)
 			&& (tp == null || tp.getColor() != turn)) {
 			BMove tmpM = new BMove(kfrom, kto);
 			b.move(tmpM, depth, false);
