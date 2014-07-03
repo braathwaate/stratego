@@ -211,7 +211,9 @@ public class AI implements Runnable
                 {
 			getBestMove(new TestingBoard(board));
 		} catch (InterruptedException e) {
-                }
+                } catch (Exception e) {
+			e.printStackTrace();
+		}
 		finally
 		{
 			System.runFinalization();
@@ -248,7 +250,7 @@ public class AI implements Runnable
 	}
 
 
-	public boolean getMoves(ArrayList<MoveValuePair> moveList, TestingBoard b, int turn, Piece fp)
+	public boolean getMoves(ArrayList<MoveValuePair> moveList, TestingBoard b, Piece fp)
 	{
 		boolean hasMove = false;
 		int i = fp.getIndex();
@@ -354,13 +356,13 @@ public class AI implements Runnable
 		// only examine moves adjacent to chase and chased pieces
 		// as they chase around the board
 		if (chasePiece != null) {
-			getMoves(moveList, b, turn, chasedPiece);
+			getMoves(moveList, b, chasedPiece);
 			for (int d : dir ) {
 				int i = chasePiece.getIndex() + d;
 				if (i != chasedPiece.getIndex() && b.isValid(i)) {
 					Piece p = b.getPiece(i);
-					if (p != null)
-						getMoves(moveList, b, turn, p );
+					if (p != null && p.getColor() == turn)
+						getMoves(moveList, b, p );
 				}
 			}
 
@@ -376,7 +378,7 @@ public class AI implements Runnable
 		for (Piece np : b.pieces[turn]) {
 			if (np == null)	// end of list
 				break;
-			if (getMoves(moveList, b, turn, np))
+			if (getMoves(moveList, b, np))
 				hasMove = true;
 		}
 
@@ -923,28 +925,30 @@ public class AI implements Runnable
 		}
 
 		for (int i = 0; i < moveList.size(); i++) {
-			MoveValuePair mvp = moveList.get(i);
+			MoveValuePair max;
+			{
+				MoveValuePair mvp = moveList.get(i);
 
-		// skip killer move
-			if (mvp.move != null
-				&& mvp.move.getFrom() == kfrom
-				&& mvp.move.getTo() == kto)
-				continue;
+			// skip killer move
+				if (mvp.move != null
+					&& mvp.move.getFrom() == kfrom
+					&& mvp.move.getTo() == kto)
+					continue;
 
-			MoveValuePair max = mvp;
-			int tj = i;
-			for (int j = i + 1; j < moveList.size(); j++) {
-				MoveValuePair tmvp = moveList.get(j);
-				if (tmvp.value > max.value) {
-					max = tmvp;
-					tj = j;
+				max = mvp;
+				int tj = i;
+				for (int j = i + 1; j < moveList.size(); j++) {
+					MoveValuePair tmvp = moveList.get(j);
+					if (tmvp.value > max.value) {
+						max = tmvp;
+						tj = j;
+					}
 				}
+				moveList.set(tj, mvp);
 			}
-			moveList.set(tj, mvp);
-			BMove tmpM = max.move;
 
 			int vm = 0;
-			if (tmpM == null) {
+			if (max.move == null) {
 			b.pushNullMove();	// because of isRepeatedMove()
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 			b.popMove();
@@ -957,27 +961,27 @@ public class AI implements Runnable
 			// are pruned off by alpha-beta,
 			// so calls to isRepeatedMove() are also pruned off,
 			// saving a heap of time.
-			if (b.isRepeatedMove(tmpM))
+			if (b.isRepeatedMove(max.move))
 				continue;
 
-			b.move(tmpM, depth, mvp.unknownScoutFarMove);
+			b.move(max.move, depth, max.unknownScoutFarMove);
 
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo(valueB);
 
-			logMove(n, b, tmpM, valueB, vm);
+			logMove(n, b, max.move, valueB, vm);
 			}
 
 			if (turn == Settings.topColor) {
 				if (vm > alpha) {
 					v = alpha = vm;
-					bestmove = tmpM;
+					bestmove = max.move;
 				}
 			} else {
 				if (vm < beta) {
 					v = beta = vm;
-					bestmove = tmpM;
+					bestmove = max.move;
 				}
 			}
 

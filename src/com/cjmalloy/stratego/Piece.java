@@ -28,8 +28,6 @@ public class Piece implements Comparable<Piece>
 	private boolean known = false;	// known to players
 	// a known piece can be not shown
 	// a shown piece can be unknown to the computer
-	private boolean moved = false;	// used by screen view thread so
-					// do not update by ai
 	private int value = 0;
 	private Rank actingRankFlee = Rank.NIL;
 	private Rank actingRankChase = Rank.NIL;
@@ -55,7 +53,6 @@ public class Piece implements Comparable<Piece>
 	{
 		uniqueID = p.uniqueID;
 		color = p.color;
-		moved = p.moved;
 		moves = p.moves;
 		rank = p.rank;
 		known = p.known;
@@ -70,7 +67,6 @@ public class Piece implements Comparable<Piece>
 
 	public void clear()
 	{
-		moved = false;
 		moves = 0;
 		known = false;
 		shown = false;
@@ -137,12 +133,12 @@ public class Piece implements Comparable<Piece>
 
 	public boolean hasMoved()
 	{
-		return moved;
+		return moves != 0;
 	}
 	
-	public void setMoved(boolean m)
+	public void setMoved()
 	{
-		moved = m;
+		moves++;
 	}
 
 	public void setAiValue(int v)

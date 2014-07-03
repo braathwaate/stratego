@@ -189,8 +189,7 @@ public class Board
 			fp.setShown(true);
 			fp.makeKnown();
 			tp.makeKnown();
-			fp.setMoved(true);
-			fp.moves++;
+			fp.setMoved();
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
 			}
@@ -551,17 +550,19 @@ public class Board
 	//
 	// Examples:
 	// If unknown Blue moves towards Red 3 and Blue 8,
-	// the piece is not protected.
+	// the piece is not protected.  Unknown Blue gains a chase
+	// rank of Three.
 	// R3 -- B?
 	// -- B8 --
 	//
 	// If unknown Blue moves towards unknown Red and Blue 8,
-	// the piece is not protected.
+	// the piece is not protected.  Unknown Blue gains a chase
+	// rank of Unknown.
 	// R? -- B?
 	// -- B8 --
 	//
 	// If unknown Blue moves towards Red 3 and Blue 2,
-	// the piece is protected.
+	// the piece is protected.  No chase rank assigned.
 	// R3 -- B?
 	// -- B2 --
 	//
@@ -584,18 +585,19 @@ public class Board
 	// the piece from obtaining an erroneous chase rank.
 	//
 	// In the following example, all the pieces are unknown.  One of the
-	// blue pieces moves towards Unknown Red.  Nothing can be
-	// be determined.
+	// blue pieces moves towards Unknown Red.  It gains a chase
+	// rank of Unknown.
 	// R? -- B?
 	// -- B? --
 	//
-	// Either the chaser or the chased must be known in order for any result
-	// to be determined.
-	//
 	public void isProtectedChase(Piece chaser, Piece chased, int i)
 	{
+		// Either the chaser or the chased must be known
+		// in order for protection to be determined.
+
 		if (!chaser.isKnown() && !chased.isKnown())
 			return;
+
 		assert getPiece(i) == chased : "chased not at i?";
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
@@ -621,7 +623,33 @@ public class Board
 
 		if (unknownProtector != null
 			&& knownProtector == null) {
-			// strong unknown protector confirmed
+
+		// If both the chased piece and the protector are unknown,
+		// then it cannot be certain which piece is stronger.
+		// (Recall that the chased is actually the chaser, so
+		// an unknown piece is attacking a known piece.)
+		// If the chased piece already has an acting rank chase,
+		// and that rank is greater than the chaser piece rank,
+		// reset the acting rank chase to NIL.
+		// For example, if an unknown Blue approaches known Red Two,
+		// it is not possible to tell which piece is stronger.
+		// So set the acting rank chase to NIL and caveat emptor.
+		// B? -- R2
+		// -- B? --
+		//
+		// Or,
+		// -- B? R2
+		// B? -- -- 
+
+			if (!chased.isKnown()) {
+				Rank rank = chased.getActingRankChase();
+				if (rank.toInt() > chaser.getApparentRank().toInt())
+					chased.setActingRankChase(Rank.NIL);
+				return;
+			}
+
+		// strong unknown protector confirmed
+
 			int r = chased.getRank().toInt();
 			if (chaser.getApparentRank().toInt() < r)
 				r = chaser.getApparentRank().toInt();
@@ -651,7 +679,7 @@ public class Board
 				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
 			return;
 
-	       // If an unknown piece has been fleeing,
+		// If an unknown piece has been fleeing,
 		// and gets trapped in some way, it may just give up.
 		// So do not assign a chase rank equal to the flee rank.
 
@@ -660,7 +688,7 @@ public class Board
 
 		// Chasing an unknown sets the chase rank to UNKNOWN.
 		// Once set, the chase rank
-		// is never changed again because if  a piece chases an Unknown,
+		// is never changed again because if a piece chases an Unknown,
 		// it could be a bluffing high rank that will chase anything or
 		// less likely, but possible, it could be an invincible
 		// piece.  Its real identity can be determined only
@@ -673,16 +701,6 @@ public class Board
 			|| arank.toInt() > chaser.getRank().toInt())
 			chased.setActingRankChase(chaser.getRank());
 	}
-
-	// Example 1:
-	// -- -- R7
-	// -- B? --
-	// B5 B? --
-	//
-	// Known Red Seven moves left.  No chase rank set because
-	// Blue has the move.
-	//
-	//
 
 	void genChaseRank(int turn)
 	{
@@ -716,10 +734,21 @@ public class Board
 				if (!isValid(j))
 					continue;
 				Piece chaser = getPiece(j);
-				if (chaser == null
-					|| chaser.getColor() != turn
-					|| !chaser.hasMoved()
-					|| (chased.isKnown() && chaser.getRank().toInt() <= chased.getRank().toInt())
+				if (chaser == null || chaser.getColor() != turn)
+					continue;
+
+		// If the chased piece (moved or unmoved) is not known,
+		// all that is known is that the chaser is intent on discovery,
+		// and so the piece gains a permanent chase rank of Unknown. 
+
+				if (!chased.isKnown()) {
+					if (!chaser.isKnown())
+						chaser.setActingRankChase(Rank.UNKNOWN);
+					continue;
+				}
+
+				if (!chaser.hasMoved()
+					|| chaser.getRank().toInt() <= chased.getRank().toInt()
 					|| chaser.getRank() == Rank.FLAG
 					|| chaser.getRank() == Rank.BOMB)
 					continue;
@@ -784,8 +813,7 @@ public class Board
 
 			setPiece(null, m.getFrom());
 			setPiece(fp, m.getTo());
-			fp.setMoved(true);
-			fp.moves++;
+			fp.setMoved();
 			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
 				Math.abs(m.getToY() - m.getFromY()) > 1) {
 				//scouts reveal themselves by moving more than one place

@@ -46,8 +46,8 @@ public class Skin
 	private static final String SKIN_B  = "#6060FF";
 	private static final String SKIN_RA = "#FF8080";
 	private static final String SKIN_BA = "#A0A0FF";
-	private static final String SKIN_RAA = "#FF4040";
-	private static final String SKIN_BAA = "#8080FF";
+	private static final String SKIN_RAA = "#BB7070";
+	private static final String SKIN_BAA = "#9090BB";
 	public Color bgColor    = Color.decode(SKIN_BG);
 	public Color mapColor   = Color.decode(SKIN_G);
 	public Color waterColor = Color.decode(SKIN_W);
