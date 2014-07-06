@@ -607,8 +607,10 @@ public class AI implements Runnable
 			}
 		}
 
-		if (moveList.size() == 0)
+		if (moveList.size() == 0) {
+			log("Empty move list");
 			return;		// ai trapped
+		}
 
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;

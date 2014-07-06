@@ -651,11 +651,13 @@ public class Board
 		// strong unknown protector confirmed
 
 			int r = chased.getRank().toInt();
+
+		// One cannot be protected.
+			if (r == 1)
+				return;
+
 			if (chaser.getApparentRank().toInt() < r)
 				r = chaser.getApparentRank().toInt();
-		// One cannot be protected.
-			else if (r == 1)
-				return;
 			else
 				r--;
 			r--;
