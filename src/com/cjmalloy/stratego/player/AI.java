@@ -449,14 +449,14 @@ public class AI implements Runnable
 				continue;
 			}
 
-		// More Squares Rule
+
+			// More Squares Rule
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			if (b.isMoreSquares())
+			if (b.isRepeatedMove())
 				moveList.remove(k);
 
 			b.undo(0);
-
 		}
 
 		// Settings tick marks:
@@ -956,17 +956,24 @@ public class AI implements Runnable
 			b.popMove();
 			log.println(n + ": (null move) " + valueB + " " + vm);
 			} else {
-			// NOTE: FORWARD TREE PRUNING (minor)
-			// isRepeatedMove() discards back-and-forth moves.
-			// This is done now rather than during move
-			// generation because most moves
-			// are pruned off by alpha-beta,
-			// so calls to isRepeatedMove() are also pruned off,
-			// saving a heap of time.
-			if (b.isRepeatedMove(max.move))
+
+		// NOTE: FORWARD TREE PRUNING (minor)
+		// isRepeatedMove() discards repetitive moves.
+		// This is done now rather than during move
+		// generation because most moves
+		// are pruned off by alpha-beta,
+		// so calls to isRepeatedMove() are also pruned off,
+		// saving a heap of time.
+
+			if (b.isTwoSquares(max.move))
 				continue;
 
 			b.move(max.move, depth, max.unknownScoutFarMove);
+
+			if (b.isRepeatedMove()) {
+				b.undo(valueB);
+				continue;
+			}
 
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 

@@ -83,14 +83,26 @@ public class Board
 	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
 	protected long hash = 0;
 
+	protected static TTEntry[] ttable = new TTEntry[2<<22];
+
 	static {
 		Random rnd = new Random();
 		for ( int k = 0; k < 2; k++)
 		for ( int m = 0; m < 2; m++)
 		for ( int c = RED; c <= BLUE; c++)
 		for ( int r = 0; r < 15; r++)
-		for ( int i = 12; i <= 120; i++)
-			boardHash[k][m][c][r][i] = rnd.nextLong();
+		for ( int i = 12; i <= 120; i++) {
+			long n = rnd.nextLong();
+
+		// It is really silly that java does not have unsigned
+		// so we lose a bit of precision.  hash has to
+		// be positive because we use it to index ttable.
+
+			if (n < 0)
+				boardHash[k][m][c][r][i] = -n;
+			else
+				boardHash[k][m][c][r][i] = n;
+		}
 	}
 	
 	public Board()
@@ -296,6 +308,10 @@ public class Board
 			setup[i] = Rank.UNKNOWN;
 
 		hash = 0;
+
+		for (TTEntry t : ttable)
+			if (t != null)
+				t.clear();
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -459,6 +475,10 @@ public class Board
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
 		UndoMove um = new UndoMove(fp, tp, from, to, hash);
+		undoList.add(um);
+
+		int index = (int)(hash % ttable.length);
+		ttable[index] = new TTEntry(hash, from, to);
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -542,8 +562,6 @@ public class Board
 				}
 			}
 		}
-
-		undoList.add(um);
 	}
 
 	// Return true if the chase piece is obviously protected.
@@ -719,24 +737,29 @@ public class Board
 				continue;
 			Piece chased = getPiece(i);
 
-		// start out by finding a chased piece of the opposite color
+		// Start out by finding a chased piece of the opposite color
+		// (This can even be the One, because if a chaser piece
+		// approaches the One and has a protector, then we know
+		// the protector is a Spy (or acting like a Spy).
 	
 			if (chased == null
 				|| chased.getColor() == turn
 				|| chased.getRank() == Rank.FLAG
-				|| chased.getRank() == Rank.BOMB
-				|| chased.getRank() == Rank.ONE)
+				|| chased.getRank() == Rank.BOMB)
 				continue;
 
-		// then find a chaser piece of the same color
-		// that just moved adjacent to the chaser
+		// Then find a chaser piece of the same color
+		// adjacent to the chaser (rank does not matter
+		// at this point).
 
 			for (int d : dir) {
 				int j = i + d;
 				if (!isValid(j))
 					continue;
 				Piece chaser = getPiece(j);
-				if (chaser == null || chaser.getColor() != turn)
+				if (chaser == null
+					|| chaser.getColor() != turn
+					|| !chaser.hasMoved())
 					continue;
 
 		// If the chased piece (moved or unmoved) is not known,
@@ -749,8 +772,10 @@ public class Board
 					continue;
 				}
 
-				if (!chaser.hasMoved()
-					|| chaser.getRank().toInt() <= chased.getRank().toInt()
+		// If the chaser is a lower or equal rank to the chased piece,
+		// there is nothing more that can be determined.
+
+				if (chaser.getRank().toInt() <= chased.getRank().toInt()
 					|| chaser.getRank() == Rank.FLAG
 					|| chaser.getRank() == Rank.BOMB)
 					continue;
@@ -879,7 +904,12 @@ public class Board
 		if (Settings.twoSquares
 			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
 			BMove prev = undoList.get(size-2);
-			return (undoList.get(size-6)).equals(prev)
+			if (prev == null)
+				return false;
+			BMove prevprev = undoList.get(size-6);
+			if (prevprev == null)
+				return false;
+			return prevprev.equals(prev)
 				&& m.getFrom() == prev.getTo()
 				&& m.getTo() == prev.getFrom();
 		} else
@@ -921,25 +951,57 @@ public class Board
 		return dejavu();
 	}
 
-	// This is a stricter version of the Two Squares rule.
+	// This implements the More-Squares Rule,
+	// and is more restrictive because it also eliminates repetitive
+	// non-chase moves as well as chase moves.
 	// It is used during move generation to forward prune
 	// repeated moves.
-	public boolean isRepeatedMove(BMove m)
+	public boolean isRepeatedMove()
 	{
-		int size = undoList.size();
-		if (size < 4)
-			return false;
-
 		// AI always abides by Two Squares rule
 		// even if box is not checked (AI plays nice).
+
+		int size = undoList.size();
+		if (size < 2)
+			return false;
+
+		BMove m = undoList.get(size-1);
+		if (m == null)
+			return false;
+
 		if (Settings.twoSquares
 			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
-			BMove prev = undoList.get(size-4);
-			if (prev == null)
+			int index = (int)(hash % ttable.length);
+			TTEntry entry = ttable[index];
+			if (entry == null || entry.key != hash)
 				return false;
-			return m.equals(prev);
+
+		// Position has been reached before
+
+		// Check for chase
+
+			BMove oppmove = undoList.get(size-2);
+			if (oppmove == null)
+				return false;
+
+			for (int d : dir) {
+				int i = oppmove.getTo() + d;
+				if (!isValid(i))
+					continue;
+
+		// piece is being chased, so repetitive moves OK
+
+				if (i == m.getFrom()) {
+					// chase confirmed
+					return false;
+				}
+			}
+
+			return true;
 		} else
-			// let opponent get away with it
+
+		// let opponent get away with it
+
 			return false;
 	}
 
@@ -968,6 +1030,11 @@ public class Board
 			undoList.remove(size - 1);
 		}
 		Collections.sort(tray);
+
+		int index = (int)(hash % ttable.length);
+		TTEntry entry = ttable[index];
+		if (entry != null)
+			entry.clear();
 	}
 
 
