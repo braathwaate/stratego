@@ -662,7 +662,7 @@ public class Board
 			if (!chased.isKnown()) {
 				Rank rank = chased.getActingRankChase();
 				if (rank.toInt() > chaser.getApparentRank().toInt())
-					chased.setActingRankChase(Rank.NIL);
+					chased.setActingRankChaseEqual(Rank.NIL);
 				return;
 			}
 
@@ -687,9 +687,20 @@ public class Board
 			else
 				rank = Rank.toRank(r);
 
+		// Once the AI has indirectly identified the opponent Spy
+		// (by attacking an opponent Two that had a protector)
+		// the AI sticks with the guess, even if the suspected
+		// Spy later tries to bluff.  This is because the Two is
+		// so valuable, that it is unlikely, although possible,
+		// that the opponent would risk the Two in a high stakes
+		// bluff, protected by some other piece.
+		// 
 			Rank arank = unknownProtector.getActingRankChase();
+			if (arank == Rank.SPY)
+				rank = Rank.SPY;
+
 			if (arank == Rank.NIL || arank.toInt() > r)
-				unknownProtector.setActingRankChase(rank);
+				unknownProtector.setActingRankChaseLess(rank);
 		}
 
 		// set chase rank
@@ -719,7 +730,7 @@ public class Board
 			&& arank != Rank.UNKNOWN)
 			|| chaser.getRank() == Rank.UNKNOWN
 			|| arank.toInt() > chaser.getRank().toInt())
-			chased.setActingRankChase(chaser.getRank());
+			chased.setActingRankChaseEqual(chaser.getRank());
 	}
 
 	void genChaseRank(int turn)
@@ -763,13 +774,25 @@ public class Board
 					continue;
 
 		// If the chased piece (moved or unmoved) is not known,
-		// all that is known is that the chaser is intent on discovery,
-		// and so the piece gains a permanent chase rank of Unknown. 
+		// and the chaser had no prior chase rank,
+		// the piece gains a permanent chase rank of Unknown.
+		// This is because a piece that willingly moves next
+		// to an unknown is willing to sacrifice itself
+		// (and so the AI guesses that the piece is probably
+		// a high-ranked piece).
+		//
+		// The difficulty is determining if the piece willingly
+		// moved next to an unknown or was cornered.  So if
+		// the piece already has a chase rank, it is retained
+		// if it approaches an unknown.
 
 				if (!chased.isKnown()) {
-					if (!chaser.isKnown())
-						chaser.setActingRankChase(Rank.UNKNOWN);
+					if (!chaser.isKnown()) {
+						Rank chaserRank = chaser.getActingRankChase();
+						if (chaserRank == Rank.NIL)
+							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
 					continue;
+					}
 				}
 
 		// If the chaser is a lower or equal rank to the chased piece,
@@ -952,10 +975,20 @@ public class Board
 	}
 
 	// This implements the More-Squares Rule,
-	// and is more restrictive because it also eliminates repetitive
+	// but is more restrictive because it also eliminates
+	// all repetitive moves,
 	// non-chase moves as well as chase moves.
 	// It is used during move generation to forward prune
 	// repeated moves.
+	//
+	// Note that a player chasing an opponent piece
+	// can reach a previous position
+	// and still abide by More-Squares Rule, as long as the
+	// moves are not continuous.
+	//
+	// Because isRepeatedMove() is more restrictive, the AI
+	// does not expect the opponent to abide by this rule as coded.
+	//
 	public boolean isRepeatedMove()
 	{
 		// AI always abides by Two Squares rule
@@ -969,40 +1002,33 @@ public class Board
 		if (m == null)
 			return false;
 
-		if (Settings.twoSquares
-			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
-			int index = (int)(hash % ttable.length);
-			TTEntry entry = ttable[index];
-			if (entry == null || entry.key != hash)
-				return false;
+		int index = (int)(hash % ttable.length);
+		TTEntry entry = ttable[index];
+		if (entry == null || entry.key != hash)
+			return false;
 
 		// Position has been reached before
 
 		// Check for chase
 
-			BMove oppmove = undoList.get(size-2);
-			if (oppmove == null)
-				return false;
+		BMove oppmove = undoList.get(size-2);
+		if (oppmove == null)
+			return false;
 
-			for (int d : dir) {
-				int i = oppmove.getTo() + d;
-				if (!isValid(i))
-					continue;
+		for (int d : dir) {
+			int i = oppmove.getTo() + d;
+			if (!isValid(i))
+				continue;
 
 		// piece is being chased, so repetitive moves OK
 
-				if (i == m.getFrom()) {
-					// chase confirmed
-					return false;
-				}
+			if (i == m.getFrom()) {
+				// chase confirmed
+				return false;
 			}
+		}
 
-			return true;
-		} else
-
-		// let opponent get away with it
-
-			return false;
+		return true;
 	}
 
 	public void undoLastMove()

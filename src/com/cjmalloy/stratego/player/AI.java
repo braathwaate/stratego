@@ -970,7 +970,8 @@ public class AI implements Runnable
 
 			b.move(max.move, depth, max.unknownScoutFarMove);
 
-			if (b.isRepeatedMove()) {
+			if (turn == Settings.topColor
+				&& b.isRepeatedMove()) {
 				b.undo(valueB);
 				continue;
 			}

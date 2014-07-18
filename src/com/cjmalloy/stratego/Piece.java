@@ -17,6 +17,8 @@
 
 package com.cjmalloy.stratego;
 
+import java.util.EnumSet;
+
 public class Piece implements Comparable<Piece>
 {
 	private int uniqueID = 0;
@@ -31,11 +33,16 @@ public class Piece implements Comparable<Piece>
 	private int value = 0;
 	private Rank actingRankFlee = Rank.NIL;
 	private Rank actingRankChase = Rank.NIL;
-	private boolean suspectedRank = false;
 	private int index = 0;
 	
 	public int moves = 0;	// times piece has moved
 	private boolean blocker = false;
+
+	    public enum Flags {
+		IS_SUSPECTED, IS_LESS
+	    }
+
+	private EnumSet<Flags> flags = EnumSet.noneOf(Flags.class);
 
 	public Piece(int id, int c, Rank r) 
 	{
@@ -59,7 +66,7 @@ public class Piece implements Comparable<Piece>
 		shown = p.shown;
 		actingRankFlee = p.actingRankFlee;
 		actingRankChase = p.actingRankChase;
-		suspectedRank = p.suspectedRank;
+		flags = p.flags.clone();
 		value = p.value;
 		index = p.index;
 		blocker = p.blocker;
@@ -72,7 +79,7 @@ public class Piece implements Comparable<Piece>
 		shown = false;
 		actingRankChase = Rank.NIL;
 		actingRankFlee = Rank.NIL;
-		suspectedRank = false;
+		flags = EnumSet.noneOf(Flags.class);
 		value = 0;
 		index = 0;
 		blocker = false;
@@ -158,9 +165,21 @@ public class Piece implements Comparable<Piece>
 		return actingRankChase;
 	}
 
-	public void setActingRankChase(Rank r)
+	public void setActingRankChaseEqual(Rank r)
 	{
 		actingRankChase = r;
+		flags.remove(Flags.IS_LESS);
+	}
+
+	public void setActingRankChaseLess(Rank r)
+	{
+		actingRankChase = r;
+		flags.add(Flags.IS_LESS);
+	}
+
+	public boolean isRankLess()
+	{
+		return flags.contains(Flags.IS_LESS);
 	}
 
 	public Rank getActingRankFlee()
@@ -177,13 +196,13 @@ public class Piece implements Comparable<Piece>
 
 	public boolean isSuspectedRank()
 	{
-		return suspectedRank;
+		return flags.contains(Flags.IS_SUSPECTED);
 	}
 
 	public void setSuspectedRank(Rank r)
 	{
 		setRank(r);
-		suspectedRank = true;
+		flags.add(Flags.IS_SUSPECTED);
 	}
 
 	public void setBlocker(boolean b)
