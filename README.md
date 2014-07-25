@@ -1,3 +1,11 @@
+Introduction
+------------
+
+Demon Of Ignorance is
+a java version of the game of stratego.
+This version of the game is forked from cjmalloy/stratego
+and mainly offers a much improved AI and some other features.
+
 Download
 --------
 
@@ -7,16 +15,10 @@ Download
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
 
-Introduction
-------------
-
-Java remake of stratego.  Forked from cjmalloy/stratego.
-This version has an improved AI and other features.
-
 Installation and Requirements
 -----------------------------
 
-Stratego requires java, which you probably already have or can
+Demon Of Ignorance requires java, which you probably already have or can
 figure out how to download.
 
 To run on most computers, just double click on the jar file to run.
@@ -36,11 +38,15 @@ About the AI (Artificial Intelligence)
 The AI algorithm is the usual minimax with alpha-beta pruning.
 Iterative deepening and heuristic history is used 
 for move ordering to increase pruning success.
+Killer move is used for efficiency.
+Quiescent Search and First Move Weighing are used to reduce
+to reduce the horizon effect.
+Move generation abides by the Two-Square and More-Squares rules.
 
 The search time is adjustable with the Settings menu.
 At the default depth (1 tick)
 it completes within a fraction of a second
-usally completing about 6 ply depending on the speed of the desktop.
+usally completing about 4-6 ply depending on the speed of the desktop.
 
 The evaluation function is based on material gained versus lost
 as well as opponent piece rank discovery.
@@ -49,21 +55,40 @@ of discovering important piece ranks versus the risk of loss.
 Hence, an valuable AI piece will generally avoid unknown and unmoved opponent pieces
 whereas lesser AI pieces are eager to sacrifice themselves if the loss
 leads to key opponent piece discovery that assists in winning the game.
-Once an AI piece becomes invincible, it will attack all unknown moved pieces.
-The AI derives opponent piece information based on how the
-opponent piece interacts with its pieces or whether it moves at all.
+
+A primary goal of the AI is to keep its low ranked pieces unknown
+and unmoved
+while it tries to discover the ranks of the opponent's low ranked pieces,
+primarily the opponent's One.
+As the opponent's low ranked pieces become known,
+the AI's low ranked pieces (Two and up) become locally invincible,
+which allow it attack all higher ranked or unknown moved pieces with impunity.
+
+The AI derives opponent piece rank based on how an
+opponent piece interacts with its pieces.
+When an opponent piece appears to act as a strong chase piece
+or protector, the AI tries to attack it with pieces of
+expendable rank to confirm its suspicions.
 
 Static position analysis is used to determine piece destinations.
-Success is largely dependent on the AI in gaining opponent piece information.
-I won't tell you how it works here because it is a bit of a spoiler.
-As with human opponents, once you know their strategy
-it is easy to thwart it.
-This is much worse with the AI, because it does not adapt.
-You need to read the code if you want to find out
-what the AI tries to accomplish.
+Success is largely dependent on the AI in gaining
+knowledge of opponent piece rank.
+(However, this does lead the AI to make pointless chases
+which are mitigated only by the Two-Squares and More-Squares rules).
+
+Once a piece gets in the general vicinity of its target(s),
+the AI relies on the minimax algorithm to find
+the optimal set of moves that
+allows it to attack its target.
 
 This algorithm results in a modest amateur level of play,
-able to defeat most casual human players.
+able to defeat most casual human players and most stratego bots.
+A primary failing of other stratego bots is the lack of bluffing,
+which allows the AI to easily determine piece ranks
+without random attack.
+However, even if the opponent does bluff, the AI does not heavily
+weight suspected piece ranks until confirmed through attack by
+a piece of expendable rank.
 
 Areas for improvements are:
 
@@ -78,11 +103,11 @@ Areas for improvements are:
 AI Regression Testing
 ---------------------
 
-Stratego supports the interface protocol defined in
+Demon Of Ignorance supports the interface protocol defined in
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
 This is used to test the strength of the AI
 by playing the AI against the bots including itself and the prior release.
-To use Stratego with the Stratego AI Evaluator,
+To use Demon Of Ignorance with the Stratego AI Evaluator,
 use the -t option on the command line.
 
 For a given set of initial setups,

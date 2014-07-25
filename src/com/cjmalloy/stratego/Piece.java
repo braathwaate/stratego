@@ -26,20 +26,21 @@ public class Piece implements Comparable<Piece>
 
 	private Rank rank = null;
 
-	private boolean shown = false;	// visible on screen
-	private boolean known = false;	// known to players
-	// a known piece can be not shown
-	// a shown piece can be unknown to the computer
 	private int value = 0;
 	private Rank actingRankFlee = Rank.NIL;
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
 	
 	public int moves = 0;	// times piece has moved
-	private boolean blocker = false;
 
+	// a known piece can be not shown
+	// a shown piece can be unknown to the computer
 	    public enum Flags {
-		IS_SUSPECTED, IS_LESS
+		IS_SUSPECTED,
+		IS_LESS,
+		IS_BLOCKER,
+		IS_SHOWN,	// visible on screen
+		IS_KNOWN	// known to players
 	    }
 
 	private EnumSet<Flags> flags = EnumSet.noneOf(Flags.class);
@@ -62,27 +63,21 @@ public class Piece implements Comparable<Piece>
 		color = p.color;
 		moves = p.moves;
 		rank = p.rank;
-		known = p.known;
-		shown = p.shown;
 		actingRankFlee = p.actingRankFlee;
 		actingRankChase = p.actingRankChase;
 		flags = p.flags.clone();
 		value = p.value;
 		index = p.index;
-		blocker = p.blocker;
 	}
 
 	public void clear()
 	{
 		moves = 0;
-		known = false;
-		shown = false;
 		actingRankChase = Rank.NIL;
 		actingRankFlee = Rank.NIL;
 		flags = EnumSet.noneOf(Flags.class);
 		value = 0;
 		index = 0;
-		blocker = false;
 	}
 
 	public void setRank(Rank r)
@@ -92,7 +87,7 @@ public class Piece implements Comparable<Piece>
 
 	public void makeKnown()
 	{
-		known = true;
+		flags.add(Flags.IS_KNOWN);
 	}
 
 	public int getColor() 
@@ -102,7 +97,7 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getApparentRank() 
 	{
-		if (!known)
+		if (!isKnown())
 			return Rank.UNKNOWN;
 		else
 			return rank;
@@ -120,22 +115,28 @@ public class Piece implements Comparable<Piece>
 	
 	public boolean isShown()
 	{
-		return shown;
+		return flags.contains(Flags.IS_SHOWN);
 	}
 	
 	public void setShown(boolean b)
 	{
-		shown = b;
+		if (b)
+			flags.add(Flags.IS_SHOWN);
+		else
+			flags.remove(Flags.IS_SHOWN);
 	}	
 	
 	public boolean isKnown()
 	{
-		return known;
+		return flags.contains(Flags.IS_KNOWN);
 	}
 	
 	public void setKnown(boolean b)
 	{
-		known = b;
+		if (b)
+			flags.add(Flags.IS_KNOWN);
+		else
+			flags.remove(Flags.IS_KNOWN);
 	}
 
 	public boolean hasMoved()
@@ -160,7 +161,7 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankChase()
 	{
-		if (known)
+		if (isKnown())
 			return rank;
 		return actingRankChase;
 	}
@@ -184,7 +185,7 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankFlee()
 	{
-		if (known)
+		if (isKnown())
 			return rank;
 		return actingRankFlee;
 	}
@@ -207,12 +208,15 @@ public class Piece implements Comparable<Piece>
 
 	public void setBlocker(boolean b)
 	{
-		blocker = b;
+		if (b)
+			flags.add(Flags.IS_BLOCKER);
+		else
+			flags.remove(Flags.IS_BLOCKER);
 	}
 
 	public boolean isBlocker()
 	{
-		return blocker;
+		return flags.contains(Flags.IS_BLOCKER);
 	}
 
 	public int getIndex()

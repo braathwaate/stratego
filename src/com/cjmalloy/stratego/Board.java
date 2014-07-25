@@ -619,12 +619,18 @@ public class Board
 		assert getPiece(i) == chased : "chased not at i?";
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
+		int open = 0;
 		for (int d : dir) {
 			int j = i + d;
 			if (!isValid(j))
 				continue;
 			Piece p = getPiece(j);
-			if (p == null || p.getColor() == chaser.getColor())
+			if (p == null) {
+				open++;
+				continue;
+			}
+
+			if (p.getColor() == chaser.getColor())
 				continue;
 
 			if (p.isKnown()
@@ -638,6 +644,12 @@ public class Board
 			} else
 				unknownProtector= p;
 		}
+
+		// if the chased piece is trapped, nothing can be
+		// determined about the protection
+
+		if (open == 0)
+			return;
 
 		if (unknownProtector != null
 			&& knownProtector == null) {
@@ -703,7 +715,42 @@ public class Board
 				unknownProtector.setActingRankChaseLess(rank);
 		}
 
-		// set chase rank
+		// Set direct chase rank
+
+		// Set direct chase rank to the piece that just moved.
+		// Do not set direct chase rank to any other piece.
+		//
+		// For example:
+		// B? -- R3
+		// Red Three approaches Unknown Blue.  Blue makes some
+		// other move.  So after Blue makes some other move,
+		// Unknown Blue should not acquire a chase rank because
+		// Unknown Blue did not approach Red Three.
+		//
+		// Why would Blue make some other move?  It would appear
+		// that Blue should take Red Three if Blue is lower ranked,
+		// flee if Blue is higher ranked, or stay put, attack, or
+		// flee if even ranked?
+		//
+		// But there are reasons why Blue may not move.
+		// 1. It is cornered.
+		// 2. It will lose the piece anyway because fleeing
+		//    would lead Red Three to fork a more valuable piece.
+		// 3. It is currently forked with another piece.
+		// 4. Blue is a human player and just missed the fact
+		//    that its piece is under attack.
+		// 5. It is protected.
+		//
+		// Case #3 occurs frequently.  For example,
+		// B? --
+		// -- R3
+		// B4
+		// If Red Three forks unknown Blue and Blue Four, Blue Four
+		// flees, unknown Blue should not acquire a chase rank.
+
+		Move m = getLastMove();
+		if (m.getPiece() != chased)
+			return;
 
 		if (unknownProtector != null
 			|| (knownProtector != null
@@ -733,16 +780,19 @@ public class Board
 			chased.setActingRankChaseEqual(chaser.getRank());
 	}
 
+	// Chase acting rank is set implicitly if
+	// a known piece under attack does not move
+	// and it has only one possible unknown defender.
+	//
+	// (This is how the ai can guess the spy: if the
+	// a known Two is attacked by an ai piece, and it
+	// does not move or another piece moves to protect it)
+	//
+	// Note that chase rank is set after the player move
+	// but flee rank is set before the player move.
+
 	void genChaseRank(int turn)
 	{
-		// Chase acting rank is set implicitly if
-		// a known piece under attack does not move
-		// and it has only one possible unknown defender.
-		//
-		// (This is how the ai can guess the spy: if the
-		// a known Two is attacked by an ai piece, and it
-		// does not move or another piece moves to protect it)
-		//
 		for ( int i = 12; i <= 120; i++) {
 			if (!isValid(i))
 				continue;
@@ -791,12 +841,28 @@ public class Board
 						Rank chaserRank = chaser.getActingRankChase();
 						if (chaserRank == Rank.NIL)
 							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
-					continue;
+						continue;
 					}
 				}
 
 		// If the chaser is a lower or equal rank to the chased piece,
 		// there is nothing more that can be determined.
+		//
+		// TBD: If the chased piece is Unknown, the chaser will be
+		// lower in rank and the code will continue.  However,
+		// there is more that can be determined in this case
+		// if the chaser is not invincible, because if the chaser
+		// believes that the Unknown is a low ranked piece, then
+		// the protector must even be lower.  For example,
+		// R? -- B?
+		// -- B2 --
+		// Blue Two moves between Unknown Red and Unknown Blue.
+		// If Blue thinks that Unknown Red could be Red One
+		// and Unknown Blue is Blue Spy, then Red could guess that
+		// Unknown Blue *is* Blue Spy.  But if Blue does not think
+		// that Unknown Red is Red One, this is simply an attacking
+		// move and nothing can be determined about Unknown Blue.
+		// 
 
 				if (chaser.getRank().toInt() <= chased.getRank().toInt()
 					|| chaser.getRank() == Rank.FLAG

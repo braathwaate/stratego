@@ -299,8 +299,8 @@ public class AI implements Runnable
 		// NOTE: FORWARD PRUNING
 		// generate scout far moves only for attacks by unknown
 		// valuable pieces.
-		// if there are no nines (or only one) left, don't bother
-				if (ninesAtLarge > 1 && fprank == Rank.UNKNOWN) {
+		// if there are no nines left, then skip this code
+				if (ninesAtLarge > 0 && fprank == Rank.UNKNOWN) {
 					Piece p;
 					do {
 						t += d;
@@ -1011,45 +1011,55 @@ public class AI implements Runnable
 		Rank rank = p.getRank();
 		if (p.getColor() == Settings.bottomColor
 			&& !p.isKnown()
-			&& (p.isSuspectedRank()
-			|| p.getActingRankFlee() != Rank.NIL
-			|| p.getActingRankChase() != Rank.NIL))
-			return p.getRank() + "[" + p.isSuspectedRank()
-				+ "," + p.getActingRankChase()
+			&& (p.getActingRankFlee() != Rank.NIL
+				|| p.getActingRankChase() != Rank.NIL))
+			return p.getRank() + "["
+				+ p.getActingRankChase()
 				+ "," + p.getActingRankFlee() + "]";
 
 		return "" + p.getRank();
 	}
 
+	String logFlags(Piece p)
+	{
+		String s = "";
+		if (p.hasMoved())
+			s += 'M';
+		else
+			s += ' ';
+		if (p.isKnown())
+			s += 'K';
+		else
+			s += ' ';
+		if (p.isSuspectedRank())
+			s += 'S';
+		else
+			s += ' ';
+		if (p.isRankLess())
+			s += 'L';
+		else
+			s += ' ';
+		return s;
+	}
+
+
 	void logMove(int n, Board b, BMove move, int valueB, int value)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
-	char hasMoved = ' ';
-	if (b.getPiece(move.getFrom()).hasMoved())
-		hasMoved = 'M';
-	char isKnown = ' ';
-	if (b.getPiece(move.getFrom()).isKnown())
-		isKnown = 'K';
 	if (b.getPiece(move.getTo()) == null) {
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + ")"
-	+ hasMoved + isKnown + " "
+	+ logFlags(b.getPiece(move.getFrom())) + " "
 	+ valueB + " " + value);
 	} else {
-		char tohasMoved = ' ';
-		if (b.getPiece(move.getTo()).hasMoved())
-			tohasMoved = 'M';
-		char toisKnown = ' ';
-		if (b.getPiece(move.getTo()).isKnown())
-			toisKnown = 'K';
 		char X = 'x';
 		if (n == 0)
 			X = 'X';
 	log.println(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + X + logPiece(b.getPiece(move.getTo())) + ")"
-	+ hasMoved + isKnown + " " + tohasMoved + toisKnown
+	+ logFlags(b.getPiece(move.getFrom())) + " " + logFlags(b.getPiece(move.getTo()))
 	+ " " + b.getPiece(move.getTo()).aiValue() + " " + valueB + " " + value);
 	}
 	}
