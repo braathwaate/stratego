@@ -733,10 +733,10 @@ public class Board
 		// flee if even ranked?
 		//
 		// But there are reasons why Blue may not move.
-		// 1. It is cornered.
-		// 2. It will lose the piece anyway because fleeing
+		// 1. Unknown Blue is cornered.
+		// 2. Unknown Blue will lose the piece anyway because fleeing
 		//    would lead Red Three to fork a more valuable piece.
-		// 3. It is currently forked with another piece.
+		// 3. Unknown Blue is currently forked with another piece.
 		// 4. Blue is a human player and just missed the fact
 		//    that its piece is under attack.
 		// 5. It is protected.
@@ -752,7 +752,8 @@ public class Board
 		if (m.getPiece() != chased)
 			return;
 
-		if (unknownProtector != null
+		if (chased.isKnown()
+			|| unknownProtector != null
 			|| (knownProtector != null
 				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
 			return;
@@ -761,7 +762,7 @@ public class Board
 		// and gets trapped in some way, it may just give up.
 		// So do not assign a chase rank equal to the flee rank.
 
-		if (chased.getActingRankFlee() == chaser.getRank())
+		if (chased.getActingRankFlee() == chaser.getApparentRank())
 			return;
 
 		// Chasing an unknown sets the chase rank to UNKNOWN.
@@ -773,11 +774,13 @@ public class Board
 		// through attack.
 
 		Rank arank = chased.getActingRankChase();
-		if ((arank == Rank.NIL
-			&& arank != Rank.UNKNOWN)
-			|| chaser.getRank() == Rank.UNKNOWN
-			|| arank.toInt() > chaser.getRank().toInt())
-			chased.setActingRankChaseEqual(chaser.getRank());
+		if (arank == Rank.UNKNOWN)
+			return;
+
+		if (chaser.getApparentRank() == Rank.UNKNOWN
+			|| arank == Rank.NIL 
+			|| arank.toInt() > chaser.getApparentRank().toInt())
+			chased.setActingRankChaseEqual(chaser.getApparentRank());
 	}
 
 	// Chase acting rank is set implicitly if
@@ -805,8 +808,8 @@ public class Board
 	
 			if (chased == null
 				|| chased.getColor() == turn
-				|| chased.getRank() == Rank.FLAG
-				|| chased.getRank() == Rank.BOMB)
+				|| chased.getApparentRank() == Rank.FLAG
+				|| chased.getApparentRank() == Rank.BOMB)
 				continue;
 
 		// Then find a chaser piece of the same color
@@ -848,9 +851,8 @@ public class Board
 		// If the chaser is a lower or equal rank to the chased piece,
 		// there is nothing more that can be determined.
 		//
-		// TBD: If the chased piece is Unknown, the chaser will be
-		// lower in rank and the code will continue.  However,
-		// there is more that can be determined in this case
+		// However, if the chased piece is Unknown, 
+		// then there is more that can be determined in this case
 		// if the chaser is not invincible, because if the chaser
 		// believes that the Unknown is a low ranked piece, then
 		// the protector must even be lower.  For example,
@@ -863,10 +865,29 @@ public class Board
 		// that Unknown Red is Red One, this is simply an attacking
 		// move and nothing can be determined about Unknown Blue.
 		// 
+		// One way to determine whether Blue believes Unknown Red
+		// is a superior piece is if Blue neglects to attack
+		// Unknown Red.  For example,
+		// R? B2 -- B?
+		// If Blue Two does not attack Unknown Red, and instead
+		// moves unknown Blue towards Blue Two, then Red is signaling
+		// that it believes Unknown Red is a superior piece.
+		//
+		// So if the last move was not the chaser, then it can
+		// be assumed that the player believes the unknown chased piece
+		// is a superior piece, and so the AI assumes that its
+		// protector is even more superior.
 
-				if (chaser.getRank().toInt() <= chased.getRank().toInt()
-					|| chaser.getRank() == Rank.FLAG
-					|| chaser.getRank() == Rank.BOMB)
+				Rank chasedRank = chased.getApparentRank();
+				Rank chaserRank = chaser.getApparentRank();
+
+				if (chasedRank == Rank.UNKNOWN) {
+					Move m = getLastMove();
+					if (m.getPiece() == chaser)
+						continue;
+				} else if (chaserRank.toInt() <= chasedRank.toInt()
+					|| chaserRank == Rank.FLAG
+					|| chaserRank == Rank.BOMB)
 					continue;
 
 		// Now this is the tricky part.

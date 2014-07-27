@@ -93,12 +93,17 @@ a piece of expendable rank.
 Areas for improvements are:
 
   1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the two squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the two squares rule, then chase attacks would be much more successful and worthy of deep analysis.
-  2. Heuristic.
-  3. Static position analysis.
-  4. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
-  5. Opponent bots.  Improve or add opponent bots in 
+  2. Heuristic.  This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  The primary issue is how much too weight suspected pieces given a bluffing opponent.
+  3. Suspected Rank Analysis.  This is perhaps the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but gives it signficant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.
+  4. Plans.  There are very few plans.
+	A. Chase opponent pieces that that could result in a favorable exchange.
+	B. Attack flag structures.
+	C. Protect its flag.
+	D. Determine opponent piece ranks through bluffing or baiting.
+  5. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
+  6. Opponent bots.  Improve or add opponent bots in 
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
-  6. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does not support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
+  7. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does not support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
 
 AI Regression Testing
 ---------------------
