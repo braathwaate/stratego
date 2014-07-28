@@ -25,10 +25,10 @@ public class Grid
 	// board with illegal squares
 	// so that illegal moves are easily discarded
 
-private Piece[] grid = new Piece[133];
-private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
+	private Piece[] grid = new Piece[133];
+	private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
 
-protected static class UniqueID
+	protected static class UniqueID
         {
                 private static int id = 0;
 
@@ -38,7 +38,6 @@ protected static class UniqueID
                         return id;
                 }
         }
-
 	
 	public Grid() 
 	{
@@ -114,6 +113,13 @@ protected static class UniqueID
 			}
 		}
 	}
+
+	// number of steps between indicies
+	static public int steps(int f, int t)
+	{
+		return Math.abs(getY(t)-getY(f)) + Math.abs(getX(t)-getX(f));
+	}
+
 
 	// search for closest relevant piece to Piece p
 	public int closestPieceDir(Piece p, boolean isBombed)

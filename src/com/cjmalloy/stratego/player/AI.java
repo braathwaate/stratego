@@ -855,19 +855,31 @@ public class AI implements Runnable
 		else
 			v = beta;
 
+		// If the chaser is N or more squares away, then
+		// the chase is considered over.
+		// What often happens in a extended random chase,
+		// is that the chased piece approaches one of its other
+		// pieces, allowing the chaser to fork the two pieces.
+		// N = 3 means chaser has 1 move to become adjacent
+		// to the chased piece, so the forked piece must be
+		// adjacent to the the chaser. 
+		// N = 4 gives the chaser a broader area to attack
+		// after a chase.  For example,
+		// -- -- --
+		// B2 -- R5
+		// -- R7 R4
+		// R3
+		// Red Three has been fleeing Blue Two.  If Blue Two
+		// moves right, Red Five will move and
+		// the chase will be over (N=3), but
+		// QS will award Blue with Red Seven.
+		// But if N=4, Blue has one more move, so after Red Five
+		// flees, Blue Two moves right again, forking Red Five
+		// and Red Four.
+
 		if (chasePiece != null && turn == Settings.bottomColor) {
-			Move move = b.getLastMove();
-			if (move != null) {
-				boolean chaseOver = true;
-				for (int d : dir) {
-					if (chasePiece.getIndex() + d == move.getFrom()) {
-						chaseOver = false;
-						break;
-					}
-				}
-				if (chaseOver)
-					return qs(b, turn, depth, QSMAX, false);
-			}
+			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
+				return qs(b, turn, depth, QSMAX, false);
 		}
 
 		// Try the killer move before move generation
