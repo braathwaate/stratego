@@ -120,15 +120,45 @@ public class Grid
 		return Math.abs(getY(t)-getY(f)) + Math.abs(getX(t)-getX(f));
 	}
 
+	static public int dir(int f, int t)
+	{
+		int x = getX(f);
+		int y = getY(f);
+		int tx = getX(t);
+		int ty = getY(t);
+		int dir = 0;
+
+		if (y > ty) {
+			if (x > tx)
+				dir = 12;
+			else if (x == tx)
+				dir = 11;
+			else
+				dir = 10;
+		} else if (y == ty) {
+			if (x > tx)
+				dir = 1;
+			else
+				dir = -1;
+		} else {
+			if (x > tx)
+				dir = -10;
+			else if (x == tx)
+				dir = -11;
+			else
+				dir = -12;
+		}
+		return dir;
+	}
 
 	// search for closest relevant piece to Piece p
-	public int closestPieceDir(Piece p, boolean isBombed)
+	public Piece closestPiece(Piece p, boolean isBombed)
 	{
 		int tx = Grid.getX(p.getIndex());
 		int ty = Grid.getY(p.getIndex());
 	
 		int minsteps = 99;
-		int dir = 0;
+		Piece found = null;
 		for (int y = 0; y < 10; y++)
 		for (int x = 0; x < 10; x++) {
 			Piece fp = getPiece(x,y);
@@ -147,29 +177,10 @@ public class Grid
 			int steps = Math.abs(ty - y) + Math.abs(tx - x);
 			if (steps < minsteps) {
 				minsteps = steps;
-				if (y > ty) {
-					if (x > tx)
-						dir = 12;
-					else if (x == tx)
-						dir = 11;
-					else
-						dir = 10;
-				} else if (y == ty) {
-					if (x > tx)
-						dir = 1;
-					else
-						dir = -1;
-				} else {
-					if (x > tx)
-						dir = -10;
-					else if (x == tx)
-						dir = -11;
-					else
-						dir = -12;
-				}
+				found = fp;
 			}
 		}
 
-		return dir;
+		return found;
 	}
 }

@@ -36,6 +36,7 @@ import com.cjmalloy.stratego.Board;
 import com.cjmalloy.stratego.BMove;
 import com.cjmalloy.stratego.Grid;
 import com.cjmalloy.stratego.Move;
+import com.cjmalloy.stratego.UndoMove;
 import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Rank;
 import com.cjmalloy.stratego.Settings;
@@ -297,7 +298,7 @@ public class AI implements Runnable
 
 
 		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks by unknown
+		// generate scout far moves only for attacks on unknown
 		// valuable pieces.
 		// if there are no nines left, then skip this code
 				if (ninesAtLarge > 0 && fprank == Rank.UNKNOWN) {
@@ -673,8 +674,8 @@ public class AI implements Runnable
 	// or can attack a known piece of lesser rank.
 	private boolean isMovable(TestingBoard b, int i)
 	{
-		Piece p = b.getPiece(i);
-		Rank rank = p.getRank();
+		Piece fp = b.getPiece(i);
+		Rank rank = fp.getRank();
 		if (rank == Rank.FLAG || rank == Rank.BOMB)
 			return false;
 		for (int d: dir) {
@@ -684,11 +685,12 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(j);
 			if (tp == null)
 				return true;
-			if (tp.getColor() == p.getColor()
-				|| !tp.isKnown()
-				|| rank.toInt() > tp.getRank().toInt())
+			if (tp.getColor() == fp.getColor())
 				continue;
-			return true;
+			int result = b.winFight(fp, tp);
+			if (result == Rank.WINS
+				|| result == Rank.EVEN)
+				return true;
 		}
 		return false;
 	}
@@ -788,9 +790,20 @@ public class AI implements Runnable
 		// bombs because the bomb might actually be
 		// some other piece, but once the bomb becomes
 		// known, it ceases to move.
+
 			Rank fprank = fp.getRank();
 			if (fprank == Rank.BOMB && fp.isKnown())
 			 	continue;
+
+		// TBD: Far attacks by nines or unknown pieces
+		// are not handled.  This would improve the
+		// accuracy of qs.  isMovable() would have to
+		// check the direction of the attack.  If nines
+		// are handled, then it would be impossible to
+		// to reuse the result in subsequent moves
+		// (tbd: use qs from prior move (or null move)
+		// if new move is not adjacent to any pieces involved
+		// in attack)
 
 			for (int d : dir ) {
 				boolean canFlee = false;
@@ -841,7 +854,8 @@ public class AI implements Runnable
 		BMove bestmove = null;
 		int valueB = b.getValue();
 		int v;
-		if (n < 1)
+		UndoMove lastmove = b.getLastMove();
+		if (n < 1 || (lastmove != null && lastmove.tp != null && lastmove.tp.getRank() == Rank.FLAG))
 			return qs(b, turn, depth, QSMAX, false);
 
 		if (bestMove != null
@@ -1021,8 +1035,7 @@ public class AI implements Runnable
 	String logPiece(Piece p)
 	{
 		Rank rank = p.getRank();
-		if (p.getColor() == Settings.bottomColor
-			&& !p.isKnown()
+		if (!p.isKnown()
 			&& (p.getActingRankFlee() != Rank.NIL
 				|| p.getActingRankChase() != Rank.NIL))
 			return p.getRank() + "["
@@ -1049,6 +1062,10 @@ public class AI implements Runnable
 			s += ' ';
 		if (p.isRankLess())
 			s += 'L';
+		else
+			s += ' ';
+		if (p.isBlocker())
+			s += 'B';
 		else
 			s += ' ';
 		return s;

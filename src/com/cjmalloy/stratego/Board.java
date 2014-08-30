@@ -41,26 +41,6 @@ public class Board
 		}
 	}
 
-        public class UndoMove extends Move
-        {
-                public Piece tp = null;
-		public Piece fpcopy = null;
-		public Piece tpcopy = null;
-		public long hash = 0;
-
-		public UndoMove(Piece fpin, Piece tpin, int f, int t, long h)
-		{
-			super(fpin, f, t);
-			tp = tpin;
-			fpcopy = new Piece(fpin);
-			if (tp != null)
-				tpcopy = new Piece(tp);
-			else
-				tpcopy = null;
-			hash = h;
-		}
-        }
-
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
 
 	
@@ -651,31 +631,47 @@ public class Board
 		if (open == 0)
 			return;
 
-		if (unknownProtector != null
-			&& knownProtector == null) {
+		if (unknownProtector != null) {
 
 		// If both the chased piece and the protector are unknown,
-		// then it cannot be certain which piece is stronger.
-		// (Recall that the chased is actually the chaser, so
+		// and the chased piece approached the chaser
+		// (recall that the chased piece is actually the chaser, so
 		// an unknown piece is attacking a known piece.)
-		// If the chased piece already has an acting rank chase,
-		// and that rank is greater than the chaser piece rank,
-		// reset the acting rank chase to NIL.
+		// then it cannot be certain which piece is stronger.
+		//
 		// For example, if an unknown Blue approaches known Red Two,
 		// it is not possible to tell which piece is stronger.
 		// So set the acting rank chase to NIL and caveat emptor.
 		// B? -- R2
 		// -- B? --
 		//
-		// Or,
-		// -- B? R2
+		// However, if the chased piece neglects to attack
+		// a known piece (thereby acquiring an acting rank flee),
+		// it can be certain that the unknown protector
+		// is the stronger piece.
+		// For example, known Red Five approaches unknown Blue
+		// (because it has a chase rank of Unknown from chasing
+		// unknown pieces, suggesting that it is a high ranked
+		// piece).  The unknown blue protector moves to protect
+		// the unknown blue under attack.
+		// -- B? R5
 		// B? -- -- 
 
 			if (!chased.isKnown()) {
-				Rank rank = chased.getActingRankChase();
-				if (rank.toInt() > chaser.getApparentRank().toInt())
-					chased.setActingRankChaseEqual(Rank.NIL);
-				return;
+				assert chaser.isKnown() : "unknown chaser?";
+				Rank fleeRank = chased.getActingRankFlee();
+				Rank chaserRank = chaser.getApparentRank();
+				if (fleeRank != chaserRank) {
+
+		// If the chased piece already has an acting rank chase,
+		// and that rank is greater than the chaser piece rank,
+		// reset the acting rank chase to NIL.
+
+					Rank chasedRank = chased.getActingRankChase();
+					if (chasedRank.toInt() > chaserRank.toInt())
+						chased.setActingRankChaseEqual(Rank.NIL);
+					return;
+				}
 			}
 
 		// strong unknown protector confirmed
@@ -691,6 +687,12 @@ public class Board
 			else
 				r--;
 			r--;
+
+		// known piece is protector
+
+		if (knownProtector != null
+			&& knownProtector.getRank().toInt() <= r)
+			return;
 
 		// Only a Spy can protect a piece attacked by a One.
 			Rank rank;
@@ -783,6 +785,20 @@ public class Board
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
 	}
 
+	boolean forked(int i)
+	{
+		int color = getPiece(i).getColor();
+		for (int d : dir) {
+			int j = i + d;
+			Piece p = getPiece(j);
+			if (p == null)
+				continue;
+			if (p.isKnown() && p.getColor() != color)
+				return true;
+		}
+		return false;
+	}
+
 	// Chase acting rank is set implicitly if
 	// a known piece under attack does not move
 	// and it has only one possible unknown defender.
@@ -838,12 +854,25 @@ public class Board
 		// moved next to an unknown or was cornered.  So if
 		// the piece already has a chase rank, it is retained
 		// if it approaches an unknown.
+		//
+		// If the unknown chaser attacking an unknown chased piece
+		// also forks a known piece, it could
+		// be the unknown attacker is targeting the known piece
+		// and not the unknown, so no rank is assigned.  For example,
+		// -- R3 --
+		// B? -- R?
+		// B? B? --
+		// Unknown Blue (a One or Two) moves towards Red Three.
+		// Blue doesn't care that R?xB? reveals its rank
+		// because B?xR3 wins.
 
 				if (!chased.isKnown()) {
 					if (!chaser.isKnown()) {
-						Rank chaserRank = chaser.getActingRankChase();
-						if (chaserRank == Rank.NIL)
-							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
+						if (!forked(j)) {
+							Rank chaserRank = chaser.getActingRankChase();
+							if (chaserRank == Rank.NIL)
+								chaser.setActingRankChaseEqual(Rank.UNKNOWN);
+						}
 						continue;
 					}
 				}
