@@ -37,6 +37,7 @@ public class Piece implements Comparable<Piece>
 	// a shown piece can be unknown to the computer
 	    public enum Flags {
 		IS_SUSPECTED,
+		MAYBE_EIGHT,	// unknown piece could be an eight
 		IS_LESS,
 		IS_BLOCKER,
 		IS_SHOWN,	// visible on screen
@@ -217,6 +218,19 @@ public class Piece implements Comparable<Piece>
 	public boolean isBlocker()
 	{
 		return flags.contains(Flags.IS_BLOCKER);
+	}
+
+	public void setMaybeEight(boolean b)
+	{
+		if (b)
+			flags.add(Flags.MAYBE_EIGHT);
+		else
+			flags.remove(Flags.MAYBE_EIGHT);
+	}
+
+	public boolean getMaybeEight()
+	{
+		return flags.contains(Flags.MAYBE_EIGHT);
 	}
 
 	public int getIndex()

@@ -9,8 +9,8 @@ and mainly offers a much improved AI and some other features.
 Download
 --------
 
-[Stratego player v0.7.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v.0.7.0/stratego_v0.7.0.jar
+[Stratego player v0.8.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.8.0/stratego_v0.8.0.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -39,8 +39,8 @@ The AI algorithm is the usual minimax with alpha-beta pruning.
 Iterative deepening and heuristic history is used 
 for move ordering to increase pruning success.
 Killer move is used for efficiency.
-Quiescent Search and First Move Weighing are used to reduce
-to reduce the horizon effect.
+Quiescent Search and Singular Extension are used to reduce
+the horizon effect.
 Move generation abides by the Two-Square and More-Squares rules.
 
 The search time is adjustable with the Settings menu.

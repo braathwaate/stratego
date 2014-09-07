@@ -1,5 +1,5 @@
 PKG=com/cjmalloy/stratego
-VER=stratego_v0.8.0.jar
+VER=stratego_v0.8.1.jar
 
 all: $(VER) 
 
