@@ -9,8 +9,8 @@ and mainly offers a much improved AI and some other features.
 Download
 --------
 
-[Stratego player v0.8.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.8.0/stratego_v0.8.0.jar
+[Stratego player v0.8.1][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.8.1/stratego_v0.8.1.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -40,13 +40,13 @@ Iterative deepening and heuristic history is used
 for move ordering to increase pruning success.
 Killer move is used for efficiency.
 Quiescent Search and Singular Extension are used to reduce
-the horizon effect.
+the horizon effect resulting from a very shallow search depth.
 Move generation abides by the Two-Square and More-Squares rules.
 
 The search time is adjustable with the Settings menu.
 At the default depth (1 tick)
 it completes within a fraction of a second
-usally completing about 4-6 ply depending on the speed of the desktop.
+usually completing about 3-5 ply depending on the speed of the desktop.
 
 The evaluation function is based on material gained versus lost
 as well as opponent piece rank discovery.
@@ -92,8 +92,8 @@ a piece of expendable rank.
 
 Areas for improvements are:
 
-  1. Search tree.  Extreme pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the two squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the two squares rule, then chase attacks would be much more successful and worthy of deep analysis.
-  2. Heuristic.  This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  The primary issue is how much too weight suspected pieces given a bluffing opponent.
+  1. Search tree.  Forward pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the Two Squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the Two Squares rule, then chase attacks would be much more successful and worthy of deep analysis.  Restrict move generation to only those pieces that can affect the outcome.
+  2. Heuristic.  This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  One issue is how much to weight suspected pieces given a bluffing opponent.
   3. Suspected Rank Analysis.  This is perhaps the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but gives it signficant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.
   4. Plans.  There are very few plans.
 	A. Chase opponent pieces that that could result in a favorable exchange.
