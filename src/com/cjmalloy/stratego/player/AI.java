@@ -320,14 +320,17 @@ public class AI implements Runnable
 
 				} else if (fprank == Rank.NINE) {
 					t += d;
-					if (!b.isValid(t))
+					Piece p = b.getPiece(t);
+
+		// if next-to-adjacent square is invalid or contains
+		// the same color piece, a far move is not possible
+
+					if (p != null
+						&& p.getColor() != 1 - fpcolor)
 						continue;
-					Piece p;
-					while (true) {
-						p = b.getPiece(t);
-						if (p != null)
-							break;
+					while (p == null) {
 						t += d;
+						p = b.getPiece(t);
 					};
 					if (p.getColor() != 1 - fpcolor)
 						t -= d;
@@ -462,7 +465,8 @@ public class AI implements Runnable
 			if (b.isRepeatedMove())
 				moveList.remove(k);
 
-			b.undo(0);
+			b.undo();
+			assert b.getValue() == 0 : "Board value not zero?";
 		}
 
 		// Settings tick marks:
@@ -624,7 +628,7 @@ public class AI implements Runnable
 	// To negate the horizon effect where the ai
 	// plays a losing move to delay a negative result
 	// discovered deep in the tree, the value of the best
-	// move is searched one ply deeper (singular extension).
+	// move is searched two plies deeper (singular extension).
 	// For example,
 	// B5 R4
 	// B3 --
@@ -635,7 +639,7 @@ public class AI implements Runnable
 	// simply play B3xR4 and play the winning sequence on its next
 	// move.
 	//
-	// By searching one ply deeper, the ai may see that R4xB5
+	// By searching two plies deeper, the ai may see that R4xB5
 	// is a loss, even if R4xB4 delays the Blue winning sequence
 	// past the horizon.
 
@@ -643,18 +647,21 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(mvp.move.getTo());
 
 			int vm = -9999;
-			for (int n2 = 1; n2 >= 0; n2--) {
+			for (int n2 = 1; n2 >= -1; n2 -= 2) {
 				b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 				vm = valueNMoves(b, n-n2, alpha, beta, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
 
 				mvp.value = vm;
 
-				b.undo(0);
+				b.undo();
+				assert b.getValue() == 0 : "Board value not zero?";
 				int v = 0;
 				if (tp != null)
 					v = b.actualValue(tp);
 				logMove(1+n-n2, b, tmpM, v, vm);
+
+		// no horizon effect possible until ply 2
 
 				if (n == 1 || vm <= alpha)
 					break;
@@ -832,7 +839,10 @@ public class AI implements Runnable
 		// pieces reduces the value of the board by 4.
 		
 				if (turn == tp.getColor()) {
-					if (tp.isKnown() && tp.getRank() != Rank.BOMB)
+					if (fp.isKnown()
+						&& fp.getRank() != Rank.BOMB
+						&& tp.isKnown()
+						&& tp.getRank() != Rank.BOMB)
 						adjacentKnownPieces++;
 					continue;
 				}
@@ -845,7 +855,7 @@ public class AI implements Runnable
 
 				int vm = qs(b, 1-turn, depth+1, n-1, false);
 
-				b.undo(valueB);
+				b.undo();
 
 		// Save worthwhile attack (vm > best)
 		// (if vm < best, the player will play
@@ -940,7 +950,7 @@ public class AI implements Runnable
 
 			int vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
-			b.undo(valueB);
+			b.undo();
 
 			logMove(n, b, tmpM, valueB, vm);
 
@@ -1024,13 +1034,13 @@ public class AI implements Runnable
 
 			if (turn == Settings.topColor
 				&& b.isRepeatedMove()) {
-				b.undo(valueB);
+				b.undo();
 				continue;
 			}
 
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
-			b.undo(valueB);
+			b.undo();
 
 			logMove(n, b, max.move, valueB, vm);
 			}

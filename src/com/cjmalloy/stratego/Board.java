@@ -454,7 +454,7 @@ public class Board
 	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int from, int to)
 	{
-		UndoMove um = new UndoMove(fp, tp, from, to, hash);
+		UndoMove um = new UndoMove(fp, tp, from, to, hash, 0);
 		undoList.add(um);
 
 		int index = (int)(hash % ttable.length);

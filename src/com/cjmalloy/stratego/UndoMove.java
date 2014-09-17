@@ -23,8 +23,9 @@ public class UndoMove extends Move
 	public Piece fpcopy = null;
 	public Piece tpcopy = null;
 	public long hash = 0;
+	public int value;
 
-	public UndoMove(Piece fpin, Piece tpin, int f, int t, long h)
+	public UndoMove(Piece fpin, Piece tpin, int f, int t, long h, int v)
 	{
 		super(fpin, f, t);
 		tp = tpin;
@@ -34,6 +35,7 @@ public class UndoMove extends Move
 		else
 			tpcopy = null;
 		hash = h;
+		value = v;
 	}
 }
 
