@@ -60,12 +60,17 @@ public class AI implements Runnable
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
-		int value = 0;
+		protected int value;
 		boolean unknownScoutFarMove = false;
-		MoveValuePair(BMove m, int v, boolean s) {
+		MoveValuePair(BMove m, boolean s) {
 			move = m;
-			value = v;
 			unknownScoutFarMove = s;
+		}
+		public int getValue() {
+			return value;
+		}
+		public void setValue(int v) {
+			value = v;
 		}
 		public int compareTo(MoveValuePair mvp) {
 			return mvp.value - value;
@@ -219,19 +224,24 @@ public class AI implements Runnable
 			System.runFinalization();
 			System.gc(); 
 
+		// note: no assertions here, because they overwrite
+		// earlier assertions
+
 			if (bestMove == null)
 				engine.aiReturnMove(null);
+			else if (bestMove.move == null)
+				log("Null move");
+			else if (board.getPiece(bestMove.move.getFrom()) == null)
+ 				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
+			else {
+				logMove(0, board, bestMove.move, 0, bestMove.value);
+				// return the actual board move
+				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
+			}
 
-			assert bestMove != null  : "bestMove is null?";
-			assert bestMove.move != null : "bestMove.move is null?";
-			assert board.getPiece(bestMove.move.getFrom()) != null : "bestMove at " + bestMove.move.getFrom() + " from piece is null?";
-
-			logMove(0, board, bestMove.move, 0, bestMove.value);
 			log.println("----");
 			log.flush();
 
-			// return the actual board move
-			engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			aiLock.unlock();
 		}
 	}
@@ -293,7 +303,7 @@ public class AI implements Runnable
 
 		// move to open square
 					BMove tmpM = new BMove(i, t);
-					moveList.add(new MoveValuePair(tmpM, 0, false));
+					moveList.add(new MoveValuePair(tmpM, false));
 				}
 
 
@@ -312,7 +322,7 @@ public class AI implements Runnable
 						&& b.isValuable(p)) {
 						BMove tmpM = getMove(b, fp, i, t);
 						if (tmpM != null)
-							moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+							moveList.add(new MoveValuePair(tmpM, !fp.isKnown()));
 					} // attack
 
 		// NOTE: FORWARD PRUNING
@@ -336,14 +346,14 @@ public class AI implements Runnable
 						t -= d;
 					BMove tmpM = getMove(b, fp, i, t);
 					if (tmpM != null)
-						moveList.add(new MoveValuePair(tmpM, 0, !fp.isKnown()));
+						moveList.add(new MoveValuePair(tmpM, !fp.isKnown()));
 				} // nine
 			} else {
 
 		// attack
 				BMove tmpM = getMove(b, fp, i, t);
 				if (tmpM != null)
-					moveList.add(new MoveValuePair(tmpM, 0, false));
+					moveList.add(new MoveValuePair(tmpM, false));
 			}
 		} // d
 
@@ -380,7 +390,7 @@ public class AI implements Runnable
 			// has found protection, this could be a good
 			// way to end the chase.
 			// Add null move
-			moveList.add(new MoveValuePair(null, 0, false));
+			moveList.add(new MoveValuePair(null, false));
 
 		} else {
 		boolean hasMove = false;
@@ -394,7 +404,7 @@ public class AI implements Runnable
 		// FORWARD PRUNING
 		// Add null move
 		if (hasMove)
-			moveList.add(new MoveValuePair(null, 0, false));
+			moveList.add(new MoveValuePair(null, false));
 		}
 
 		return moveList;
@@ -404,6 +414,7 @@ public class AI implements Runnable
 	{
 		BMove tmpM = null;
 		bestMove = null;
+		int bestMoveValue = 0;
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -413,7 +424,10 @@ public class AI implements Runnable
 		Move lastMove = b.getLastMove(1);
 		if (lastMove != null) {
 			lastMoveTo = lastMove.getTo();
-			lastMovedPiece = b.getPiece(lastMoveTo);
+			Piece p = b.getPiece(lastMoveTo);
+		// make sure last moved piece is still on the board
+			if (p != null && p.equals(lastMove.getPiece()))
+				lastMovedPiece = p;
 		}
 
 		// move history heuristic (hh)
@@ -481,10 +495,11 @@ public class AI implements Runnable
 		stopTime = System.currentTimeMillis( )
  			+ Settings.aiLevel * Settings.aiLevel * 100;
 
+		boolean discardPly = false;	// horizon effect
+
 		for (int n = 1; n < 20; n++) {
 
 		int alpha = -9999;
-		int beta = 9999;
 
 		// FORWARD PRUNING:
 		// Some opponent AI bots like to chase pieces around
@@ -535,31 +550,30 @@ public class AI implements Runnable
 
 		if (chasePiece == null
 			&& lastMovedPiece != null
-			&& lastMovedPiece.equals(lastMove.getPiece())
 
-			// Begin chase after 2 iterations of broad search
+		// Begin chase after xx iterations of broad search
 			&& n >= 3
 			&& bestMove != null
 
-			// Chase is skipped if best move from broad search
-			// is to attack a piece (perhaps the chaser)
+		// Chase is skipped if best move from broad search
+		// is to attack a piece (perhaps the chaser)
 			&& b.getPiece(bestMove.move.getTo()) == null
 
-			// Limit deep chase to superior pieces.
-			// Using deep chase can be risky if the
-			// objective of the chaser is not be the chased
-			// piece, but some other piece, like a flag or
-			// flag bomb.
+		// Limit deep chase to superior pieces.
+		// Using deep chase can be risky if the
+		// objective of the chaser is not be the chased
+		// piece, but some other piece, like a flag or
+		// flag bomb.
 			&& b.getPiece(bestMove.move.getFrom()).getRank().toInt() <= 4 ) {
 
-			// check for possible chase
+		// check for possible chase
 			for (int d : dir) {
 				int from = lastMoveTo + d;
 				if (from != bestMove.move.getFrom())
 					continue;
 
-				// chase confirmed:
-				// bestMove is to move chased piece 
+		// chase confirmed:
+		// bestMove is to move chased piece 
 				int count = 0;
 				for (int k = moveList.size()-1; k >= 0; k--)
 				if (from == moveList.get(k).move.getFrom()) {
@@ -568,8 +582,8 @@ public class AI implements Runnable
 					if (tp != null) {
 					
 					int result = b.winFight(b.getPiece(from), tp);
-					// If chased piece wins or is even
-					// continue broad search.
+		// If chased piece wins or is even
+		// continue broad search.
 					if (result == Rank.WINS
 						|| result == Rank.EVEN) {
 						count = 0;
@@ -581,25 +595,25 @@ public class AI implements Runnable
 					count++;
 				}
 
-				// Note: if the chased piece has a choice of
-				// 1 open square and 1 opponent piece,
-				// broad search is continued.  Deep search
-				// is not used because the AI may discover
-				// many moves later that the open square is
-				// a bad move, leading it to attack the
-				// opponent piece. This may appear to
-				// be a bad choice, because usually the opponent
-				// is not highly skilled at pushing the
-				// chased piece for so many moves
-				// in the optimal direction.  But because
-				// the broad search is shallow, the AI can
-				// be lured into a trap by taking material.
-				// So perhaps this can be solved by doing
-				// a half-deep search?
+		// Note: if the chased piece has a choice of
+		// 1 open square and 1 opponent piece,
+		// broad search is continued.  Deep search
+		// is not used because the AI may discover
+		// many moves later that the open square is
+		// a bad move, leading it to attack the
+		// opponent piece. This may appear to
+		// be a bad choice, because usually the opponent
+		// is not highly skilled at pushing the
+		// chased piece for so many moves
+		// in the optimal direction.  But because
+		// the broad search is shallow, the AI can
+		// be lured into a trap by taking material.
+		// So perhaps this can be solved by doing
+		// a half-deep search?
 				if (count >= 2) {
-					// Chased piece has at least 2 moves
-					// to open squares.
-					// Pick the better path.
+		// Chased piece has at least 2 moves
+		// to open squares.
+		// Pick the better path.
 					chasePiece = lastMovedPiece;
 					chasePiece.setIndex(lastMoveTo);
 					chasedPiece = b.getPiece(from);
@@ -625,49 +639,19 @@ public class AI implements Runnable
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
 
-	// To negate the horizon effect where the ai
-	// plays a losing move to delay a negative result
-	// discovered deep in the tree, the value of the best
-	// move is searched two plies deeper (singular extension).
-	// For example,
-	// B5 R4
-	// B3 --
-	//
-	// If the ai discovers a winning sequence of moves for Blue
-	// deep in the tree, the ai would play R4xB5 because it assumes
-	// Blue will play the winning sequence of moves.  But Blue will
-	// simply play B3xR4 and play the winning sequence on its next
-	// move.
-	//
-	// By searching two plies deeper, the ai may see that R4xB5
-	// is a loss, even if R4xB4 delays the Blue winning sequence
-	// past the horizon.
+			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			Piece fp = b.getPiece(mvp.move.getFrom());
+			int vm = valueNMoves(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
+
+			mvp.setValue(vm);
+
+			b.undo();
+			assert b.getValue() == 0 : "Board value not zero?";
+			int v = 0;
 			Piece tp = b.getPiece(mvp.move.getTo());
-
-			int vm = -9999;
-			for (int n2 = 1; n2 >= -1; n2 -= 2) {
-				b.move(tmpM, 0, mvp.unknownScoutFarMove);
-
-				vm = valueNMoves(b, n-n2, alpha, beta, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
-
-				mvp.value = vm;
-
-				b.undo();
-				assert b.getValue() == 0 : "Board value not zero?";
-				int v = 0;
-				if (tp != null)
-					v = b.actualValue(tp);
-				logMove(1+n-n2, b, tmpM, v, vm);
-
-		// no horizon effect possible until ply 2
-
-				if (n == 1 || vm <= alpha)
-					break;
-				log("singular extension");
-
-			}
+			if (tp != null)
+				v = b.actualValue(tp);
+			logMove(n, b, tmpM, v, vm);
 
 			if (vm > alpha)
 			{
@@ -677,7 +661,64 @@ public class AI implements Runnable
 
 		log.println("-+-");
 		Collections.sort(moveList);
-		bestMove = moveList.get(0);
+
+		// To negate the horizon effect where the ai
+		// plays a losing move to delay a negative result
+		// discovered deeper in the tree, the search is
+		// extended two plies deeper.
+		// If the extended search cannot be completed in time,
+		// the AI sticks with the result of the last acceptable ply.
+		// For example,
+		// B5 R4
+		// B3 --
+		//
+		// If the ai discovers a winning sequence of moves for Blue
+		// deeper in the tree, the ai would play R4xB5
+		// because it assumes
+		// Blue will play the winning sequence of moves.  But Blue will
+		// simply play B3xR4 and play the winning sequence on its next
+		// move.
+		//
+		// By searching two plies deeper, the ai may see that R4xB5
+		// is a loss, even if R4xB4 delays the Blue winning sequence
+		// past the horizon.  If the search cannot be completed
+		// in time, the AI will play some other move that does not
+		// lose material immediately, oblivious that Blue has a
+		// winning sequence coming.  (This can only be solved by
+		// increasing search depth).
+
+		MoveValuePair bestMovePly = moveList.get(0);
+
+		if (n == 1 || chasePiece != null) {
+
+		// no horizon effect possible until ply 2
+
+			bestMove = bestMovePly;
+			bestMoveValue = bestMove.getValue();
+
+		} else {
+
+		// The AI accepts the best move of a deeper search only
+		// if the value is better (or just slightly worse) than
+		// the value of the best move of a shallow search 
+		// OR
+		// if the deeper search is 2 plies deeper than
+		// the ply of the currently selected best move.
+		
+			if (bestMove == bestMovePly
+				|| bestMovePly.getValue() > bestMoveValue - 15
+				|| discardPly) {
+				bestMove = bestMovePly;
+				bestMoveValue = bestMove.getValue();
+				discardPly = false;
+			} else {
+				discardPly = true;
+				n += 1;
+				log("ply " + n + ": best move discarded.");
+				continue;
+			}
+		}
+
 		hh[bestMove.move.getFrom()][bestMove.move.getTo()]+=n;
 		log.println("-+++-");
 
@@ -821,6 +862,12 @@ public class AI implements Runnable
 		// (tbd: use qs from prior move (or null move)
 		// if new move is not adjacent to any pieces involved
 		// in attack)
+		//
+		// TBD: Another reason to handle far attacks is
+		// the deep chase code.  It relies on qs, so
+		// a known AI piece can be chased out of the
+		// way to permit an attack on an unknown AI piece
+		// without the AI realizing it.
 
 			for (int d : dir ) {
 				boolean canFlee = false;
@@ -985,7 +1032,7 @@ public class AI implements Runnable
 		ArrayList<MoveValuePair> moveList = getMoves(b, turn, chasePiece, chasedPiece);
 		for (MoveValuePair mvp : moveList) {
 			if (mvp.move != null)
-				mvp.value = hh[mvp.move.getFrom()][mvp.move.getTo()];
+				mvp.setValue(hh[mvp.move.getFrom()][mvp.move.getTo()]);
 		}
 
 		for (int i = 0; i < moveList.size(); i++) {
@@ -1003,7 +1050,7 @@ public class AI implements Runnable
 				int tj = i;
 				for (int j = i + 1; j < moveList.size(); j++) {
 					MoveValuePair tmvp = moveList.get(j);
-					if (tmvp.value > max.value) {
+					if (tmvp.getValue() > max.getValue()) {
 						max = tmvp;
 						tj = j;
 					}
