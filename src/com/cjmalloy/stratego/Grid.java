@@ -152,10 +152,10 @@ public class Grid
 	}
 
 	// search for closest relevant piece to Piece p
-	public Piece closestPiece(Piece p, boolean isBombed)
+	public Piece closestPiece(Piece p, int offset, boolean isBombed)
 	{
-		int tx = Grid.getX(p.getIndex());
-		int ty = Grid.getY(p.getIndex());
+		int tx = Grid.getX(p.getIndex() + offset);
+		int ty = Grid.getY(p.getIndex() + offset);
 	
 		int minsteps = 99;
 		Piece found = null;

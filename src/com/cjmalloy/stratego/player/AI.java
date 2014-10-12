@@ -686,6 +686,24 @@ public class AI implements Runnable
 		// lose material immediately, oblivious that Blue has a
 		// winning sequence coming.  (This can only be solved by
 		// increasing search depth).
+		//
+		// This seems to work most of the time.  But not if
+		// the loss is more than two ply deeper.  For example,
+		// R? R? -- R? RF R? -- -- -- --
+		// -- -- -- -- -- -- -- B4 R5 --
+		//
+		// If Red Flag is known (the code may mark the flag
+		// as known if it is vulnerable so that the search tree
+		// moves AI pieces accordingly in defense), Red moves
+		// one of its unknown pieces because Blue Four x Red Five
+		// moves Blue Four *away* from Red Flag, causing a delay
+		// of 4 ply.  Red will continue to do this until all of
+		// its pieces have been lost.
+		//
+		// This happens not just with Red Flag, but in any instance
+		// where the AI sees a loss of a more valuable piece
+		// and can lose a lessor piece by drawing the attacker
+		// away.  Fortunately, this does not occur in play often.
 
 		MoveValuePair bestMovePly = moveList.get(0);
 
@@ -834,7 +852,6 @@ public class AI implements Runnable
 			best = vm;
 		}
 
-		int adjacentKnownPieces=0;
 		for (Piece fp : b.pieces[turn]) {
 			if (fp == null)	// end of list
 				break;
@@ -875,24 +892,8 @@ public class AI implements Runnable
 				if (!b.isValid(t))
 					continue;
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null)
+				if (tp == null || turn == tp.getColor())
 					continue;
-
-		// This is a convenient spot to count
-		// the number of a player's adjacent
-		// known pieces, which has negative impact on the
-		// value of a board, because known adjacent pieces
-		// are often easily forked.  Two adjacent known
-		// pieces reduces the value of the board by 4.
-		
-				if (turn == tp.getColor()) {
-					if (fp.isKnown()
-						&& fp.getRank() != Rank.BOMB
-						&& tp.isKnown()
-						&& tp.getRank() != Rank.BOMB)
-						adjacentKnownPieces++;
-					continue;
-				}
 
 				if (flee && isMovable(b, t))
 					canFlee = true;
@@ -929,7 +930,7 @@ public class AI implements Runnable
 		if (bestFlee)
 			best = nextBest;
 
-		return best - adjacentKnownPieces * 2;
+		return best;
 	}
 
 	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
