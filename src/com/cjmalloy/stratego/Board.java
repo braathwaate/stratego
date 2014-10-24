@@ -641,9 +641,22 @@ public class Board
 		//
 		// For example, if an unknown Blue approaches known Red Two,
 		// it is not possible to tell which piece is stronger.
-		// So set the acting rank chase to NIL and caveat emptor.
 		// B? -- R2
 		// -- B? --
+		//
+		// Furthermore, prior chase and flee acting rank
+		// of unknown Blue becomes unreliable.  For example, if
+		// unknown Blue had an acting chase rank of Three,
+		// and then approaches Red Two in the example,
+		// Red cannot assume that unknown Blue is a Three
+		// and sit idly by.
+		//
+		// So set the acting rank chase to NIL and caveat emptor.
+		// Also set the flee acting rank to NIL, because if
+		// flee acting rank was Unknown, and stayed Unknown while
+		// acting rank chase was set to NIL, the AI would assume
+		// that the piece was a desirable target, because it
+		// fled and did not approach any piece.
 		//
 		// However, if the chased piece neglects to attack
 		// a known piece (thereby acquiring an acting rank flee),
@@ -668,8 +681,10 @@ public class Board
 		// reset the acting rank chase to NIL.
 
 					Rank chasedRank = chased.getActingRankChase();
-					if (chasedRank.toInt() > chaserRank.toInt())
+					if (chasedRank.toInt() > chaserRank.toInt()) {
 						chased.setActingRankChaseEqual(Rank.NIL);
+						chased.setActingRankFlee(Rank.NIL);
+					}
 					return;
 				}
 			}
@@ -1103,7 +1118,86 @@ public class Board
 		return dejavu();
 	}
 
-	// This implements the More-Squares Rule,
+	// Because of limited search depth, the completion of
+	// a two squares ending may well be beyond the horizon of the search.
+	// However, a two squares ending can be predicted earlier if the
+	// opponent piece chased the defender from a non-adjacent
+	// square.  For example,
+	// xx xx xx	xx xx xx	xx xx xx
+	// -- R3 R?	-- R3 R?	-- R3 R?
+	// -- -- --	-- -- B2	B2 -- --
+	// -- B2 --	-- -- --	-- -- --
+	//
+	// Blue Two has the move and approaches Red Three
+	// Positions 1 & 2 can lead to the two squares rule but
+	// position 3 does not.  Thus, move generation can eliminate
+	// the move for R3 back to its original spot if the
+	// from-square of its chaser did not begin adjacent to the
+	// current from-square of the chased piece.
+	//
+	// Hence, the effect of the two squares rule can be felt
+	// at ply 3 rather than played out to its entirety at ply 7.
+	//
+	// If a two squares ending is predicted, the AI will see
+	// the inevitable loss of its piece, and may play some other 
+	// move, because it sees that it is pointless to move its
+	// chased piece away.
+	//
+	// This rule also works for attacks by the AI on opponent
+	// pieces, allowing it to see the effect of the two squares
+	// rule much earlier in the search tree.
+	//
+	// If there are three open squares, the code must allow
+	// the move.  For example,
+	// xx xx xx xx
+	// -- R3 -- R?
+	// -- -- -- --
+	// -- B2 -- --
+	//
+	// Blue Two has the move and approaches Red Three.
+	// Position 1 could be seen as a false Two Squares ending.
+
+	public boolean isPossibleTwoSquares(BMove m)
+	{
+		UndoMove m2 = getLastMove(2);
+		if (m2 == null)
+			return false;
+
+		// not back to the same square?
+		if (m2.getFrom() != m.getTo())
+			return false;
+
+		// not the same piece?
+		if (m2.getPiece() != getPiece(m.getFrom()))
+			return false;
+
+		// not an adjacent move (i.e., nine far move)
+		if (!Grid.isAdjacent(m.getFrom(), m.getTo()))
+			return false;
+
+		// test for three squares (which is legal)
+		Piece p = getPiece(m.getTo() + (m.getTo() - m.getFrom()));
+		if (p == null || p.getColor() != m2.getPiece().getColor())
+			return false;
+
+		UndoMove oppmove3 = getLastMove(3);
+		if (oppmove3 == null)
+			return false;
+
+		// Did chase piece start non-adjacent to chaser?
+		// If so, this is a possible two squares ending.
+		return !Grid.isAdjacent(oppmove3.getFrom(), m.getFrom());
+	}
+
+	public boolean isChased(BMove m)
+	{
+		UndoMove oppmove = getLastMove(1);
+		if (oppmove == null)
+			return false;
+		return Grid.isAdjacent(oppmove.getTo(),  m.getFrom());
+	}
+
+	// This implements the More-Squares Rule during tree search,
 	// but is more restrictive because it also eliminates
 	// all repetitive moves,
 	// non-chase moves as well as chase moves.
@@ -1115,21 +1209,12 @@ public class Board
 	// and still abide by More-Squares Rule, as long as the
 	// moves are not continuous.
 	//
-	// Because isRepeatedMove() is more restrictive, the AI
-	// does not expect the opponent to abide by this rule as coded.
-	//
-	public boolean isRepeatedMove()
+	public boolean isRepeatedPosition()
 	{
-		// AI always abides by Two Squares rule
-		// even if box is not checked (AI plays nice).
-
-		int size = undoList.size();
-		if (size < 2)
-			return false;
-
-		BMove m = undoList.get(size-1);
-		if (m == null)
-			return false;
+		// Because isRepeatedPosition() is more restrictive
+		// than More Squares, the AI
+		// does not expect the opponent to abide
+		// by this rule as coded.
 
 		int index = (int)(hash % ttable.length);
 		TTEntry entry = ttable[index];
@@ -1137,25 +1222,6 @@ public class Board
 			return false;
 
 		// Position has been reached before
-
-		// Check for chase
-
-		BMove oppmove = undoList.get(size-2);
-		if (oppmove == null)
-			return false;
-
-		for (int d : dir) {
-			int i = oppmove.getTo() + d;
-			if (!isValid(i))
-				continue;
-
-		// piece is being chased, so repetitive moves OK
-
-			if (i == m.getFrom()) {
-				// chase confirmed
-				return false;
-			}
-		}
 
 		return true;
 	}

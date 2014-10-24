@@ -124,7 +124,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 					return;
 				requestCompMove();
 			} else
-				ai.log("ILLEGAL MOVE");
+				ai.logFlush("ILLEGAL MOVE");
 		}
 	}
 
@@ -132,7 +132,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	{
 		if (m==null || m.getPiece()==null)
 		{
-			ai.log("AI trapped");
+			ai.logFlush("AI trapped");
 			status = Status.STOPPED;
 			board.showAll();
 			view.setPlayMode();
@@ -145,9 +145,9 @@ public class AIEngine extends Engine implements CompControls, UserControls
 		
 		view.moveInit(m);
 		if (!requestMove(m, view.isActive())) {
-			ai.log("ILLEGAL MOVE-->");
+			ai.logFlush("ILLEGAL MOVE-->");
 			ai.logMove(m);
-			ai.log("<--ILLEGAL MOVE");
+			ai.logFlush("<--ILLEGAL MOVE");
 		}
 
 		view.moveComplete(m);

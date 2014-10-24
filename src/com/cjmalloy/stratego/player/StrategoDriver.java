@@ -31,6 +31,8 @@ public class StrategoDriver
 			graphics = true;
 		    else if (arg.equals("-2"))
 			Settings.twoSquares = true;
+		    else if (arg.equals("-v"))
+			Settings.debug = true;
 		    else if (arg.substring(0,2).equals("-l"))
 			Settings.aiLevel = Integer.parseInt(arg.substring(2));
 		    else if (arg.equals("-t")) {

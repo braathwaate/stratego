@@ -7,4 +7,6 @@ AGENT3=$STRATEGO/run2.sh
 a=0
 
 agent=$AGENT3
-$SE/manager/stratego -o gameb.out -T 3000 $STRATEGO/run_stratego.sh $agent
+#$SE/manager/stratego -o gameb.out -T 3000 $STRATEGO/run_stratego.sh $agent
+# ai plays blue
+$SE/manager/stratego -o gameb.out -T 3000 $agent $STRATEGO/run_stratego.sh

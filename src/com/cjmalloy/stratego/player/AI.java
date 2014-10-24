@@ -90,7 +90,8 @@ public class AI implements Runnable
 	
 	public void getBoardSetup() throws IOException
 	{
-		log = new PrintWriter("ai.out", "UTF-8");
+		if (Settings.debug)
+			log = new PrintWriter("ai.out", "UTF-8");
 	
 		File f = new File("ai.cfg");
 		BufferedReader cfg;
@@ -214,7 +215,24 @@ public class AI implements Runnable
 		aiLock.lock();
                 try
                 {
-			getBestMove(new TestingBoard(board));
+		// Settings tick marks:
+		// 1: .1 sec
+		// 2: .4 sec
+		// 3: .9 sec
+		// 4: 1.6 sec
+		// 5: 2.5 sec
+		// etc, etc
+			log("Settings.aiLevel:" + Settings.aiLevel);
+			log("Settings.twoSquares:" + Settings.twoSquares);
+			long startTime = System.currentTimeMillis();
+			stopTime = startTime
+				+ Settings.aiLevel * Settings.aiLevel * 100;
+
+			TestingBoard b = new TestingBoard(board);
+			long t = System.currentTimeMillis() - startTime;
+			long trem = stopTime - System.currentTimeMillis();
+			log("Call getBestMove() at " + t + "ms: time remaining:" + trem + "ms");
+			getBestMove(b);
 		} catch (InterruptedException e) {
                 } catch (Exception e) {
 			e.printStackTrace();
@@ -234,13 +252,12 @@ public class AI implements Runnable
 			else if (board.getPiece(bestMove.move.getFrom()) == null)
  				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
 			else {
-				logMove(0, board, bestMove.move, 0, bestMove.value);
+				logMove(0, board, bestMove.move, 0, bestMove.value, "");
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			}
 
-			log.println("----");
-			log.flush();
+			logFlush("----");
 
 			aiLock.unlock();
 		}
@@ -472,28 +489,23 @@ public class AI implements Runnable
 				continue;
 			}
 
+		// Restrict moves to those that do not result
+		// in repetitive positions unless the piece is
+		// being chased.  This is more restrictive
+		// than the More Squares Rule, but better for
+		// the game and easy to calculate (for computers).
 
-			// More Squares Rule
-			b.move(tmpM, 0, mvp.unknownScoutFarMove);
+			if (!b.isChased(tmpM)) {
+				b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			if (b.isRepeatedMove())
-				moveList.remove(k);
+				if (b.isRepeatedPosition())
+					moveList.remove(k);
 
-			b.undo();
+				b.undo();
+			}
+
 			assert b.getValue() == 0 : "Board value not zero?";
 		}
-
-		// Settings tick marks:
-		// 1: .1 sec
-		// 2: .4 sec
-		// 3: .9 sec
-		// 4: 1.6 sec
-		// 5: 2.5 sec
-		// etc, etc
-		log("Settings.aiLevel:" + Settings.aiLevel);
-		log("Settings.twoSquares:" + Settings.twoSquares);
-		stopTime = System.currentTimeMillis( )
- 			+ Settings.aiLevel * Settings.aiLevel * 100;
 
 		boolean discardPly = false;	// horizon effect
 
@@ -574,6 +586,18 @@ public class AI implements Runnable
 
 		// chase confirmed:
 		// bestMove is to move chased piece 
+
+		// If Two Squares is in effect,
+		// deep search only if the best move is not adjacent
+		// to the chase piece from-square.
+		// Otherwise, the chased piece is in no danger,
+		// because the chase piece can move back and forth
+		// until Two Squares prevents the chaser from moving.
+
+				if (Settings.twoSquares
+					&& Grid.isAdjacent(bestMove.move.getTo(), lastMove.getFrom()))
+					continue;
+
 				int count = 0;
 				for (int k = moveList.size()-1; k >= 0; k--)
 				if (from == moveList.get(k).move.getFrom()) {
@@ -651,7 +675,7 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(mvp.move.getTo());
 			if (tp != null)
 				v = b.actualValue(tp);
-			logMove(n, b, tmpM, v, vm);
+			logMove(n, b, tmpM, v, vm, "");
 
 			if (vm > alpha)
 			{
@@ -659,7 +683,7 @@ public class AI implements Runnable
 			}
 		}
 
-		log.println("-+-");
+		log("-+-");
 		Collections.sort(moveList);
 
 		// To negate the horizon effect where the ai
@@ -738,7 +762,7 @@ public class AI implements Runnable
 		}
 
 		hh[bestMove.move.getFrom()][bestMove.move.getTo()]+=n;
-		log.println("-+++-");
+		log("-+++-");
 
 		} // iterative deepening
 	}
@@ -1000,7 +1024,7 @@ public class AI implements Runnable
 
 			b.undo();
 
-			logMove(n, b, tmpM, valueB, vm);
+			logMove(n, b, tmpM, valueB, vm, "");
 
 			if (turn == Settings.topColor) {
 				if (vm > alpha) {
@@ -1061,36 +1085,68 @@ public class AI implements Runnable
 
 			int vm = 0;
 			if (max.move == null) {
-			b.pushNullMove();	// because of isRepeatedMove()
+			b.pushNullMove();	// because of isRepeatedPosition()
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 			b.popMove();
-			log.println(n + ": (null move) " + valueB + " " + vm);
+			log(n + ": (null move) " + valueB + " " + vm);
 			} else {
 
 		// NOTE: FORWARD TREE PRUNING (minor)
-		// isRepeatedMove() discards repetitive moves.
+		// isRepeatedPosition() discards repetitive moves.
 		// This is done now rather than during move
 		// generation because most moves
 		// are pruned off by alpha-beta,
-		// so calls to isRepeatedMove() are also pruned off,
+		// so calls to isRepeatedPosition() are also pruned off,
 		// saving a heap of time.
 
-			if (b.isTwoSquares(max.move))
+			if (b.isTwoSquares(max.move)) {
+				logMove(n, b, max.move, valueB, 0, "two squares");
 				continue;
+			}
 
-			b.move(max.move, depth, max.unknownScoutFarMove);
+			String note = "";
 
-			if (turn == Settings.topColor
-				&& b.isRepeatedMove()) {
-				b.undo();
-				continue;
+		// AI always abides by Two Squares rule
+		// even if box is not checked (AI plays nice).
+
+			// Check for chase
+
+			if ((Settings.twoSquares
+				|| turn == Settings.topColor)
+				&& b.isChased(max.move)) {
+
+			// Piece is being chased, so repetitive moves OK
+
+			// but can it lead to a two squares result?
+
+				if (b.isPossibleTwoSquares(max.move)) {
+					logMove(n, b, max.move, valueB, 0, "poss two squares");
+					continue;
+				}
+
+				b.move(max.move, depth, max.unknownScoutFarMove);
+				note = "chased";
+			} else { // Piece is not being chased
+
+				b.move(max.move, depth, max.unknownScoutFarMove);
+		// Because isRepeatedPosition() is more restrictive
+		// than More Squares, the AI
+		// does not expect the opponent to abide
+		// by this rule as coded.
+
+				if (turn == Settings.topColor
+					&& b.isRepeatedPosition()) {
+					b.undo();
+					logMove(n, b, max.move, valueB, 0, "repeated");
+					continue;
+				}
 			}
 
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo();
 
-			logMove(n, b, max.move, valueB, vm);
+			logMove(n, b, max.move, valueB, vm, note);
 			}
 
 			if (turn == Settings.topColor) {
@@ -1156,35 +1212,43 @@ public class AI implements Runnable
 	}
 
 
-	void logMove(int n, Board b, BMove move, int valueB, int value)
+	void logMove(int n, Board b, BMove move, int valueB, int value, String note)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
 	if (b.getPiece(move.getTo()) == null) {
-	log.println(n + ":" + color
+	log(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + ")"
 	+ logFlags(b.getPiece(move.getFrom())) + " "
-	+ valueB + " " + value);
+	+ valueB + " " + value + " " + note);
 	} else {
 		char X = 'x';
 		if (n == 0)
 			X = 'X';
-	log.println(n + ":" + color
+	log(n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + X + logPiece(b.getPiece(move.getTo())) + ")"
 	+ logFlags(b.getPiece(move.getFrom())) + " " + logFlags(b.getPiece(move.getTo()))
-	+ " " + valueB + " " + value);
+	+ " " + valueB + " " + value + " " + note);
 	}
 	}
 
 	public void logMove(Move m)
 	{
-		logMove(0, board, m, 0, 0);
+		logMove(0, board, m, 0, 0, "");
 	}
 
-	public void log(String s)
+	private void log(String s)
 	{
-		log.println(s);
-		log.flush();
+		if (Settings.debug)
+			log.println(s);
+	}
+
+	public void logFlush(String s)
+	{
+		if (Settings.debug) {
+			log.println(s);
+			log.flush();
+		}
 	}
 }

@@ -42,8 +42,6 @@ public class TestingBoard extends Board
 	private static final int DEST_PRIORITY_DEFEND_FLAG_BOMBS = 6;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 4;
 	private static final int DEST_PRIORITY_ATTACK_FLAG = 1;
-	// private static final int DEST_PRIORITY_ATTACK_FLAG_BOMBS = 2;
-	// private static final int DEST_PRIORITY_BLOCKER = 2;
 	private static final int DEST_PRIORITY_FLEE = 3;
 	private static final int DEST_PRIORITY_CHASE = 1;
 	private static final int DEST_PRIORITY_LOW = 1;
@@ -342,7 +340,7 @@ public class TestingBoard extends Board
 		for (int c = RED; c <= BLUE; c++) {
 			int rank;
 			for (rank = 1;rank<10;rank++)
-				if (unknownRankAtLarge(c, rank) - suspectedRankAtLarge(c, rank) > 0)
+				if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
 					break;
 			invincibleRank[1-c] = rank;
 
@@ -831,6 +829,16 @@ public class TestingBoard extends Board
 	// of a low ranked piece is worth discovering,
 	// because it might be bluffing.
 	// Perhaps it is blocking access to the flag?
+	//
+	// TBD: this code needs to be rethought out.  The goal is
+	// to handle situations like the following example:
+	// Red Two is cornered by unknown Blue, which probably is
+	// bluffing to keep Red Two corralled.
+	//
+	// -- -- R? R?
+	// B? -- R2 R?
+	// -- -- xx xx
+	// 
 	void targetUnknownBlockers()
 	{
 		for (int i=12;i<=120;i++) {
@@ -845,26 +853,9 @@ public class TestingBoard extends Board
 			for (int lowr : importantRank) {
 				Piece fp = activeRank[1-tp.getColor()][lowr-1];
 				if (fp != null
-					&& planv(planA[fp.getColor()][lowr-1], fp.getIndex(), i) > 0) {
+					&& planv(planA[fp.getColor()][lowr-1], fp.getIndex(), i) > DEST_PRIORITY_CHASE) {
 					tp.setBlocker(true);
 
-					// Unknown piece blocking confirmed:
-					// move towards blocker.
-					// TBD:
-					// There is a tradeoff with creating
-					// a new plan to discover a blocker,
-					// because the ai doesn't really
-					// know how to attack the blocker,
-					// so I think it is best to keep to
-					// existing plans and rely on the
-					// search tree to discover the blocker's
-					// increased value.
-					//
-					// if (r <= 4)
-					// for (int r=lowr+1; r<=9; r++) {
-					// 	if (values[1-tp.getColor()][r] <= apparentValue(fp))
-					// 		genNeededPlanA(1-tp.getColor(), r);
-					// }
 				}
 			}
 		}
@@ -873,40 +864,53 @@ public class TestingBoard extends Board
 	//
 	// Flee from the piece p for pieces of higher "chaseRank"
 
-	// The difference between two priorities determines
-	// the distance that an AI piece will maintain
-	// between a rank that it chases
-	// and rank that it is fleeing from.  So if FLEE is -4 and
-	// CHASE is -1, the chaser will try to stay
-	// 3 squares or more away from a piece that it flees from.
-	// If there is both a chase piece and a chaser piece in the
-	// same direction, the plan values will tend to cancel out.
-	//
-	// In the example below, Red 3 is drawn towards Blue Four
-	// but drawn away from Red 3.  Red Three will try to take
-	// a position halfway between FLEE and CHASE, or one square
-	// away.
-	// B1 B4 -- R3 -- --
-	//
 	// A goal of this logic is to avoid becoming trapped by
 	// a team of lower ranks.  In the example below, Red Three
-	// should sense the approach of Blue One and cease its
-	// attack on Blue Four.
-	// x -- -- -- B1
-	// x R3 -- -- --
+	// should sense the approach of Blue One and Blue Two
+	// and cease its attack on Blue Four.
+	// (Fleeing takes priority over chasing).
+	// x R3 -- -- B1
+	// x -- -- -- --
 	// x R4 B2 -- --
 	// xxxxxxxxxxxxx
+	//
+	// This logic is also an offensive tactic, as the AI will
+	// try to trap an opponent piece between on its side of
+	// the board.
 	//
 	// As with the chase heuristic, more search depth would render
 	// this superfluous.
 	
 	protected void flee(Piece p)
 	{
-		int i = p.getIndex();
+		int retreat[][] = {
+			{1, 1, 1, 1, 1},
+			{2, 2, 2, 2, 2},
+			{3, 3, 3, 3, 3},
+			{4, 4, 4, 4, 4},
+			{5, 5, 5, 5, 5}
+		};
 
-		genDestTmp(GUARDED_OPEN, p.getColor(), i);
-		// this nulls out incentive for chase sequences
-		destTmp[GUARDED_OPEN][i] = DEST_VALUE_NIL;
+		int fi = p.getIndex();
+		int fx = Grid.getX(fi);
+		int fy = Grid.getY(fi);
+
+		int[] tmp = new int[121];
+		for (int j = 12; j <= 120; j++)
+			tmp[j] = DEST_VALUE_NIL;
+
+		for (int j = 0; j < 5; j++)
+		for (int k = 0; k < 5; k++) {
+			int x = fx + k - 2;
+			int y = fy + j - 2;
+			if (x < 0 || x > 9 || y < 0 || y > 9)
+				continue;
+			int i = Grid.getIndex(x, y);
+			if (p.getColor() == Settings.topColor)
+				tmp[i] = retreat[j][4-k];
+			else
+				tmp[i] = retreat[j][k];
+		}
 
 		// While an opponent piece does not deliberately
 		// flee from an unknown ai piece of lower rank,
@@ -937,14 +941,20 @@ public class TestingBoard extends Board
 					&& (p.hasMoved() || j <= invincibleRank[1-p.getColor()]))
 					continue;
 
-				genFleePlan(destTmp[GUARDED_OPEN],planA[1-p.getColor()][j-1]);
-				genFleePlan(destTmp[GUARDED_OPEN],planB[1-p.getColor()][j-1]);
+				if (p.getColor() == Settings.bottomColor
+					&& lowestUnknownExpendableRank < 5)
+					continue;
+
+				setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 			}
 
 		else {
 			for (int j = 5; j > p.getRank().toInt(); j--) {
-				genFleePlan(destTmp[GUARDED_OPEN],planA[1-p.getColor()][j-1]);
-				genFleePlan(destTmp[GUARDED_OPEN],planB[1-p.getColor()][j-1]);
+				if (lowerRankCount[p.getColor()][j-2] >= 2) {
+					setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+					setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+				}
 			}
 
 		}
@@ -1223,6 +1233,9 @@ public class TestingBoard extends Board
 			j <= invincibleRank[1-p.getColor()]
 				&& j < chasedRank;
 			j++) {
+			if (rankAtLarge(1-p.getColor(),j) == 0)
+				continue;
+
 			if (knownRankAtLarge(1-p.getColor(),j) != 0) {
 				int guarded;
 				if (j == 1 && hasSpy(p.getColor()))
@@ -1263,12 +1276,25 @@ public class TestingBoard extends Board
 		// should be used for both the chaser and the expendables.
 
 			} else if (j <= invincibleWinRank[1-p.getColor()]
-				|| (j == 1
-				&& p.isKnown()
-				&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])
 				|| (j != 1
 					&& lowerRankCount[p.getColor()][j-2] < 2
 					&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])) {
+				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+				// tbd: PlanB as well
+				chaseWithUnknownExpendable(p);
+
+		// The stealth of the AI One (like the Spy) is so important
+		// that it cannot be risked by sending it to the opposite
+		// side of the board until all the opponents expendable
+		// pieces have become known.  Until then, it is
+		// limited to a defensive position.
+
+			} else if (j == 1
+				&& p.isKnown()
+				&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank]
+				&& (p.getColor() == Settings.topColor
+					|| lowestUnknownExpendableRank < 5
+					|| p.getIndex() < 56)) {
 				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				// tbd: PlanB as well
 				chaseWithUnknownExpendable(p);
@@ -1312,6 +1338,11 @@ public class TestingBoard extends Board
 		return Rank.getRanks(Rank.toRank(r))
 			- trayRank[color][r-1]
 			- knownRank[color][r-1];
+	}
+
+	private int unknownNotSuspectedRankAtLarge(int color, int r)
+	{
+		return unknownRankAtLarge(color, r) - suspectedRankAtLarge(color, r);
 	}
 
 	private int unknownRankAtLarge(int color, Rank rank)
@@ -1413,7 +1444,7 @@ public class TestingBoard extends Board
 		int pd = grid.dir(approacherIndex, flagi);
 		genDestTmp(GUARDED_UNKNOWN, color, flagi + pd);
 		if (destTmp[GUARDED_UNKNOWN][approacherIndex]
-			!= DEST_VALUE_NIL)
+			== DEST_VALUE_NIL)
 			return;		// no imminent danger
 
 		// approacher has unguarded path to the flag
@@ -1455,7 +1486,7 @@ public class TestingBoard extends Board
 			defender = approacherRank.toInt();
 		for (int r = defender; r >= 1 ; r--)
 			if (isActiveRank(color, r)) {
-				int defenderSteps = Grid.steps(destTmp[0][activeRank[color][r-1].getIndex()], to);
+				int defenderSteps = Grid.steps(activeRank[color][r-1].getIndex(), to);
 				if (defenderSteps < minSteps) {
 					minSteps = defenderSteps;
 					rank = r;
@@ -1520,10 +1551,12 @@ public class TestingBoard extends Board
 
 		genDestTmp(GUARDED_OPEN, color, flagi+pd);
 
-		// thwart the approach of the closest unknown or eight piece
+		// Thwart the approach of the closest unknown or eight piece.
+		// Note the use of DEST_PRIORITY_ATTACK_FLAG, because
+		// the attacker could be either the AI or the opponent.
 
 		if (isBombThreat)
-			genPlanA(destTmp[GUARDED_OPEN], 1-color, approacherRank.toInt(), DEST_PRIORITY_DEFEND_FLAG_AREA);
+			genPlanA(destTmp[GUARDED_OPEN], 1-color, approacherRank.toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
 		// Try to protect the bombs with the closest rank that can
 		// take an eight.
@@ -2355,7 +2388,7 @@ public class TestingBoard extends Board
 					plan[0][j] = tmp[j];
 					plan[1][j] = priority;
 				}
-			} else if (plan[0][j] > tmp[j]*priority)
+			} else if (plan[0][j] > tmp[j])
 				plan[0][j] = tmp[j];
 	}
 
@@ -2389,11 +2422,11 @@ public class TestingBoard extends Board
 					plan[1][j] = priority;
 				}
 			} else if (plan[1][j] < priority) {
-				if (tmp[j] != 0) {
+				if (tmp[j] != DEST_VALUE_NIL) {
 					plan[0][j] = tmp[j];
 					plan[1][j] = priority;
 				}
-			} else if (plan[0][j] < tmp[j]*priority)
+			} else if (plan[0][j] < tmp[j])
 				plan[0][j]= tmp[j];
 	}
 
@@ -2410,22 +2443,6 @@ public class TestingBoard extends Board
 	private void genPlanA(int neededNear, int [] desttmp, int color, int rank, int priority)
 	{
 		setPlan(neededNear, planA[color][rank-1], desttmp, color, rank, priority);
-	}
-
-	private void genFleePlan(int [] desttmp, int [][] plan)
-	{
-		int[]tmp = new int[121];
-		for (int j = 12; j <= 120; j++) {
-			int d = desttmp[j];
-			if (d >= DEST_VALUE_FLEE) {
-				tmp[j] = 0;
-				continue;
-			}
-			tmp[j] = DEST_VALUE_FLEE - d;
-		}
-		tmp[0] = desttmp[0];
-
-		setFleePlan(plan, tmp, DEST_PRIORITY_FLEE);
 	}
 
 	// The usual Stratego attack strategy is one rank lower.
@@ -2544,7 +2561,7 @@ public class TestingBoard extends Board
 
 		lowestUnknownExpendableRank = 0;
 		for (int r = 1; r <= 10; r++)
-			if (unknownRankAtLarge(Settings.bottomColor, r) != 0) {
+			if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, r) > 0) {
 				lowestUnknownExpendableRank = r;
 				if (r >= 5)
 					break;
@@ -3042,7 +3059,7 @@ public class TestingBoard extends Board
 						actualValue(tp),
 						apparentValue(tp)) - fpvalue;
 
-		// If the defender is a known AI piece and the
+		// If the defender is an AI piece and the
 		// attacker is unknown OR the defender is an unknown
 		// opponent piece, the AI is just guessing the opponent's
 		// rank, and it is guessing that it could be even.
@@ -3069,12 +3086,24 @@ public class TestingBoard extends Board
 		// nor allow B?xS,
 		// even if unknown Blue is a suspected Spy.
 		// 
-				else if (tp.getColor() == Settings.topColor) {
-					assert tp.isKnown() : "tp is not known?";
-					vm -= (5 - tprank.toInt()) * 2;
+		// A known Unknown is also usually overstated in rank.
+		// For example:
+		// -- RB --
+		// xx R9 R5
+		// xx B? --
+		// All pieces are unknown.  Red has the move.
+		// Red errs by moving Red Five away.  Why?  The AI
+		// assumes that unknown Blue is the lowest expendable
+		// piece, or a Five.  So it sees the loss of Red Nine
+		// as inevitable.  But if Blue turns out to be a Six or
+		// Seven, then Red Five would regain the exchange.
+
+				if (tp.getColor() == Settings.topColor) {
+					if (!fp.isKnown())
+						vm -= (9 - tprank.toInt());
 				} else {
-					assert fpcolor == Settings.topColor : "fp is not AI?";
-					vm += (5 - fprank.toInt()) * 2;
+					if (!tp.isKnown() || tp.isSuspectedRank()) 
+						vm += (9 - fprank.toInt());
 				}
 
 		// Unknown AI pieces also have bluffing value
@@ -3085,7 +3114,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFlee() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fprank, tprank);
+					vm += valueBluff(fp, tprank);
 
 				if (depth != 0
 					&& fpcolor == Settings.topColor
@@ -3097,7 +3126,7 @@ public class TestingBoard extends Board
 					&& fp.getActingRankFlee() != tprank 
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m))
-					vm -= valueBluff(tprank, fprank);
+					vm -= valueBluff(tp, fprank);
 
 		// Consider the following example.
 		// -- R1 --
@@ -3222,7 +3251,7 @@ public class TestingBoard extends Board
 
 				else if (isEffectiveBluff(m)) {
 					vm += valueBluff(m, fp, tp);
-					vm -= valueBluff(tprank, fprank);
+					vm -= valueBluff(tp, fprank);
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -3344,7 +3373,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFlee() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fprank, tprank);
+					vm += valueBluff(fp, tprank);
 
 				else if (fpcolor == Settings.bottomColor)
 					vm += apparentWinValue(fp,
@@ -3528,8 +3557,16 @@ public class TestingBoard extends Board
 					assert tprank == Rank.UNKNOWN: "Known ranks are handled in WINS/LOSES/EVEN";
 
 					int suspectedRank = lowestUnknownExpendableRank;
-					if (tp.moves != 0)
-						suspectedRank--;
+
+		// If the piece is a possible bomb,
+		// then expect at best an "even" exchange,
+		// regardless of fp rank.
+		// i.e. fp loses its full value and gains the full tp value.
+		// Because the unknown value is the minimum opponent
+		// piece value, this is never a positive result.
+
+					if (isPossibleBomb(tp))
+						suspectedRank=Math.min(suspectedRank, fprank.toInt());
 
 		// One exception to the rule that the AI piece loses its value
 		// in an unknown exchange is at the start of the game when
@@ -4144,7 +4181,8 @@ public class TestingBoard extends Board
 			&& prev2.tp != null) {
 
 		// Because a One will win any attack on a lesser piece,
-		// regardless whether known, the bluffing counter-attack
+		// regardless of whether the lesser piece is known,
+		// the bluffing counter-attack
 		// restores the full value of the lost piece.  This
 		// encourages an unknown AI piece to approach an
 		// opponent One if the AI piece has protection.  Thus
@@ -4169,7 +4207,11 @@ public class TestingBoard extends Board
 		// lose the game).
 		// 
 				UndoMove prev1 = getLastMove(1);
-				if (tp.getRank() == Rank.ONE && !fp.isKnown())
+				if (tp.getRank() == Rank.ONE
+					&& tp.isKnown()
+					&& !tp.isSuspectedRank()
+					&& !fp.isKnown()
+					&& !prev2.tp.isKnown())
 					return -(prev1.value - prev2.value);
 
 		// In other cases the AI only receives half of the
@@ -4185,11 +4227,21 @@ public class TestingBoard extends Board
 	}
 
 	// Bluffing using valuable pieces is (slightly) discouraged.
-	protected int valueBluff(Rank rank, Rank airank)
+	protected int valueBluff(Piece oppPiece, Rank airank)
 	{
+		Rank rank = oppPiece.getRank();
 		if (airank.toInt() <= 4
 			|| (airank == Rank.SPY && rank != Rank.ONE))
-			return 5;
+			return values[Settings.topColor][airank.toInt()]/10;
+
+		// A suspected Four (that chased a Five) could well be a Five.
+		// If so, the piece might attack and the AI would
+		// lose its piece.
+		if (rank == Rank.FOUR
+			&& oppPiece.isSuspectedRank()
+			&& !oppPiece.isRankLess())
+			return values[Settings.topColor][airank.toInt()]/2;
+
 		return 0;
 	}
 
@@ -4728,8 +4780,8 @@ public class TestingBoard extends Board
 		// where unknown Blue could still be a Spy.
 		//
 		// Also, a suspected Bomb or Flag might actually be
-		// a Spy.  So the one could be lost if a bomb pattern
-		// or suspected flag actually turned out to be a Spy.
+		// a Spy.  So the One could be lost if a bomb pattern
+		// or suspected Flag actually turned out to be a Spy.
 		// (NOTE: The One will avoid moving next to a suspected
 		// bomb because of bluffing value of Bomb X Piece in LOSES).
 		// R1

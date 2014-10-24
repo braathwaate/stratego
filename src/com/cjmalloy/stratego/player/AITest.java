@@ -85,6 +85,8 @@ public class AITest extends View
 			scan.nextLine();
 		engine.play();
 		aimove.acquire();
+	    } else {
+		engine.play();
 	    }
 
             while (true) {
