@@ -9,8 +9,8 @@ and mainly offers a much improved AI and some other features.
 Download
 --------
 
-[Stratego player v0.8.3][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.8.3/stratego_v0.8.3.jar
+[Stratego player v0.9.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.0/stratego_v0.9.0.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -82,7 +82,7 @@ the optimal set of moves that
 allows it to attack its target.
 
 This algorithm results in a modest amateur level of play,
-able to defeat most casual human players and most stratego bots.
+able to defeat most casual human players and stratego bots.
 A primary failing of other stratego bots is the lack of bluffing,
 which allows the AI to easily determine piece ranks
 without random attack.
@@ -94,7 +94,7 @@ Areas for improvements are:
 
   1. Search tree.  Forward pruning will be required to get to deeper levels.  A transposition table is needed.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the Two Squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the Two Squares rule, then chase attacks would be much more successful and worthy of deep analysis.  Restrict move generation to only those pieces that can affect the outcome.
   2. Heuristic.  This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  One issue is how much to weight suspected pieces given a bluffing opponent.
-  3. Suspected Rank Analysis.  This is perhaps the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but gives it signficant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.
+  3. Suspected Rank Analysis.  This is perhaps the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but gives it significant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.
   4. Plans.  There are very few plans.
 	A. Chase opponent pieces that that could result in a favorable exchange.
 	B. Attack flag structures.
