@@ -563,13 +563,19 @@ public class AI implements Runnable
 		if (chasePiece == null
 			&& lastMovedPiece != null
 
-		// Begin chase after xx iterations of broad search
+		// Begin deep chase after xx iterations of broad search
 			&& n >= 3
 			&& bestMove != null
 
-		// Chase is skipped if best move from broad search
+		// Deep chase is skipped if best move from broad search
 		// is to attack a piece (perhaps the chaser)
 			&& b.getPiece(bestMove.move.getTo()) == null
+
+		// Deep chase is skipped if best move value is negative.
+		// This indicates that the piece is trapped
+		// already or there is something else on the board
+		// going on.  So broad search is preferred.
+			&& bestMove.getValue() > -30
 
 		// Limit deep chase to superior pieces.
 		// Using deep chase can be risky if the
