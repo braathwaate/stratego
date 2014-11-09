@@ -1197,6 +1197,28 @@ public class Board
 		return Grid.isAdjacent(oppmove.getTo(),  m.getFrom());
 	}
 
+	// chasing moves back to the square where the chasing piece
+	// came from in the directly preceding turn are always allowed
+	// as long as this does not violate the
+	// Two-Squares Rule / Five-Moves-on-Two-Squares Rule.
+	public boolean isTwoSquaresChase(BMove m)
+	{
+		BMove m2 = getLastMove(2);
+		if (m2 == null)
+			return false;
+
+		// not back to square where the chasing piece came from?
+		if (m2.getFrom() != m.getTo())
+			return false;
+
+		// chasing move?
+		BMove oppmove = getLastMove(1);
+		if (oppmove == null)
+			return false;
+
+		return Grid.isAdjacent(oppmove.getFrom(),  m.getTo());
+	}
+
 	// This implements the More-Squares Rule during tree search,
 	// but is more restrictive because it also eliminates
 	// all repetitive moves,

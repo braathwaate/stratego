@@ -495,7 +495,7 @@ public class AI implements Runnable
 		// than the More Squares Rule, but better for
 		// the game and easy to calculate (for computers).
 
-			if (!b.isChased(tmpM)) {
+			if (!b.isChased(tmpM) && !b.isTwoSquaresChase(tmpM)) {
 				b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
 				if (b.isRepeatedPosition())
@@ -1115,39 +1115,45 @@ public class AI implements Runnable
 		// AI always abides by Two Squares rule
 		// even if box is not checked (AI plays nice).
 
-			// Check for chase
+			if (Settings.twoSquares
+				|| turn == Settings.topColor) {
 
-			if ((Settings.twoSquares
-				|| turn == Settings.topColor)
-				&& b.isChased(max.move)) {
+				if (b.isChased(max.move)) {
 
-			// Piece is being chased, so repetitive moves OK
+		// Piece is being chased, so repetitive moves OK
+		// but can it lead to a two squares result?
 
-			// but can it lead to a two squares result?
+					if (b.isPossibleTwoSquares(max.move)) {
+						logMove(n, b, max.move, valueB, 0, "poss two squares");
+						continue;
+					}
 
-				if (b.isPossibleTwoSquares(max.move)) {
-					logMove(n, b, max.move, valueB, 0, "poss two squares");
-					continue;
-				}
+					b.move(max.move, depth, max.unknownScoutFarMove);
+					note = "chased";
+				} else if (b.isTwoSquaresChase(max.move)) {
 
-				b.move(max.move, depth, max.unknownScoutFarMove);
-				note = "chased";
-			} else { // Piece is not being chased
+		// Piece is chasing, so repetitive moves OK
+		// (until Two Squares Rule kicks in)
 
-				b.move(max.move, depth, max.unknownScoutFarMove);
+					b.move(max.move, depth, max.unknownScoutFarMove);
+					note = "chaser";
+				} else if (turn == Settings.topColor) {
+
 		// Because isRepeatedPosition() is more restrictive
-		// than More Squares, the AI
-		// does not expect the opponent to abide
-		// by this rule as coded.
+		// than More Squares, the AI does not expect
+		// the opponent to abide by this rule as coded.
 
-				if (turn == Settings.topColor
-					&& b.isRepeatedPosition()) {
-					b.undo();
-					logMove(n, b, max.move, valueB, 0, "repeated");
-					continue;
+					b.move(max.move, depth, max.unknownScoutFarMove);
+					if (b.isRepeatedPosition()) {
+						b.undo();
+						logMove(n, b, max.move, valueB, 0, "repeated");
+						continue;
+					}
 				}
-			}
-
+				else
+					b.move(max.move, depth, max.unknownScoutFarMove);
+			} else
+				b.move(max.move, depth, max.unknownScoutFarMove);
 			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo();
