@@ -253,6 +253,7 @@ public class AI implements Runnable
  				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
 			else {
 				logMove(0, board, bestMove.move, 0, bestMove.value, "");
+				log.flush();
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			}

@@ -510,38 +510,16 @@ public class Board
 			}
 		}
 
-		// Flee acting rank is also set implicitly if
+		// Flee acting rank can be set implicitly if
 		// the piece neglects to capture an adjacent opponent
-		// piece and the immediate player move was not a capture
-		// (NOT IMPLEMENTED: or a capture of a less valuable piece).  
-		for ( int i = 12; i <= 120; i++) {
-			if (i == from)
-				continue;
-			Piece fleeTp = getPiece(i);
-			if (fleeTp == null
-				|| fleeTp.isKnown()
-				|| fleeTp.getColor() != fp.getColor())
-				continue;
-			
-			for (int d : dir) {
-				int j = i + d;
-				if (!isValid(j))
-					continue;
-				Piece op = getPiece(j);
-				if (op != null
-					&& op.getColor() != fp.getColor()
-					&& !isProtectedFlee(op, fleeTp, j)
-					&& tp == null) {
-					Rank rank = op.getApparentRank();
-					if (rank == Rank.BOMB)
-						continue;
-					Rank arank = fleeTp.getActingRankFlee();
-					if (arank == Rank.NIL
-					|| arank.toInt() > rank.toInt())
-						fleeTp.setActingRankFlee(rank);
-				}
-			}
-		}
+		// piece and the immediate player move was not a capture,
+		// a chase or the response to a chase.
+		// However, it is difficult to determine whether the
+		// opponent merely played some other move that requires
+		// immediate response and planned to move the fleeing piece
+		// later.  It is better to leave the flee rank at
+		// NIL until the piece actually flees.
+		// So this code was removed in version 9.1.
 	}
 
 	// Return true if the chase piece is obviously protected.
@@ -1216,7 +1194,7 @@ public class Board
 		if (oppmove == null)
 			return false;
 
-		return Grid.isAdjacent(oppmove.getFrom(),  m.getTo());
+		return Grid.isAdjacent(oppmove.getTo(),  m.getTo());
 	}
 
 	// This implements the More-Squares Rule during tree search,
