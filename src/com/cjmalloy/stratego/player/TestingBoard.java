@@ -3250,14 +3250,18 @@ public class TestingBoard extends Board
 					&& fpcolor == Settings.bottomColor
 					&& fp.isKnown()
 					&& isInvincible(fp)) {
-					if  (!tp.isKnown() && isWinning(Settings.topColor) > VALUE_FIVE)
+					if  (!tp.isKnown()
+						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor))
+						&& isWinning(Settings.topColor) > VALUE_FIVE)
 						vm -= 10;
 					else
 						vm += actualValue(tp) - fpvalue;
 				} else if (fpcolor == Settings.topColor
 					&& tp.isKnown()
 					&& isInvincible(tp)) {
-					if  (!fp.isKnown() && isWinning(Settings.topColor) > VALUE_FIVE)
+					if  (!fp.isKnown()
+						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor))
+						&& isWinning(Settings.topColor) > VALUE_FIVE)
 						vm += 10;
 					else
 						vm += actualValue(tp) - fpvalue;
@@ -3729,19 +3733,6 @@ public class TestingBoard extends Board
 		// may be better able to assess the risk, so it is best
 		// for the ai to avoid unknown exchanges.
 		//
-		// When the AI piece is an unknown defender,
-		// apparent piece value is the apparent win value.
-		//
-		// However, if the AI piece is a known low ranked piece,
-		// it has high value.  Both piece values are lost in
-		// the exchange, and the AI loses much more than the
-		// opponent when valued based on the unknown piece value.
-		// The AI assumes that the unknown opponent piece
-		// has the stealth value of a piece two ranks lower
-		// than the AI piece.  If this stealth value is greater
-		// than the unknown piece value, this is the value
-		// that the AI gains in the unknown exchange.
-		//
 		// Probability based strictly on remaining piece ranks
 		// and number is of little use because piece encounters
 		// are rarely random.  A common example is:
@@ -3759,16 +3750,8 @@ public class TestingBoard extends Board
 		// that Blue Three IS protected by Blue One.
 		//
 		// So in an unknown exchange, the AI always loses
-		// its actual piece value but gains the greater of
-		// the stealth value of the piece that attacks it and the
-		// unknown piece value, multiplied by
-		// a factor that compares the AI piece rank to
-		// the lowest expendable piece rank, which is the
-		// rank the AI suspects because the opponent
-		// has *allowed* this unknown to come into contact with
-		// the AI piece.  (Again, note that probability based
-		// on a random encounter with remaining unknown pieces
-		// is not relevant).
+		// its actual piece value but gains the
+		// the stealth value of the piece that attacks it
 		// 
 		// For example,
 		// xxxxxxx
@@ -3819,6 +3802,10 @@ public class TestingBoard extends Board
 		// by two unknowns, so the protectors do not have any
 		// suspected rank.  This gains 50 points and the
 		// stealth value of a Two (40).
+
+		// When the AI piece is an unknown defender,
+		// apparent piece value is the apparent win value.
+		//
 
 					assert tprank == Rank.UNKNOWN: "Known ranks are handled in WINS/LOSES/EVEN";
 
@@ -4034,10 +4021,6 @@ public class TestingBoard extends Board
 		// is bluffing and perhaps one of the other two unknowns
 		// is the actual One. What would you do?
 		//
-		// The formula to determine value based on the differing
-		// ranks is not used for an unmoved unknown piece,
-		// because the target could be thought a bomb.
-		//
 		// Note: If a piece approaches a known AI piece, then
 		// it usually has a suspected rank, and is not handled here.
 		// But if a known AI piece approaches an opponent unknown,
@@ -4086,6 +4069,7 @@ public class TestingBoard extends Board
 					fpvalue = fpvalue * 3 / (3 + count);
 
 					vm += tpvalue - fpvalue;
+
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
 		// what happened to the pieces after an unknown attack.

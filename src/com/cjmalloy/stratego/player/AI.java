@@ -253,7 +253,7 @@ public class AI implements Runnable
  				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
 			else {
 				logMove(0, board, bestMove.move, 0, bestMove.value, "");
-				log.flush();
+				logFlush("");
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			}
@@ -1131,27 +1131,29 @@ public class AI implements Runnable
 
 					b.move(max.move, depth, max.unknownScoutFarMove);
 					note = "chased";
-				} else if (b.isTwoSquaresChase(max.move)) {
-
-		// Piece is chasing, so repetitive moves OK
-		// (until Two Squares Rule kicks in)
-
-					b.move(max.move, depth, max.unknownScoutFarMove);
-					note = "chaser";
 				} else if (turn == Settings.topColor) {
+
+					if (b.isTwoSquaresChase(max.move)) {
+
+			// Piece is chasing, so repetitive moves OK
+			// (until Two Squares Rule kicks in)
+
+						b.move(max.move, depth, max.unknownScoutFarMove);
+						note = "chaser";
+					} else {
 
 		// Because isRepeatedPosition() is more restrictive
 		// than More Squares, the AI does not expect
 		// the opponent to abide by this rule as coded.
 
-					b.move(max.move, depth, max.unknownScoutFarMove);
-					if (b.isRepeatedPosition()) {
-						b.undo();
-						logMove(n, b, max.move, valueB, 0, "repeated");
-						continue;
+						b.move(max.move, depth, max.unknownScoutFarMove);
+						if (b.isRepeatedPosition()) {
+							b.undo();
+							logMove(n, b, max.move, valueB, 0, "repeated");
+							continue;
+						}
 					}
-				}
-				else
+				} else
 					b.move(max.move, depth, max.unknownScoutFarMove);
 			} else
 				b.move(max.move, depth, max.unknownScoutFarMove);

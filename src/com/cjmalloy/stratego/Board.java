@@ -1189,12 +1189,58 @@ public class Board
 		if (m2.getFrom() != m.getTo())
 			return false;
 
-		// chasing move?
+		// not a chasing move?
 		BMove oppmove = getLastMove(1);
 		if (oppmove == null)
 			return false;
 
-		return Grid.isAdjacent(oppmove.getTo(),  m.getTo());
+		if (!Grid.isAdjacent(oppmove.getTo(),  m.getTo()))
+			return false;
+
+		// Will the AI eventually be blocked by Two Squares?
+		//
+		// B3 --	B3 --		-- B3		-- B3
+		// -- R2	R2 --		R2 --		-- R2
+		// (A)		  (1)		  (B)		  (2)
+		// (C)		  (3)		  (D)		  (4)
+		//
+		// (A) is the starting position.
+		// The AI is allowed to make moves 1 and 2.
+		// However, if position C is reached, the AI is not
+		// not allowed to make move 3, although this is
+		// a legal move.  This reduces 
+		// pointless 3 move sequences to pointless 2 move
+		// sequences.
+		//
+		// If A was indeed the starting position,
+		// this function will return false when position C is reached.
+		// isRepeatedPosition() will prevent the AI from
+		// considering the move.
+		// If position (A) was not the starting position,
+		// this function returns true
+		// because the moves (1) and (3) are not equal.
+		// The AI is allowed to proceed, because
+		// it will be the opponent whose will repeat first.
+		//
+		// Hence, position D can only be reached
+		// if the opponent is the repeater.  So if moves 1 and 3
+		// are equal, as well as the proposed move 4 equal to move 2,
+		// this function returns true, which
+		// then AI allows to proceed,
+		// by avoiding the isRepeatedPosition() check in the AI.
+
+		BMove m4 = getLastMove(4);
+		if (m4 == null)
+			return false;
+
+		BMove m6 = getLastMove(6);
+		if (m6 == null)
+			return false;
+
+		if (m.equals(m4) && !m2.equals(m6))
+			return false;
+
+		return true;
 	}
 
 	// This implements the More-Squares Rule during tree search,
