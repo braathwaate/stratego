@@ -729,6 +729,7 @@ public class Board
 		//
 		// But there are reasons why Blue may not move.
 		// 1. Unknown Blue is cornered.
+		//    (this case is handled above when open == 0)
 		// 2. Unknown Blue will lose the piece anyway because fleeing
 		//    would lead Red Three to fork a more valuable piece.
 		// 3. Unknown Blue is currently forked with another piece.
@@ -742,6 +743,16 @@ public class Board
 		// B4
 		// If Red Three forks unknown Blue and Blue Four, Blue Four
 		// flees, unknown Blue should not acquire a chase rank.
+		//
+		// TBD: An opponent piece approaches a player piece
+		// that is protected by a low piece.
+		// The opponent piece is also protected, so it does not gain
+		// a chase rank.  But what if the opponent protector then moves?
+		// In this case, the opponent piece should acquire a chase
+		// rank, because it will likely attack the player
+		// piece if it become unprotected.
+		// To solve this, we need to add an actingRankApproach
+		// and rely on this instead of last move.
 
 		Move m = getLastMove();
 		if (m.getPiece() != chased)

@@ -1635,25 +1635,20 @@ public class TestingBoard extends Board
 			attackerRank = 8;
 
 		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, targetIndex);
-		int r = getDefenderRank(color, destTmp3, attackerRank, stepsTarget);
-		if (r == 0)
+		Piece defender = getDefender(color, destTmp3, attackerRank, stepsTarget);
+		if (defender == null)
 			return;	// no imminent danger
 
-		if (flagp.isKnown())
-			genNeededPlanA(0, destTmp3, color, r,  DEST_PRIORITY_DEFEND_FLAG);
-		else if (isActiveRank(color,r))
+		int r = defender.getRank().toInt();
+		if (flagp.isKnown()) {
+			activeRank[color][r-1] = defender;
+			genPlanA(destTmp3, color, r,  DEST_PRIORITY_DEFEND_FLAG);
+		} else if (isActiveRank(color,r))
 			genPlanA(destTmp3, color, r, DEST_PRIORITY_DEFEND_FLAG);
 	}
 
 	// Determine if piece at "index" is at risk of attack
 	// and if so, what rank should be moved to protect it?
-
-	// TBD: a design flaw here is that ranks are given plans
-	// but not specific pieces.  The AI can assign planA to
-	// the active piece of a given rank and planB to all other
-	// pieces of the rank.  So if there happens to be multiple
-	// pieces of the same rank, and the closest piece is not
-	// active, this algorithm fails.
 
 	// Of course, this algorithm isn't perfect anyway.  If
 	// the attacker has an open path, but the player does not,
@@ -1662,7 +1657,7 @@ public class TestingBoard extends Board
 	// pieces optimally.  This code is a pale effort to improve defensive
 	// measures past the search horizon.
 
-	private int getDefenderRank(int color, int destTmp[], int attackerRank, int stepsTarget)
+	private Piece getDefender(int color, int destTmp[], int attackerRank, int stepsTarget)
 	{
 		int stepsDefender = 99;
 		Piece pDefender = null;
@@ -1681,9 +1676,9 @@ public class TestingBoard extends Board
 
 		if (pDefender == null	// attacker not stopable
 			|| stepsDefender < stepsTarget) // no imminent danger
-			return 0;
+			return null;
 
-		return pDefender.getRank().toInt();
+		return pDefender;
 	}
 
 	// Because the search tree is so shallow that it is often
@@ -1767,18 +1762,23 @@ public class TestingBoard extends Board
 		genPlanA(destTmp2, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
 		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, closestBomb);
-		int rank = getDefenderRank(color, destTmp3, 8, stepsAttacker);
+		Piece defender = getDefender(color, destTmp3, 8, stepsAttacker);
 
-		if (rank != 0)
-			genNeededPlanA(0, destTmp3, color, rank, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+		if (defender != null) {
+			int r = defender.getRank().toInt();
+			activeRank[color][r-1] = defender;
+			genPlanA(destTmp3, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+		}
 
 		// Try to push the protector, if any, out of the way
 
 		if (stepsProtector < stepsAttacker) {
-			rank = getDefenderRank(color, destTmp3, pProtector.getRank().toInt(), stepsProtector);
-			if (rank != 0) {
+			defender = getDefender(color, destTmp3, pProtector.getRank().toInt(), stepsProtector);
+			if (defender != null) {
 				int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
-				genNeededPlanA(0, destTmp4, color, rank, DEST_PRIORITY_DEFEND_FLAG_AREA);
+				int r = defender.getRank().toInt();
+				activeRank[color][r-1] = defender;
+				genPlanA(destTmp4, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
 			}
 		}
 	}
