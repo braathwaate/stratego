@@ -1710,18 +1710,16 @@ public class TestingBoard extends Board
 		int color = flagp.getColor();
 		int flagi = flagp.getIndex();
 
-		// Try to determine the closest bomb subject to attack
-		// TBD: there could be more than one bomb and/or
-		// more than one attacker, but this gets complex
+		// Determine if any bomb is subject to attack
+		// and take defensive measures.
 		// TBD: if there are two unknown attackers,
 		// but if one has a suspected rank, focus on the other one.
 
-		int stepsAttacker = 99;
-		int stepsProtector = 99;
-		Piece pAttacker = null;
-		Piece pProtector = null;
-		int closestBomb = 0;
 		for (int d : dir) {
+			int stepsAttacker = 99;
+			int stepsProtector = 99;
+			Piece pAttacker = null;
+			Piece pProtector = null;
 			int bi = flagi + d;
 			if (!isValid(bi))
 				continue;
@@ -1743,44 +1741,44 @@ public class TestingBoard extends Board
 				if (destTmp[i] < stepsAttacker) {
 					stepsAttacker = destTmp[i];
 					pAttacker = p;
-					closestBomb = bi;
 				}
 			}
-		} // dir
-		if (pAttacker == null)
-			return; // no open path
+			if (pAttacker == null)
+				continue; // no open path
 
-		int approacherIndex = pAttacker.getIndex();
-		int pd = Grid.dir(approacherIndex, closestBomb);
+			int approacherIndex = pAttacker.getIndex();
+			int pd = Grid.dir(approacherIndex, bi);
 
-		int[] destTmp2 = genDestTmp(GUARDED_OPEN, color, closestBomb+pd);
+			int[] destTmp2 = genDestTmp(GUARDED_OPEN, color, bi+pd);
 
-		// Thwart the approach of the closest unknown or eight piece.
-		// Note the use of DEST_PRIORITY_ATTACK_FLAG, because
-		// the attacker could be either the AI or the opponent.
+			// Thwart the approach of the closest unknown or eight piece.
+			// Note the use of DEST_PRIORITY_ATTACK_FLAG, because
+			// the attacker could be either the AI or the opponent.
 
-		genPlanA(destTmp2, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
+			genPlanA(destTmp2, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
-		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, closestBomb);
-		Piece defender = getDefender(color, destTmp3, 8, stepsAttacker);
+			int destTmp3[] = genDestTmp(GUARDED_OPEN, color, bi);
+			Piece defender = getDefender(color, destTmp3, 8, stepsAttacker);
 
-		if (defender != null) {
-			int r = defender.getRank().toInt();
-			activeRank[color][r-1] = defender;
-			genPlanA(destTmp3, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
-		}
-
-		// Try to push the protector, if any, out of the way
-
-		if (stepsProtector < stepsAttacker) {
-			defender = getDefender(color, destTmp3, pProtector.getRank().toInt(), stepsProtector);
 			if (defender != null) {
-				int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
 				int r = defender.getRank().toInt();
 				activeRank[color][r-1] = defender;
-				genPlanA(destTmp4, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
+				genPlanA(destTmp3, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 			}
-		}
+
+			// Try to push the protector, if any, out of the way
+
+			if (stepsProtector < stepsAttacker) {
+				defender = getDefender(color, destTmp3, pProtector.getRank().toInt(), stepsProtector);
+				if (defender != null) {
+					int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
+					int r = defender.getRank().toInt();
+					activeRank[color][r-1] = defender;
+					genPlanA(destTmp4, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
+				}
+			}
+
+		} // dir
 	}
 
 	// depends on possibleFlag() which can set the ai flag
@@ -1897,8 +1895,15 @@ public class TestingBoard extends Board
 			flagTarget(flag[Settings.topColor]);
 		}
 
-		else if ((pflag.isKnown() || pflag.isSuspectedRank())
-			&& rankAtLarge(1-pflag.getColor(), Rank.EIGHT) != 0) {
+		// Always protect the flag bomb structure, even if the flag
+		// is not known (i.e multiple structures remaining)
+		// because the opponent can make a lucky guess,
+		// especially if the opponent has expendable eights
+		// that it can sacrifice by throwing them at multiple
+		// structures (just like the AI does).
+
+		else if (rankAtLarge(1-pflag.getColor(), Rank.EIGHT) != 0) {
+
 		// Flag value is worth more than an Eight.
 		// (because we always want an eight to take the
 		// flag rather than the protecting bombs.)
@@ -2981,7 +2986,30 @@ public class TestingBoard extends Board
 		if (vto != DEST_VALUE_NIL
 			&& vfrom != DEST_VALUE_NIL
 			&& plan[1][to] == priority) {
-				if (vfrom > vto)
+
+		// The difference in plan values for adjacent squares
+		// is always 1, except if the plan was modified by
+		// neededNear, which makes the squares
+		// adjacent to the target (value 2) to be value 5.
+		//
+		// 4 3 4 5	4 3 4 5
+		// 3 2 3 4	3 5 3 4
+		// 2 T 2 3	5 T 5 3
+		// 3 2 3 4	3 5 3 2
+		// chase	neededNear
+		//
+		// A piece is rewarded only if the from square
+		// is 1 greater than the to square.  So if a piece
+		// moves to a neededNear square and hence is penalized,
+		// it is penalized again if it moves back to its
+		// original spot.  This is necessary to prevent
+		// needless back and forth chases.
+		//
+		// Note: Scout far moves are always penalized, because
+		// the difference in value between the from and to squares is
+		// not 1.
+
+				if (vfrom == vto + 1)
 					return priority;
 				else
 					return -priority;
@@ -3107,28 +3135,16 @@ public class TestingBoard extends Board
 		// and Plan B value to the rest of the pieces
 		// if the piece has moved or is known
 
-			int v = 0;
 			if (activeRank[fpcolor][r] == fp
 				|| activeRank[fpcolor][r] == null && neededRank[fpcolor][r])
-				v =  planv(planA[fpcolor][r], m.getFrom(), m.getTo());
+				vm += planv(planA[fpcolor][r], m.getFrom(), m.getTo());
 			else if (fp.hasMoved()
 					|| fp.isKnown()
 					|| neededRank[fpcolor][r])
-				v = planv(planB[fpcolor][r], m.getFrom(), m.getTo());
-		// If a nine makes a far move,
-		// add planA for if the nine is already known
-		// or only negative planA is the nine is not known.
-		// This is because nines reach their destination
-		// more quickly, and we do not want an unknown nine
-		// becoming known just to obtain higher planA value.
-
+				vm += planv(planB[fpcolor][r], m.getFrom(), m.getTo());
 			if (unknownScoutFarMove) {
-				if (v < 0)
-					vm += v;
 				makeKnown(fp);
 				vm -= stealthValue(fp);
-			} else {
-				vm += v;
 			}
 
 			fp.setIndex(m.getTo());
