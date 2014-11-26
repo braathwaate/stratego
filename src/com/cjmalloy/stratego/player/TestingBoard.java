@@ -3079,8 +3079,6 @@ public class TestingBoard extends Board
 				newRank = Rank.toRank(lowestUnknownExpendableRank);
 			else if (rankWon == Rank.ONE) {
 				newRank = Rank.SPY;
-				// demote SPY value
-				p.setAiValue(values[p.getColor()][Rank.SEVEN.toInt()] - 10);
 			} else
 				newRank = getChaseRank(p, rankWon.toInt(), false);
 
@@ -3090,6 +3088,12 @@ public class TestingBoard extends Board
 
 		if (rankWon.toInt() <= 8)
 			p.setMaybeEight(false);
+
+		// If the One is killed (by a Spy), demote SPY value
+		if (p.getRank() == Rank.SPY) {
+			assert rankWon == Rank.ONE : "Spy can only win One"; 
+			p.setAiValue(values[p.getColor()][Rank.SEVEN.toInt()] - 10);
+		}
 	}
 
 	public void move(BMove m, int depth, boolean unknownScoutFarMove)
