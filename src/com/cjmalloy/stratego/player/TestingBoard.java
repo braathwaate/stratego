@@ -438,7 +438,7 @@ public class TestingBoard extends Board
 
 			if (rankAtLarge(1-c, Rank.ONE) == 0)
 				values[c][Rank.SPY.toInt()]
-					= values[c][Rank.UNKNOWN.toInt()] - 10;
+					= values[c][Rank.SEVEN.toInt()] - 10;
 
 
 		// Pieces become more valuable as they become fewer
@@ -3080,7 +3080,7 @@ public class TestingBoard extends Board
 			else if (rankWon == Rank.ONE) {
 				newRank = Rank.SPY;
 				// demote SPY value
-				p.setAiValue(values[p.getColor()][Rank.UNKNOWN.toInt()]);
+				p.setAiValue(values[p.getColor()][Rank.SEVEN.toInt()] - 10);
 			} else
 				newRank = getChaseRank(p, rankWon.toInt(), false);
 
