@@ -606,16 +606,6 @@ public class TestingBoard extends Board
 		for (int c = RED; c <= BLUE; c++)
 			needExpendableRank(c);
 
-		// The ai considers all isolated unmoved pieces to be bombs.
-		//
-		// So one way to fool the AI is to make the flag 
-		// isolated on the front rank (by moving all pieces that
-		// surround it) and then the AI will not attack it until
-		// it is the last piece remaining.  I doubt that few
-		// opponents will ever realize this without reading this code.
-		//
-		possibleBomb();
-
 		// Opponent bombs that block the lanes can be a benefit or
 		// a detriment to the AI.  Removing them costs an eight,
 		// so unless there is good reason to remove them, 
@@ -2191,40 +2181,36 @@ public class TestingBoard extends Board
 		// confuse the opponent which structure holds the flag,
 		// forcing the opponent to randomly attack.
 
-			if (isWinning(c) > 0)
+			if (isWinning(c) > VALUE_SIX)
 				continue;
 
-			if (eightsAtLarge >= maybe_count)
-				continue;
-
-		// The value of attacking unknown structures increases
-		// with the move count and the number
-		// of remaining structures.   So when the move count
-		// is low, the value of attacking unknown structures is low.
-		// When the number of structures decreases,
-		// the value decreases.
-
-			long value = undoList.size() * (1 + maybe_count) / 200;
-
-		// But not too high, otherwise the AI will sacrifice
+		// The value of attacking unknown unmoved pieces decreases
+		// as pieces are removed from the board.
+		// But this value should not be too high,
+		// otherwise the AI will sacrifice
 		// two pieces just for one discovery.
 
-			value = Math.min(value, VALUE_SIX);
+			int value = Math.min(npieces[c]/2, VALUE_SIX);
  
-		// Add value to pieces in structure to encourage discovery.
-		// Structures are worth more on the back ranks
+		// Add value to unknown unmoved pieces to encourage discovery.
+		// Pieces are worth more on the back ranks
 		// because the flag is more likely in the rear.
 		// note: *3 to outgain -depth late capture penalty
 
-//			for (int i = 0; i < maybe_count; i++)
-//			for ( int j = 1; maybe[i][j] != 0; j++ ) {
-//				int k = maybe[i][j];
-//				if (k >= 56)
-//					unmovedValue[k] = (k/11-7) * 3 + (int)value;
-//				else
-//					unmovedValue[k] = (4-k/11) * 3 + (int)value;
-//			}
-//
+			for ( int k = 12; k <= 120; k++ ) {
+				Piece p = getPiece(k);
+				if (p == null)
+					continue;
+				if (p.hasMoved()
+					|| p.isKnown()
+					|| p.isSuspectedRank())
+					continue;
+				if (k >= 56)
+					unmovedValue[k] = (k/11-7) * 3 + (int)value;
+				else
+					unmovedValue[k] = (4-k/11) * 3 + (int)value;
+			}
+
 		// Encourage movement of front line pieces
 		// to clear a path so that pieces can move easily
 		// from side to side.
@@ -2694,7 +2680,13 @@ public class TestingBoard extends Board
 					plan[1][j] = priority;
 				}
 			} else if (plan[1][j] < priority) {
-				if (tmp[j] != DEST_VALUE_NIL) {
+				if (tmp[j] != DEST_VALUE_NIL
+
+		// If a piece is already at the outer limit of the
+		// flee area, allow the lower priority plan (chase)
+		// to remain, to allow the piece to be called
+		// even further away.
+					&& !(tmp[j] == 1 && getPiece(j) != null)) {
 					plan[0][j] = tmp[j];
 					plan[1][j] = priority;
 				}
@@ -2921,7 +2913,25 @@ public class TestingBoard extends Board
 				}
 				if (r != 10)
 					setSuspectedRank(p, getChaseRank(p, r, false));
-		}
+
+		// set actingRankFlee temporarily on any AI pieces approached
+		// by an opponent piece.  When the AI evaluates any
+		// move other than moving the approached piece,
+		// the opponent will realize that the approached piece
+		// is weak.
+
+			if (p != null)
+				for (int d : dir) {
+					Piece tp = getPiece(i+d);
+					if (tp == null)
+						continue;
+					if (tp.getColor() == Settings.topColor
+						&& (tp.getActingRankFlee() == Rank.NIL
+							|| tp.getActingRankFlee().toInt() > p.getRank().toInt()))
+						tp.setActingRankFlee(p.getRank());
+				}
+					
+		} // prev != null
 		}
 
 		// lowestUnknownRank is used in an encounter
@@ -2956,6 +2966,16 @@ public class TestingBoard extends Board
 				lowerRankCount[c][r-1] = count;
 			}
 		}
+
+		// The ai considers all isolated unmoved pieces to be bombs.
+		//
+		// So one way to fool the AI is to make the flag 
+		// isolated on the front rank (by moving all pieces that
+		// surround it) and then the AI will not attack it until
+		// it is the last piece remaining.  I doubt that few
+		// opponents will ever realize this without reading this code.
+		//
+		possibleBomb();
 	}
 
 	//
@@ -3458,7 +3478,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFlee() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fp, tprank);
+					vm += valueBluff(fp, tprank, m.getTo());
 
 				if (depth != 0
 					&& fpcolor == Settings.topColor
@@ -3470,7 +3490,7 @@ public class TestingBoard extends Board
 					&& fp.getActingRankFlee() != tprank 
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m))
-					vm -= valueBluff(tp, fprank);
+					vm -= valueBluff(tp, fprank, m.getTo());
 
 		// Consider the following example.
 		// -- R1 --
@@ -3595,7 +3615,7 @@ public class TestingBoard extends Board
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m)) {
 					vm += valueBluff(m, fp, tp);
-					vm -= valueBluff(tp, fprank);
+					vm -= valueBluff(tp, fprank, m.getTo());
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -3739,7 +3759,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFlee() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fp, tprank);
+					vm += valueBluff(fp, tprank, m.getTo());
 
 				else if (fpcolor == Settings.bottomColor)
 					vm += apparentWinValue(fp,
@@ -4587,14 +4607,14 @@ public class TestingBoard extends Board
 		return 0;
 	}
 
-	protected int valueBluff(Piece oppPiece, Rank airank)
+	protected int valueBluff(Piece oppPiece, Rank airank, int to)
 	{
 		// If the defender is near the flag,
 		// the defender has to call the bluff
 		// so bluffing isn't very effective
 
 		if (flag[Settings.bottomColor] != null
-			&& Grid.steps(oppPiece.getIndex(), flag[Settings.bottomColor].getIndex()) <= 2 )
+			&& Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 2 )
 			return values[Settings.topColor][airank.toInt()]/2;
 
 		// Bluffing using valuable pieces is (slightly) discouraged.

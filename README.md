@@ -9,8 +9,8 @@ and mainly offers a much improved AI and some other features.
 Download
 --------
 
-[Stratego player v0.9.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.0/stratego_v0.9.0.jar
+[Stratego player v0.9.1][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.1/stratego_v0.9.1.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -73,8 +73,12 @@ expendable rank to confirm its suspicions.
 Static position analysis is used to determine piece destinations.
 Success is largely dependent on the AI in gaining
 knowledge of opponent piece rank.
-(However, this does lead the AI to make pointless chases
-which are mitigated only by the Two-Squares and More-Squares rules).
+The AI creates plans (using a maze-running algorithm)
+to move its pieces towards opponent pieces
+where material or informational gain could be possible.
+However, because the outcome cannot be determined at this point,
+this does lead the AI to make pointless chases
+which are mitigated only by the Two-Squares and More-Squares rules.
 
 Once a piece gets in the general vicinity of its target(s),
 the AI relies on the minimax algorithm to find

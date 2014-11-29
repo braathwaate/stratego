@@ -1156,6 +1156,10 @@ public class Board
 		if (m2.getFrom() != m.getTo())
 			return false;
 
+		// is a capture?
+		if (getPiece(m.getTo()) != null)
+			return false;
+
 		// not the same piece?
 		if (m2.getPiece() != getPiece(m.getFrom()))
 			return false;
