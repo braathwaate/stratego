@@ -695,6 +695,9 @@ public class Board
 				while (attackerRank > 0 && unknownRankAtLarge(chaser.getColor(), attackerRank) == 0)
 					attackerRank--;
 
+				if (attackerRank == 0)
+					return;
+
 		// Guess that the protector rank is one less than
 		// the attacker rank
 
@@ -705,9 +708,9 @@ public class Board
 
 		// known piece is protector
 
-		if (knownProtector != null
-			&& knownProtector.getRank().toInt() <= r)
-			return;
+			if (knownProtector != null
+				&& knownProtector.getRank().toInt() <= r)
+				return;
 
 		// Only a Spy can protect a piece attacked by a One.
 
