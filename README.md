@@ -35,7 +35,7 @@ Finally, you can try to run it from the command line:
 About the AI (Artificial Intelligence)
 --------------------------------------
 
-The AI algorithm is the usual minimax with alpha-beta pruning.
+The AI algorithm is the generic minimax with alpha-beta pruning.
 Iterative deepening and heuristic history is used 
 for move ordering to increase pruning success.
 Killer move is used for efficiency.
@@ -80,18 +80,24 @@ However, because the outcome cannot be determined at this point,
 this does lead the AI to make pointless chases
 which are mitigated only by the Two-Squares and More-Squares rules.
 
-Once a piece gets in the general vicinity of its target(s),
+Once a piece arrives in the general vicinity of its target(s),
 the AI relies on the minimax algorithm to find
 the optimal set of moves that
 allows it to attack its target.
+Because every unknown piece is assigned a suspected rank,
+every outcome has a single value,
+so the generic minimax algorithm is able to determine the optimal result.
+The AI is conservative in the assignment of suspected rank,
+which results in cautious play until the suspected ranks
+are confirmed through attack or mature through extended play.
 
-This algorithm results in a modest amateur level of play,
-able to defeat most casual human players and stratego bots.
+The result is a stratego bot with a modest amateur level of play,
+able to defeat most casual human players and other stratego bots.
 A primary failing of other stratego bots is the lack of bluffing,
 which allows the AI to easily determine piece ranks
 without random attack.
 However, even if the opponent does bluff, the AI does not heavily
-weight suspected piece ranks until confirmed through attack by
+weight suspected ranks until confirmed through attack by
 a piece of expendable rank.
 
 Areas for improvements are:

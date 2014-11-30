@@ -680,16 +680,28 @@ public class Board
 			if (r == 1)
 				return;
 
+			int attackerRank = 0;
+
 			if (chaser.isKnown()) {
-				assert !chased.isKnown() : "known chaser must chase unknown";
-				r = chaser.getApparentRank().toInt()-1;
-				while (r > 0 & unknownRankAtLarge(chased.getColor(), r) == 0)
-					r--;
+				attackerRank = chaser.getApparentRank().toInt();
+				assert attackerRank < r : "known chaser must chase unknown or lower rank";
+				r = attackerRank - 1;
 			} else {
-				r = r - 2;
-				while (r > 0 & unknownRankAtLarge(chaser.getColor(), r) == 0)
-					r--;
+
+		// Guess that the attacker rank is one less than
+		// the chased rank (or possibly less, if not unknown)
+
+				attackerRank = r - 1;
+				while (attackerRank > 0 && unknownRankAtLarge(chaser.getColor(), attackerRank) == 0)
+					attackerRank--;
+
+		// Guess that the protector rank is one less than
+		// the attacker rank
+
+				r = attackerRank - 1;
 			}
+			while (r > 0 && unknownRankAtLarge(chased.getColor(), r) == 0)
+				r--;
 
 		// known piece is protector
 
@@ -698,10 +710,13 @@ public class Board
 			return;
 
 		// Only a Spy can protect a piece attacked by a One.
+
 			Rank rank;
-			if (r == 0)
+			if (r == 0) {
+				if (attackerRank != 1)
+					return;
 				rank = Rank.SPY;
-			else
+			} else
 				rank = Rank.toRank(r);
 
 		// Once the AI has indirectly identified the opponent Spy
