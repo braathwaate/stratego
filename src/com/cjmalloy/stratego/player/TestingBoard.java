@@ -59,15 +59,12 @@ public class TestingBoard extends Board
 	protected int[] invincibleRank = new int[2];	// rank that always wins or ties
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
-	protected int[][] knownRank = new int[2][15];	// discovered ranks
 	protected Piece[][] activeRank = new Piece[2][15];	// moved rank Piece
-	protected int[][] trayRank = new int[2][15];	// ranks in trays
 	protected boolean[][] neededRank = new boolean[2][15];	// needed ranks
 	protected int[][] lowerRankCount = new int[2][10];
 	protected int[][][][] planA = new int[2][15][2][121];	// plan A
 	protected int[][][][] planB = new int[2][15][2][121];	// plan B
 	protected int[][] winRank = new int[15][15];	// winfight cache
-	protected int[] piecesInTray = new int[2];
 	protected int[] piecesNotBomb = new int[2];
 	protected int[] sumValues = new int[2];
 	protected int value;	// value of board
@@ -201,12 +198,9 @@ public class TestingBoard extends Board
 			flag[c]=null;
 			npieces[c] = 0;
 			piecesNotBomb[c] = 0;
-			piecesInTray[c] = 0;
 			for (int j=0;j<15;j++) {
 				suspectedRank[c][j] = 0;
-				knownRank[c][j] = 0;
 				activeRank[c][j] = null;
-				trayRank[c][j] = 0;
 				neededRank[c][j] = false;
 				values[c][j] = startValues[j];
 				valueStealth[c][j] = 0;
@@ -228,10 +222,8 @@ public class TestingBoard extends Board
 				grid.setPiece(i, np);
 				np.setAiValue(0);
 				np.setIndex(i);
-				if (p.isKnown()) {
-					int r = p.getRank().toInt();
-					knownRank[p.getColor()][r-1]++;
-				} else if (p.getColor() == Settings.bottomColor)
+				if (!p.isKnown()
+					&& p.getColor() == Settings.bottomColor)
 					np.setRank(Rank.UNKNOWN);
 
 				if (p.hasMoved() || p.isKnown()) {
@@ -253,14 +245,6 @@ public class TestingBoard extends Board
 				if (np.getRank() == Rank.FLAG)
 					flag[p.getColor()] = np;
 			}
-		}
-
-		// add in the tray pieces to trayRank
-		for (int i=0;i<getTraySize();i++) {
-			Piece p = getTrayPiece(i);
-			int r = p.getRank().toInt();
-			trayRank[p.getColor()][r-1]++;
-			piecesInTray[p.getColor()]++;
 		}
 
 		// The number of expendable ranks still at large
@@ -1443,49 +1427,22 @@ public class TestingBoard extends Board
 				= frank.winFight(trank);
 	}
 
-	private int unknownRankAtLarge(int color, int r)
-	{
-		return Rank.getRanks(Rank.toRank(r))
-			- trayRank[color][r-1]
-			- knownRank[color][r-1];
-	}
-
-	private int unknownNotSuspectedRankAtLarge(int color, int r)
+	protected int unknownNotSuspectedRankAtLarge(int color, int r)
 	{
 		return unknownRankAtLarge(color, r) - suspectedRankAtLarge(color, r);
 	}
 
-	private int unknownNotSuspectedRankAtLarge(int color, Rank rank)
+	protected int unknownNotSuspectedRankAtLarge(int color, Rank rank)
 	{
 		return unknownNotSuspectedRankAtLarge(color, rank.toInt());
 	}
 
-	private int unknownRankAtLarge(int color, Rank rank)
-	{
-		return unknownRankAtLarge(color, rank.toInt());
-	}
-
-	private int knownRankAtLarge(int color, int r)
-	{
-		return knownRank[color][r-1];
-	}
-
-	private int rankAtLarge(int color, int rank)
-	{
-		return (Rank.getRanks(Rank.toRank(rank)) - trayRank[color][rank-1]);
-	}
-
-	private int rankAtLarge(int color, Rank rank)
-	{
-		return rankAtLarge(color, rank.toInt());
-	}
-
-	private int suspectedRankAtLarge(int color, int r)
+	protected int suspectedRankAtLarge(int color, int r)
 	{
 		return suspectedRank[color][r-1];
 	}
 
-	private int suspectedRankAtLarge(int color, Rank rank)
+	protected int suspectedRankAtLarge(int color, Rank rank)
 	{
 		return suspectedRankAtLarge(color, rank.toInt());
 	}
@@ -2901,7 +2858,11 @@ public class TestingBoard extends Board
 		if (prev != null) {
 			int i = prev.getTo();
 			Piece p = getPiece(i);
-			if (p != null && p.getRank() == Rank.UNKNOWN)
+
+		// Even if the approaching piece already has a suspected rank,
+		// override it if it approaches an AI piece.
+
+			if (p != null && !p.isKnown())
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
 					if (tp == null)
@@ -4860,7 +4821,7 @@ public class TestingBoard extends Board
 		// on a discovery mission than a Six, Seven or Nine.
 		//
 		if (r == 5 && !fp.isSuspectedRank())
-			return 5;	// 50% chance of attack
+			return 6;	// 60% chance of attack
 
 		// Risk of an unknown scout attack decreases with
 		// with the number of scouts remaining.

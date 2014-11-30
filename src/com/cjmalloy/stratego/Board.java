@@ -42,8 +42,6 @@ public class Board
 	}
 
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
-
-	
 	public static final int RED  = 0;
 	public static final int BLUE = 1;
 	public static final Spot IN_TRAY = new Spot(-1, -1);
@@ -64,6 +62,10 @@ public class Board
 	protected long hash = 0;
 
 	protected static TTEntry[] ttable = new TTEntry[2<<22];
+
+        protected int[][] knownRank = new int[2][15];   // discovered ranks
+        protected int[][] trayRank = new int[2][15];    // ranks in trays
+	protected int[] piecesInTray = new int[2];
 
 	static {
 		Random rnd = new Random();
@@ -145,6 +147,9 @@ public class Board
 		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
 		hash = b.hash;
+		trayRank = b.trayRank.clone();
+		knownRank = b.knownRank.clone();
+		piecesInTray = b.piecesInTray.clone();
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -675,11 +680,16 @@ public class Board
 			if (r == 1)
 				return;
 
-			if (chaser.getApparentRank().toInt() < r)
-				r = chaser.getApparentRank().toInt();
-			else
-				r--;
-			r--;
+			if (chaser.isKnown()) {
+				assert !chased.isKnown() : "known chaser must chase unknown";
+				r = chaser.getApparentRank().toInt()-1;
+				while (r > 0 & unknownRankAtLarge(chased.getColor(), r) == 0)
+					r--;
+			} else {
+				r = r - 2;
+				while (r > 0 & unknownRankAtLarge(chaser.getColor(), r) == 0)
+					r--;
+			}
 
 		// known piece is protector
 
@@ -816,6 +826,32 @@ public class Board
 
 	void genChaseRank(int turn)
 	{
+               for (int c = RED; c <= BLUE; c++) {
+                        piecesInTray[c] = 0;
+                        for (int j=0;j<15;j++) {
+                                trayRank[c][j] = 0;
+                                knownRank[c][j] = 0;
+			}
+		}
+
+		// add in the tray pieces to trayRank
+		for (int i=0;i<getTraySize();i++) {
+			Piece p = getTrayPiece(i);
+			int r = p.getRank().toInt();
+			trayRank[p.getColor()][r-1]++;
+			piecesInTray[p.getColor()]++;
+		}
+
+		for ( int i = 12; i <= 120; i++) {
+			if (!isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p == null)
+				continue;
+			if (p.isKnown())
+				knownRank[p.getColor()][p.getRank().toInt()-1]++;
+		}
+
 		for ( int i = 12; i <= 120; i++) {
 			if (!isValid(i))
 				continue;
@@ -1423,13 +1459,31 @@ public class Board
 		return false;
 	}
 
-	public int rankInTray(int color, Rank rank)
+	public int unknownRankAtLarge(int color, int r)
 	{
-		int count = 0;
-		for (Piece p : tray)
-			if (p.getColor() == color && p.getRank() == rank)
-				count++;
-		return count;
+		return Rank.getRanks(Rank.toRank(r))
+			- trayRank[color][r-1]
+			- knownRank[color][r-1];
+	}
+
+	public int unknownRankAtLarge(int color, Rank rank)
+	{
+		return unknownRankAtLarge(color, rank.toInt());
+	}
+
+	public int knownRankAtLarge(int color, int r)
+	{
+		return knownRank[color][r-1];
+	}
+
+	public int rankAtLarge(int color, int rank)
+	{
+		return (Rank.getRanks(Rank.toRank(rank)) - trayRank[color][rank-1]);
+	}
+
+	public int rankAtLarge(int color, Rank rank)
+	{
+		return rankAtLarge(color, rank.toInt());
 	}
 }
 

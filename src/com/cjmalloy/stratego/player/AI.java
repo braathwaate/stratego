@@ -50,7 +50,7 @@ public class AI implements Runnable
 	private Board board = null;
 	private CompControls engine = null;
 	private PrintWriter log;
-	private int ninesAtLarge;	// if the opponent still has Nines
+	private int unknownNinesAtLarge;	// if the opponent still has Nines
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
@@ -329,7 +329,7 @@ public class AI implements Runnable
 		// generate scout far moves only for attacks on unknown
 		// valuable pieces.
 		// if there are no nines left, then skip this code
-				if (ninesAtLarge > 0 && fprank == Rank.UNKNOWN) {
+				if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN) {
 					Piece p;
 					do {
 						t += d;
@@ -453,15 +453,8 @@ public class AI implements Runnable
 		for (int k=12; k<=120; k++)
 			hh[j][k] = 0;
 
-		ninesAtLarge = Rank.getRanks(Rank.NINE)
-			- b.rankInTray(Settings.bottomColor, Rank.NINE);
+		unknownNinesAtLarge = b.unknownRankAtLarge(Settings.bottomColor, Rank.NINE);
 
-		for (Piece p : b.pieces[Settings.bottomColor])
-			if (p == null)	// end of list
-				break;
-			else if (p.getRank() == Rank.NINE)
-				ninesAtLarge--;
-			
 		ArrayList<MoveValuePair> moveList = getMoves(b, Settings.topColor, null, null);
 		// To speed move generation, the search tree does not check the
 		// Two Squares rule for each move, so we remove
