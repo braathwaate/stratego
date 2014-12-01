@@ -466,6 +466,7 @@ public class AI implements Runnable
 
 		// Two Squares Rule
 			if (b.isTwoSquares(tmpM)) {
+				logMove(0, b, tmpM, 0, 0, "removed two squares");
 				moveList.remove(k);
 				continue;
 			}
@@ -492,10 +493,15 @@ public class AI implements Runnable
 			if (!b.isChased(tmpM) && !b.isTwoSquaresChase(tmpM)) {
 				b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-				if (b.isRepeatedPosition())
+				boolean isRepeated = false;
+				if (b.isRepeatedPosition()) {
 					moveList.remove(k);
+					isRepeated = true;
+				}
 
 				b.undo();
+				if (isRepeated)
+					logMove(0, b, tmpM, 0, 0, "removed repeated");
 			}
 
 			assert b.getValue() == 0 : "Board value not zero?";

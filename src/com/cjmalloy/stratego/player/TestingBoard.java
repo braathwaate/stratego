@@ -1682,41 +1682,17 @@ public class TestingBoard extends Board
 		// but if one has a suspected rank, focus on the other one.
 
 		for (int d : dir) {
-			int stepsAttacker = 99;
-			int stepsProtector = 99;
-			Piece pAttacker = null;
-			Piece pProtector = null;
+
 			int bi = flagi + d;
 			if (!isValid(bi))
 				continue;
 			Piece bp = getPiece(bi);
 			assert (bp != null && bp.getRank() == Rank.BOMB) : "flagBombTarget() called on non-bombed flag";
 
-			int destTmp[] = genDestTmp(GUARDED_OPEN, color, bi);
-			for (int i = 12; i < 120; i++) {
-				Piece p = getPiece(i);
-				if (p == null || p.getColor() != 1 - color)
-					continue;
-				if (p.isKnown() && p.getRank() != Rank.EIGHT) {
-					if (destTmp[i] < stepsProtector) {
-						stepsProtector = destTmp[i];
-						pProtector = p;
-					}
-					continue;
-				}
-				if (destTmp[i] < stepsAttacker) {
-					stepsAttacker = destTmp[i];
-					pAttacker = p;
-				}
-			}
-			if (pAttacker == null)
-				continue; // no open path
-
 			//
 			// check all possible approaches to bomb
 			//
 
-			int approacherIndex = pAttacker.getIndex();
 			for (int dbomb : dir ) {
 				int bd = bi + dbomb;
 				if (!isValid(bd))
@@ -1724,26 +1700,48 @@ public class TestingBoard extends Board
 				if (getPiece(bd) != null)
 					continue;
 
-				int[] destTmp2 = genDestTmp(GUARDED_OPEN, color, bd);
+				int stepsAttacker = 99;
+				int stepsProtector = 99;
+				Piece pAttacker = null;
+				Piece pProtector = null;
+				int destTmp[] = genDestTmp(GUARDED_OPEN, color, bd);
+				for (int i = 12; i < 120; i++) {
+					Piece p = getPiece(i);
+					if (p == null || p.getColor() != 1 - color)
+						continue;
+					if (p.isKnown() && p.getRank() != Rank.EIGHT) {
+						if (destTmp[i] < stepsProtector) {
+							stepsProtector = destTmp[i];
+							pProtector = p;
+						}
+						continue;
+					}
+					if (destTmp[i] < stepsAttacker) {
+						stepsAttacker = destTmp[i];
+						pAttacker = p;
+					}
+				}
+				if (pAttacker == null)
+					continue; // no open path
 
 				// Thwart the approach of the closest unknown or eight piece.
 				// Note the use of DEST_PRIORITY_ATTACK_FLAG, because
 				// the attacker could be either the AI or the opponent.
 
-				genPlanA(destTmp2, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
+				genPlanA(destTmp, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
-				Piece defender = getDefender(color, destTmp2, 8, stepsAttacker);
+				Piece defender = getDefender(color, destTmp, 8, stepsAttacker);
 
 				if (defender != null) {
 					int r = defender.getRank().toInt();
 					activeRank[color][r-1] = defender;
-					genPlanA(destTmp2, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+					genPlanA(destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 				}
 
 				// Try to push the protector, if any, out of the way
 
 				if (stepsProtector < stepsAttacker) {
-					defender = getDefender(color, destTmp2, pProtector.getRank().toInt(), stepsProtector);
+					defender = getDefender(color, destTmp, pProtector.getRank().toInt(), stepsProtector);
 					if (defender != null) {
 						int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
 						int r = defender.getRank().toInt();
@@ -3364,7 +3362,8 @@ public class TestingBoard extends Board
 		// more negative.
 
 					if (!tp.isKnown()) {
-						vm += apparentWinValue(fp,
+						vm += apparentWinValue(depth,
+							fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
@@ -3533,7 +3532,7 @@ public class TestingBoard extends Board
 					if (fpcolor == Settings.topColor)
 						vm += stealthValue(tp);
 					else {
-						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp), valueStealth[tp.getColor()][Rank.UNKNOWN.toInt()-1]);
+						vm += apparentWinValue(depth, fp, fprank, unknownScoutFarMove, tp, stealthValue(tp), valueStealth[tp.getColor()][Rank.UNKNOWN.toInt()-1]);
 						vm += riskOfLoss(tp, fp);
 					}
 				}
@@ -3702,7 +3701,8 @@ public class TestingBoard extends Board
 					&& fprank != Rank.EIGHT) {
 					vm -= fpvalue * (10 - apparentRisk(fp, fprank, unknownScoutFarMove, tp)) / 10;
 					if (fpcolor == Settings.bottomColor)
-						vm += apparentWinValue(fp,
+						vm += apparentWinValue(depth,
+							fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
@@ -3723,7 +3723,8 @@ public class TestingBoard extends Board
 					vm += valueBluff(fp, tprank, m.getTo());
 
 				else if (fpcolor == Settings.bottomColor)
-					vm += apparentWinValue(fp,
+					vm += apparentWinValue(depth,
+							fp,
 						fprank,
 						unknownScoutFarMove,
 						tp,
@@ -4104,7 +4105,7 @@ public class TestingBoard extends Board
 		// AI piece?  The opponent piece only sees the apparent value
 		// of the AI piece.
 
-					tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank.toInt(), false), false, tp, tpvalue, apparentValue(tp));
+					tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, tpvalue, apparentValue(tp));
 
 		// Outcome is the negation as if ai
 		// were the attacker.
@@ -4640,7 +4641,7 @@ public class TestingBoard extends Board
 	{
 		int c = pflag.getColor();
 		if (c == Settings.bottomColor
-			|| invincibleWinRank[c] <= invincibleRank[1-c])
+			|| invincibleWinRank[1-c] <= invincibleWinRank[c])
 			pflag.setKnown(true);
 	}
 
@@ -4850,7 +4851,7 @@ public class TestingBoard extends Board
 
 	}
 
-	int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV, int apparentV)
+	int apparentWinValue(int depth, Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV, int apparentV)
 	{
 		assert fp.getColor() == Settings.bottomColor : "apparentWinValue only for opponent attacker";
 
@@ -4900,9 +4901,9 @@ public class TestingBoard extends Board
 		// value is somewhere between actual and apparent value.
 		//
 		// Now consider the following example.
-		// -- B? B? B?
-		// -- B? R3 B?
-		// B? R2 B7
+		// -- R? R? R?
+		// -- R? R3 R?
+		// R? R2 B7
 		// All pieces are unknown except for Blue Seven.
 		// Red has the move.  Should Red play R3xB7 to
 		// protect the stealth of the Two?  R3xB7 loses
@@ -4916,8 +4917,36 @@ public class TestingBoard extends Board
 		// and allow B7xR2.  But then Red is calculating that
 		// Blue may play B7xR3 instead of B7xR2, since
 		// neither piece is known.
+		//
+		// The risk of attack on an unknown piece is largely
+		// based on the rank of the attacker.  High ranked
+		// pieces are much more likely to attack unknown pieces,
+		// except perhaps if the opponent is losing, when
+		// the opponent may make a last ditch effort to
+		// bolster a lost position.
+		//
+		// But the true risk depends assessing the actual target
+		// of the attacker.  Factors that could be useful in
+		// determining the most likely target are:
+		// 1. distance to the target
+		// 2. direction of the attacker
+		// 3. multiple targets
+		//
+		// The determination of the target is more computationally
+		// expensive than just basing the risk on the attacker
+		// rank.  To simplify, the AI sets the risk to zero
+		// if the depth is greater than two moves away.
+		// This makes the assumption that if the attacker is
+		// far away, there is likely some other target it
+		// is aiming for.  Once the attacker is only two moves
+		// away, the AI assumes that attacker is aiming for
+		// this piece, and it needs to assess the risk.
 
-		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
+		int risk;
+		if (depth > 3)
+			risk = 0;
+		else
+			risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
 

@@ -1298,15 +1298,21 @@ public class Board
 		// then AI allows to proceed,
 		// by avoiding the isRepeatedPosition() check in the AI.
 
-		BMove m4 = getLastMove(4);
+		UndoMove m4 = getLastMove(4);
 		if (m4 == null)
 			return false;
 
-		BMove m6 = getLastMove(6);
+		UndoMove m6 = getLastMove(6);
 		if (m6 == null)
 			return false;
 
-		if (m.equals(m4) && !m2.equals(m6))
+		// If moves 1 and 3 are equal
+		// and position A = C
+		// and moves 2 and 4 are not equal (if they are equal, it
+		// means we are at position D)
+		if (m.equals(m4)
+			&& hash == m4.hash
+			&& !m2.equals(m6))
 			return false;
 
 		return true;
