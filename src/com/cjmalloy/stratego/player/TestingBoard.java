@@ -2857,7 +2857,8 @@ public class TestingBoard extends Board
 			int i = prev.getTo();
 			Piece p = getPiece(i);
 
-		// Even if the approaching piece already has a suspected rank,
+		// Even if the approaching piece already
+		// has a lower suspected rank,
 		// override it if it approaches an AI piece.
 
 			if (p != null && !p.isKnown())
@@ -2870,7 +2871,7 @@ public class TestingBoard extends Board
 						&& tp.getRank().toInt() < r) 
 						r = tp.getRank().toInt();
 				}
-				if (r != 10)
+				if (r != 10 && r < p.getRank().toInt())
 					setSuspectedRank(p, getChaseRank(p, r, false));
 
 		// set actingRankFlee temporarily on any AI pieces approached
