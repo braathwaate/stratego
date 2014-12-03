@@ -671,7 +671,7 @@ public class AI implements Runnable
 
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			int vm = valueNMoves(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
+			int vm = -valueNMoves(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
 
 			mvp.setValue(vm);
 
@@ -963,25 +963,28 @@ public class AI implements Runnable
 		return best;
 	}
 
+	private int negQS(int qs, int turn)
+	{
+		if (turn == Settings.topColor)
+			return qs;
+		else
+			return -qs;
+	}
+
 	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
 	{
 		BMove bestmove = null;
 		int valueB = b.getValue();
-		int v;
+		int bestValue = -9999;
 		UndoMove lastmove = b.getLastMove();
 		if (n < 1 || (lastmove != null && lastmove.tp != null && lastmove.tp.getRank() == Rank.FLAG))
-			return qs(b, turn, depth, QSMAX, false);
+			return negQS(qs(b, turn, depth, QSMAX, false), turn);
 
 		if (bestMove != null
 			&& stopTime != 0
 			&& System.currentTimeMillis( ) > stopTime)
 			throw new InterruptedException();
 
-
-		if (turn == Settings.topColor)
-			v = alpha;
-		else
-			v = beta;
 
 		// If the chaser is N or more squares away, then
 		// the chase is considered over.
@@ -1007,7 +1010,7 @@ public class AI implements Runnable
 
 		if (chasePiece != null && turn == Settings.bottomColor) {
 			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
-				return qs(b, turn, depth, QSMAX, false);
+				return negQS(qs(b, turn, depth, QSMAX, false), turn);
 		}
 
 		// Try the killer move before move generation
@@ -1018,33 +1021,27 @@ public class AI implements Runnable
 		int kto = killerMove.getTo();
 		Piece fp = b.getPiece(kfrom);
 		Piece tp = b.getPiece(kto);
-		int d = kto - kfrom;
 		if (fp != null
 			&& fp.getColor() == turn
-			&& (d == 1 || d == -1 || d == -11 || d == 11)
+			&& Grid.isAdjacent(kfrom, kto)
 			&& (tp == null || tp.getColor() != turn)) {
 			BMove tmpM = new BMove(kfrom, kto);
 			b.move(tmpM, depth, false);
 
-			int vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			int vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo();
 
 			logMove(n, b, tmpM, valueB, vm, "");
 
-			if (turn == Settings.topColor) {
-				if (vm > alpha) {
-					v = alpha = vm;
-					bestmove = tmpM;
-				}
-			} else {
-				if (vm < beta) {
-					v = beta = vm;
-					bestmove = tmpM;
-				}
+			if (vm > bestValue) {
+				bestmove = tmpM;
+				bestValue = vm;
 			}
 
-			if (beta <= alpha) {
+			alpha = Math.max(alpha, vm);
+
+			if (alpha >= beta) {
 				hh[kfrom][kto]+=n;
 				return vm;
 			}
@@ -1092,7 +1089,7 @@ public class AI implements Runnable
 			int vm = 0;
 			if (max.move == null) {
 			b.pushNullMove();	// because of isRepeatedPosition()
-			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 			b.popMove();
 			log(n + ": (null move) " + valueB + " " + vm);
 			} else {
@@ -1156,26 +1153,21 @@ public class AI implements Runnable
 					b.move(max.move, depth, max.unknownScoutFarMove);
 			} else
 				b.move(max.move, depth, max.unknownScoutFarMove);
-			vm = valueNMoves(b, n-1, alpha, beta, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
 			b.undo();
 
 			logMove(n, b, max.move, valueB, vm, note);
 			}
 
-			if (turn == Settings.topColor) {
-				if (vm > alpha) {
-					v = alpha = vm;
-					bestmove = max.move;
-				}
-			} else {
-				if (vm < beta) {
-					v = beta = vm;
-					bestmove = max.move;
-				}
+			if (vm > bestValue) {
+				bestValue = vm;
+				bestmove = max.move;
 			}
 
-			if (beta <= alpha)
+			alpha = Math.max(alpha, vm);
+
+			if (alpha >= beta)
 				break;
 		} // moveList
 
@@ -1183,18 +1175,20 @@ public class AI implements Runnable
 			hh[bestmove.getFrom()][bestmove.getTo()]+=n;
 			killerMove.set(bestmove);
 		}
-		return v;
+		return bestValue;
 	}
 
 	String logPiece(Piece p)
 	{
 		Rank rank = p.getRank();
 		if (!p.isKnown()
-			&& (p.getActingRankFlee() != Rank.NIL
+			&& (p.getActingRankFleeLow() != Rank.NIL
+				|| p.getActingRankFleeHigh() != Rank.NIL
 				|| p.getActingRankChase() != Rank.NIL))
 			return p.getRank() + "["
 				+ p.getActingRankChase()
-				+ "," + p.getActingRankFlee() + "]";
+				+ "," + p.getActingRankFleeLow()
+				+ "," + p.getActingRankFleeHigh() + "]";
 
 		return "" + p.getRank();
 	}

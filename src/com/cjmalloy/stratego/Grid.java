@@ -117,10 +117,11 @@ public class Grid
 	// isAdjacent is the same as steps() == 1 but perhaps faster
 	static public boolean isAdjacent(int f, int t)
 	{
-		return f == t + 11
-			|| f == t - 11
-			|| f == t + 1
-			|| f == t - 1;
+		int d = f - t;
+		return d == 11
+			|| d == -11
+			|| d == 1
+			|| d == -1;
 	}
 
 	// number of steps between indicies

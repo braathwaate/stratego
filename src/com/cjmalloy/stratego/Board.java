@@ -508,10 +508,7 @@ public class Board
 				if (isProtectedFlee(chasePiece, fp, chaser))
 					continue;
 
-				Rank arank = fp.getActingRankFlee();
-				if (arank == Rank.NIL
-				|| arank.toInt() > rank.toInt())
-					fp.setActingRankFlee(rank);
+				fp.setActingRankFlee(rank);
 			}
 		}
 
@@ -655,7 +652,7 @@ public class Board
 
 			if (!chased.isKnown()) {
 				assert chaser.isKnown() : "unknown chaser?";
-				Rank fleeRank = chased.getActingRankFlee();
+				Rank fleeRank = chased.getActingRankFleeLow();
 				Rank chaserRank = chaser.getApparentRank();
 				if (fleeRank != chaserRank) {
 
@@ -666,7 +663,7 @@ public class Board
 					Rank chasedRank = chased.getActingRankChase();
 					if (chasedRank.toInt() > chaserRank.toInt()) {
 						chased.setActingRankChaseEqual(Rank.NIL);
-						chased.setActingRankFlee(Rank.NIL);
+						chased.clearActingRankFlee();
 					}
 					return;
 				}
@@ -796,7 +793,7 @@ public class Board
 		// and gets trapped in some way, it may just give up.
 		// So do not assign a chase rank equal to the flee rank.
 
-		if (chased.getActingRankFlee() == chaser.getApparentRank())
+		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
 			return;
 
 		// Chasing an unknown sets the chase rank to UNKNOWN.

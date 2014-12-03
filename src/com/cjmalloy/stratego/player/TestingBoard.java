@@ -1043,7 +1043,7 @@ public class TestingBoard extends Board
 		// it may have fled to avoid detection (or capture,
 		// in the case of a Spy).
 
-				if (a.getActingRankFlee() == p.getRank())
+				if (a.getActingRankFleeLow() == p.getRank())
 					continue;
 			}
 
@@ -1166,21 +1166,21 @@ public class TestingBoard extends Board
 
 		} else if (p.hasMoved()) {
 		// chase unknown fleeing pieces as well
-			if (p.getActingRankFlee() != Rank.NIL
-				&& p.getActingRankFlee().toInt() <= 4)
-				for (int j = p.getActingRankFlee().toInt(); j > invincibleRank[1-p.getColor()]; j--)
+			if (p.getActingRankFleeLow() != Rank.NIL
+				&& p.getActingRankFleeLow().toInt() <= 4)
+				for (int j = p.getActingRankFleeLow().toInt(); j > invincibleRank[1-p.getColor()]; j--)
 					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 
-			else if (p.getActingRankFlee() == Rank.UNKNOWN) {
+			else if (p.getActingRankFleeLow() == Rank.UNKNOWN) {
 				for ( int j : expendableRank ) {
 					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 					genPlanB(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				}
 
-			} else if (p.getActingRankFlee() != Rank.NIL
-				&& p.getActingRankFlee().toInt() >= 5) {
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFlee().toInt(), DEST_PRIORITY_CHASE);
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFlee().toInt()+1, DEST_PRIORITY_CHASE);
+			} else if (p.getActingRankFleeLow() != Rank.NIL
+				&& p.getActingRankFleeLow().toInt() >= 5) {
+					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFleeLow().toInt(), DEST_PRIORITY_CHASE);
+					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFleeLow().toInt()+1, DEST_PRIORITY_CHASE);
 			}
 
 		// Also use Fives to chase unknown pieces
@@ -2817,7 +2817,8 @@ public class TestingBoard extends Board
 		// suspected rank of the same rank?  But because this is
 		// unusual behavior, the piece stays Unknown.
 
-			if (rank == p.getActingRankFlee())
+			if (rank == p.getActingRankFleeLow()
+				|| rank == p.getActingRankFleeHigh())
 				continue;
 
 			if (rank == Rank.SPY) {
@@ -2885,9 +2886,7 @@ public class TestingBoard extends Board
 					Piece tp = getPiece(i+d);
 					if (tp == null)
 						continue;
-					if (tp.getColor() == Settings.topColor
-						&& (tp.getActingRankFlee() == Rank.NIL
-							|| tp.getActingRankFlee().toInt() > p.getRank().toInt()))
+					if (tp.getColor() == Settings.topColor)
 						tp.setActingRankFlee(p.getRank());
 				}
 					
@@ -3437,7 +3436,7 @@ public class TestingBoard extends Board
 					&& !tp.isKnown()
 					&& !isInvincible(fp)
 					&& fprank.toInt() <= 4
-					&& tp.getActingRankFlee() != fprank
+					&& tp.getActingRankFleeLow() != fprank
 					&& isEffectiveBluff(m))
 					vm += valueBluff(fp, tprank, m.getTo());
 
@@ -3448,7 +3447,7 @@ public class TestingBoard extends Board
 						|| (tprank == Rank.ONE
 							&& hasSpy(Settings.topColor)))
 					&& tprank.toInt() <= 4
-					&& fp.getActingRankFlee() != tprank 
+					&& fp.getActingRankFleeLow() != tprank 
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m))
 					vm -= valueBluff(tp, fprank, m.getTo());
@@ -3572,7 +3571,7 @@ public class TestingBoard extends Board
 						|| (tprank == Rank.ONE
 							&& hasSpy(fpcolor)))
 					&& tprank.toInt() <= 4
-					&& fp.getActingRankFlee() != tprank
+					&& fp.getActingRankFleeLow() != tprank
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m)) {
 					vm += valueBluff(m, fp, tp);
@@ -3719,7 +3718,7 @@ public class TestingBoard extends Board
 					&& !tp.isKnown()
 					&& !isInvincible(fp)
 					&& fprank.toInt() <= 4
-					&& tp.getActingRankFlee() != fprank
+					&& tp.getActingRankFleeLow() != fprank
 					&& isEffectiveBluff(m))
 					vm += valueBluff(fp, tprank, m.getTo());
 
@@ -4284,7 +4283,7 @@ public class TestingBoard extends Board
 		// an unknown piece, it is not a low ranked piece.
 
 		Rank chaseRank = tp.getActingRankChase();
-		Rank fleeRank = tp.getActingRankFlee();
+		Rank fleeRank = tp.getActingRankFleeLow();
 		if (!isPossibleBomb(tp)
 			&& chaseRank != Rank.UNKNOWN
 			&& fleeRank == Rank.UNKNOWN)
@@ -5239,19 +5238,20 @@ public class TestingBoard extends Board
 	{
 		assert fp.getColor() == Settings.topColor : "fp must be top color";
 		Rank fprank = fp.getRank();
-		Rank fleeRank = tp.getActingRankFlee();
-		if (fleeRank != Rank.NIL
-			&& fleeRank != Rank.UNKNOWN
-			&& fleeRank.toInt() >= fprank.toInt()
-			&& (valueStealth[tp.getColor()][lowestUnknownRank-1] * 5 / 4 < values[fp.getColor()][fleeRank.toInt()]
+		Rank fleeRankHigh = tp.getActingRankFleeHigh();
+		Rank fleeRankLow = tp.getActingRankFleeLow();
+		if (fleeRankHigh != Rank.NIL
+			&& fleeRankHigh != Rank.UNKNOWN
+			&& fleeRankHigh.toInt() >= fprank.toInt()
+			&& (valueStealth[tp.getColor()][lowestUnknownRank-1] * 5 / 4 < values[fp.getColor()][fleeRankHigh.toInt()]
 				|| fprank.toInt() >= 5))
 			return true;
 
-		else if (fleeRank != Rank.NIL
-			&& fleeRank != Rank.UNKNOWN
-			&& (fleeRank.toInt() == fprank.toInt()
-				|| fleeRank.toInt() + 1 == fprank.toInt())
-			&& fleeRank.toInt() >= 5)
+		else if (fleeRankLow != Rank.NIL
+			&& fleeRankLow != Rank.UNKNOWN
+			&& (fleeRankLow.toInt() == fprank.toInt()
+				|| fleeRankLow.toInt() + 1 == fprank.toInt())
+			&& fleeRankLow.toInt() >= 5)
 			return true;
 
 		// The AI considers all unknown opponent pieces
@@ -5270,9 +5270,9 @@ public class TestingBoard extends Board
 		else if (!fp.isKnown()
 			&& fprank.toInt() < dangerousUnknownRank
 			&& fprank.toInt() <= lowestUnknownExpendableRank
-			&& fleeRank != Rank.UNKNOWN
-			&& (fleeRank == Rank.NIL
-				|| fleeRank.toInt() >= fprank.toInt()))
+			&& fleeRankLow != Rank.UNKNOWN
+			&& (fleeRankLow == Rank.NIL
+				|| fleeRankLow.toInt() >= fprank.toInt()))
 			return true;
 
 		return false;

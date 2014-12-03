@@ -27,7 +27,8 @@ public class Piece implements Comparable<Piece>
 	private Rank rank = null;
 
 	private int value = 0;
-	private Rank actingRankFlee = Rank.NIL;
+	private Rank actingRankFleeLow = Rank.NIL;
+	private Rank actingRankFleeHigh = Rank.NIL;
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
 	
@@ -64,7 +65,8 @@ public class Piece implements Comparable<Piece>
 		color = p.color;
 		moves = p.moves;
 		rank = p.rank;
-		actingRankFlee = p.actingRankFlee;
+		actingRankFleeLow = p.actingRankFleeLow;
+		actingRankFleeHigh = p.actingRankFleeHigh;
 		actingRankChase = p.actingRankChase;
 		flags = p.flags.clone();
 		value = p.value;
@@ -75,7 +77,8 @@ public class Piece implements Comparable<Piece>
 	{
 		moves = 0;
 		actingRankChase = Rank.NIL;
-		actingRankFlee = Rank.NIL;
+		actingRankFleeLow = Rank.NIL;
+		actingRankFleeHigh = Rank.NIL;
 		flags = EnumSet.noneOf(Flags.class);
 		value = 0;
 		index = 0;
@@ -184,16 +187,35 @@ public class Piece implements Comparable<Piece>
 		return flags.contains(Flags.IS_LESS);
 	}
 
-	public Rank getActingRankFlee()
+	public Rank getActingRankFleeLow()
 	{
 		if (isKnown())
 			return rank;
-		return actingRankFlee;
+		return actingRankFleeLow;
+	}
+
+	public Rank getActingRankFleeHigh()
+	{
+		if (isKnown())
+			return rank;
+		return actingRankFleeHigh;
 	}
 
 	public void setActingRankFlee(Rank r)
 	{
-		actingRankFlee = r;
+		if (actingRankFleeLow == Rank.NIL
+			|| actingRankFleeLow.toInt() > r.toInt())
+			actingRankFleeLow = r;
+
+		if (actingRankFleeHigh == Rank.NIL
+			|| actingRankFleeHigh.toInt() < r.toInt())
+			actingRankFleeHigh = r;
+	}
+
+	public void clearActingRankFlee()
+	{
+		actingRankFleeLow = Rank.NIL;
+		actingRankFleeHigh = Rank.NIL;
 	}
 
 	public boolean isSuspectedRank()
