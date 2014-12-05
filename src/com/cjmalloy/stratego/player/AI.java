@@ -41,6 +41,7 @@ import com.cjmalloy.stratego.Piece;
 import com.cjmalloy.stratego.Rank;
 import com.cjmalloy.stratego.Settings;
 import com.cjmalloy.stratego.Spot;
+import com.cjmalloy.stratego.TTEntry;
 
 
 
@@ -54,6 +55,7 @@ public class AI implements Runnable
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
+	private TTEntry[] ttable;
 	private final int QSMAX = 3;	// maximum qs search depth
 	MoveValuePair bestMove = null;
 	long stopTime = 0;
@@ -252,7 +254,7 @@ public class AI implements Runnable
 			else if (board.getPiece(bestMove.move.getFrom()) == null)
  				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
 			else {
-				logMove(0, board, bestMove.move, 0, bestMove.value, "");
+				logMove(0, board, bestMove.move, 0, bestMove.value, 0, "");
 				logFlush("");
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
@@ -433,6 +435,7 @@ public class AI implements Runnable
 		BMove tmpM = null;
 		bestMove = null;
 		int bestMoveValue = 0;
+		ttable = new TTEntry[2<<22]; // 4194304, clear transposition table
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -466,7 +469,7 @@ public class AI implements Runnable
 
 		// Two Squares Rule
 			if (b.isTwoSquares(tmpM)) {
-				logMove(0, b, tmpM, 0, 0, "removed two squares");
+				logMove(0, b, tmpM, 0, 0, 0, "removed two squares");
 				moveList.remove(k);
 				continue;
 			}
@@ -501,7 +504,7 @@ public class AI implements Runnable
 
 				b.undo();
 				if (isRepeated)
-					logMove(0, b, tmpM, 0, 0, "removed repeated");
+					logMove(0, b, tmpM, 0, 0, 0, "removed repeated");
 			}
 
 			assert b.getValue() == 0 : "Board value not zero?";
@@ -669,11 +672,13 @@ public class AI implements Runnable
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
 
+			// logMove(n, b, tmpM, 0, 0, 0, "");
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			int vm = -valueNMoves(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
+			int vm = -negamax(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
 
 			mvp.setValue(vm);
+			long h = b.getHash();
 
 			b.undo();
 			assert b.getValue() == 0 : "Board value not zero?";
@@ -681,7 +686,7 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(mvp.move.getTo());
 			if (tp != null)
 				v = b.actualValue(tp);
-			logMove(n, b, tmpM, v, vm, "");
+			logMove(n, b, tmpM, v, vm, h, "");
 
 			if (vm > alpha)
 			{
@@ -971,11 +976,31 @@ public class AI implements Runnable
 			return -qs;
 	}
 
-	private int valueNMoves(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
+	// Note: negamax is split into two parts
+	// Part 1: check transposition table and qs
+	// Part 2: check killer move and if necessary, iterate through movelist
+
+	private int negamax(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
 	{
-		BMove bestmove = null;
-		int valueB = b.getValue();
-		int bestValue = -9999;
+		int alphaOrig = alpha;
+		long hashOrig = b.getHash();
+		int index = (int)(hashOrig % ttable.length);
+		TTEntry entry = ttable[index];
+		if (entry != null
+			&& entry.hash == hashOrig
+			&& entry.depth >= n) {
+			assert entry.turn == turn : "transposition table bug";
+
+			if (entry.flags.contains(TTEntry.Flags.EXACT))
+				return entry.value;
+			else if (entry.flags.contains(TTEntry.Flags.LOWERBOUND))
+				alpha = Math.max(alpha, entry.value);
+			else if (entry.flags.contains(TTEntry.Flags.UPPERBOUND))
+				beta = Math.min(beta, entry.value);
+			if (alpha >= beta)
+				return entry.value;
+		}
+
 		UndoMove lastmove = b.getLastMove();
 		if (n < 1 || (lastmove != null && lastmove.tp != null && lastmove.tp.getRank() == Rank.FLAG))
 			return negQS(qs(b, turn, depth, QSMAX, false), turn);
@@ -1013,6 +1038,30 @@ public class AI implements Runnable
 				return negQS(qs(b, turn, depth, QSMAX, false), turn);
 		}
 
+		int bestValue = negamax2(b, n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove);
+
+		assert hashOrig == b.getHash() : "hash changed";
+
+		TTEntry.Flags flag;
+		if (bestValue <= alphaOrig)
+			flag = TTEntry.Flags.UPPERBOUND;
+		else if (bestValue >= beta)
+			flag = TTEntry.Flags.LOWERBOUND;
+		else
+			flag = TTEntry.Flags.EXACT;
+
+		ttable[index] = new TTEntry(turn, b.getHash(), bestValue, n, flag);
+
+		return bestValue;
+	}
+
+
+	private int negamax2(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
+	{
+		BMove bestmove = null;
+		int bestValue = -9999;
+		int valueB = b.getValue();
+
 		// Try the killer move before move generation
 		// to save time if the killer move causes ab pruning.
 		// TBD: killer move can be multi-hop, but then
@@ -1026,13 +1075,16 @@ public class AI implements Runnable
 			&& Grid.isAdjacent(kfrom, kto)
 			&& (tp == null || tp.getColor() != turn)) {
 			BMove tmpM = new BMove(kfrom, kto);
+			// logMove(n, b, tmpM, valueB, 0, 0, "");
 			b.move(tmpM, depth, false);
 
-			int vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
 
+			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+
+			long h = b.getHash();
 			b.undo();
 
-			logMove(n, b, tmpM, valueB, vm, "");
+			logMove(n, b, tmpM, valueB, negQS(vm, turn), h, "");
 
 			if (vm > bestValue) {
 				bestmove = tmpM;
@@ -1088,10 +1140,20 @@ public class AI implements Runnable
 
 			int vm = 0;
 			if (max.move == null) {
-			b.pushNullMove();	// because of isRepeatedPosition()
-			vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
-			b.popMove();
-			log(n + ": (null move) " + valueB + " " + vm);
+
+		// A null move does not change the board
+		// so it doesn't change the hash.  But the hash
+		// could have been saved (in ttable or possibly boardHistory)
+		// for the opponent.  Even if the board is the same,
+		// the outcome is different if the player is different.
+		// So set a new hash and reset it after the move.
+
+				Random rnd = new Random();
+				long rndlong = rnd.nextLong();
+				b.rehash(rndlong);
+				vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+				b.rehash(rndlong);
+				log(n + ": (null move) " + valueB + " " + negQS(vm, turn));
 			} else {
 
 		// NOTE: FORWARD TREE PRUNING (minor)
@@ -1102,8 +1164,10 @@ public class AI implements Runnable
 		// so calls to isRepeatedPosition() are also pruned off,
 		// saving a heap of time.
 
+			// logMove(n, b, max.move, valueB, 0, 0, "");
+
 			if (b.isTwoSquares(max.move)) {
-				logMove(n, b, max.move, valueB, 0, "two squares");
+				logMove(n, b, max.move, valueB, 0, 0, "two squares");
 				continue;
 			}
 
@@ -1121,7 +1185,7 @@ public class AI implements Runnable
 		// but can it lead to a two squares result?
 
 					if (b.isPossibleTwoSquares(max.move)) {
-						logMove(n, b, max.move, valueB, 0, "poss two squares");
+						logMove(n, b, max.move, valueB, 0, 0, "poss two squares");
 						continue;
 					}
 
@@ -1145,7 +1209,7 @@ public class AI implements Runnable
 						b.move(max.move, depth, max.unknownScoutFarMove);
 						if (b.isRepeatedPosition()) {
 							b.undo();
-							logMove(n, b, max.move, valueB, 0, "repeated");
+							logMove(n, b, max.move, valueB, 0, 0, "repeated");
 							continue;
 						}
 					}
@@ -1153,11 +1217,13 @@ public class AI implements Runnable
 					b.move(max.move, depth, max.unknownScoutFarMove);
 			} else
 				b.move(max.move, depth, max.unknownScoutFarMove);
-			vm = -valueNMoves(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+
+			long h = b.getHash();
 
 			b.undo();
 
-			logMove(n, b, max.move, valueB, vm, note);
+			logMove(n, b, max.move, valueB, negQS(vm, turn), h, note);
 			}
 
 			if (vm > bestValue) {
@@ -1175,8 +1241,10 @@ public class AI implements Runnable
 			hh[bestmove.getFrom()][bestmove.getTo()]+=n;
 			killerMove.set(bestmove);
 		}
+
 		return bestValue;
 	}
+
 
 	String logPiece(Piece p)
 	{
@@ -1185,12 +1253,12 @@ public class AI implements Runnable
 			&& (p.getActingRankFleeLow() != Rank.NIL
 				|| p.getActingRankFleeHigh() != Rank.NIL
 				|| p.getActingRankChase() != Rank.NIL))
-			return p.getRank() + "["
-				+ p.getActingRankChase()
-				+ "," + p.getActingRankFleeLow()
-				+ "," + p.getActingRankFleeHigh() + "]";
+			return rank.value + "["
+				+ p.getActingRankChase().value
+				+ "," + p.getActingRankFleeLow().value
+				+ "," + p.getActingRankFleeHigh().value + "]";
 
-		return "" + p.getRank();
+		return "" + rank.value;
 	}
 
 	String logFlags(Piece p)
@@ -1220,7 +1288,7 @@ public class AI implements Runnable
 	}
 
 
-	void logMove(int n, Board b, BMove move, int valueB, int value, String note)
+	void logMove(int n, Board b, BMove move, int valueB, int value, long hash, String note)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
 	if (b.getPiece(move.getTo()) == null) {
@@ -1243,7 +1311,7 @@ public class AI implements Runnable
 
 	public void logMove(Move m)
 	{
-		logMove(0, board, m, 0, 0, "");
+		logMove(0, board, m, 0, 0, 0, "");
 	}
 
 	private void log(String s)

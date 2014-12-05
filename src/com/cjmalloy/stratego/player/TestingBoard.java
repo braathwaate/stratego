@@ -215,7 +215,6 @@ public class TestingBoard extends Board
 		for (int i=12;i<=120;i++) {
 			if (!isValid(i))
 				continue;
-			unmovedValue[i] = 0;
 			Piece p = getPiece(i);
 			if (p != null) {
 				Piece np = new Piece(p);
@@ -555,6 +554,7 @@ public class TestingBoard extends Board
 		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
+		setUnmovedValues();	// chase depends on this
 
 		for (int i=12;i<=120;i++) {
 			if (!isValid(i))
@@ -928,6 +928,92 @@ public class TestingBoard extends Board
 
 				}
 			}
+		}
+	}
+
+	// Low rank piece discovery is much more important
+	// than finding the structure that contains the flag.
+	// The structure will become evident
+	// as the opponent moves pieces and the game progresses,
+	// without any need to identify the likely bombs
+	// in the structure.
+	//
+	// The AI waits for the number of possible structures
+	// to be reduced and then sends in an Eight to investigate.
+	//
+	// However, a strong opponent will move as few pieces
+	// as possible to thwart structure discovery.  This is
+	// especially true if the opponent has an unfavorable
+	// position and is satisfied with a draw.
+	//
+	// This is often the case when the AI plays bots, because
+	// most bots (and some players) aimlessly fire off 
+	// expendable pieces at the start to probe the enemy's
+	// position.  The AI tries to retain its expendable
+	// pieces until the middle game and use them to
+	// identify low ranked pieces.  So often the AI reaches
+	// the middle game with expendable pieces but no clue
+	// where the opponent low ranked pieces are located.
+	//
+	// So if the AI has a favorable mid-game position, it has
+	// to use its expendable pieces to probe the opponents
+	// unmoved pieces.  This is a last ditch effort to
+	// avoid a draw, but could result in discovery of an
+	// opponent low ranked piece or reduce the number of
+	// possible structures to a point where an Eight
+	// can be sent.
+
+	// If the player is winning, opponent should
+	// preserve its pieces and not randomly attack,
+	// so skip this code.
+
+	// Conversely, if the player is losing, there is value
+	// in keeping pieces in structures unmoved to
+	// confuse the opponent which structure holds the flag,
+	// forcing the opponent to randomly attack.
+	void setUnmovedValues()
+	{
+		// Add value to unknown unmoved pieces to encourage discovery.
+		// Pieces are worth more on the back ranks
+		// because the flag is more likely in the rear.
+		// note: *3 to outgain -depth late capture penalty
+
+		for ( int k = 12; k <= 120; k++ ) {
+			unmovedValue[k] = 0;
+			Piece p = getPiece(k);
+			if (p == null)
+				continue;
+			if (p.hasMoved()
+				|| p.isKnown()
+				|| p.isSuspectedRank())
+				continue;
+			if (k >= 56) {
+
+		// The value of attacking unknown unmoved pieces decreases
+		// as pieces are removed from the board.
+		// But this value should not be too high,
+		// otherwise the AI will sacrifice
+		// two pieces just for one discovery.
+
+				int value = Math.min(npieces[Settings.bottomColor]/2, VALUE_SIX);
+ 
+				if (isWinning(Settings.topColor) > VALUE_SIX)
+					unmovedValue[k] = (k/11-7) * 3 + (int)value;
+			} else {
+				int value = Math.min(npieces[Settings.topColor]/2, VALUE_SIX);
+
+				if (isWinning(Settings.bottomColor) > VALUE_SIX)
+					unmovedValue[k] = (4-k/11) * 3 + (int)value;
+			}
+		}
+
+		// Encourage movement of front line pieces
+		// to clear a path so that pieces can move easily
+		// from side to side.
+
+		for (int c = RED; c <= BLUE; c++) {
+			for (int x = 0; x < 10; x++)
+				unmovedValue[Grid.getIndex(x, yside(c,3))] = -VALUE_MOVED;
 		}
 	}
 
@@ -2095,84 +2181,6 @@ public class TestingBoard extends Board
 				values[1-c][Rank.EIGHT.toInt()]
 					+= (maybe_count - eightsAtLarge) * 30;
 
-		// Low rank piece discovery is much more important
-		// than finding the structure that contains the flag.
-		// The structure will become evident
-		// as the opponent moves pieces and the game progresses,
-		// without any need to identify the likely bombs
-		// in the structure.
-		//
-		// The AI waits for the number of possible structures
-		// to be reduced and then sends in an Eight to investigate.
-		//
-		// However, a strong opponent will move as few pieces
-		// as possible to thwart structure discovery.  This is
-		// especially true if the opponent has an unfavorable
-		// position and is satisfied with a draw.
-		//
-		// This is often the case when the AI plays bots, because
-		// most bots (and some players) aimlessly fire off 
-		// expendable pieces at the start to probe the enemy's
-		// position.  The AI tries to retain its expendable
-		// pieces until the middle game and use them to
-		// identify low ranked pieces.  So often the AI reaches
-		// the middle game with expendable pieces but no clue
-		// where the opponent low ranked pieces are located.
-		//
-		// So if the AI has a favorable mid-game position, it has
-		// to use its expendable pieces to probe the opponents
-		// unmoved pieces.  This is a last ditch effort to
-		// avoid a draw, but could result in discovery of an
-		// opponent low ranked piece or reduce the number of
-		// possible structures to a point where an Eight
-		// can be sent.
-
-		// If the player is winning, opponent should
-		// preserve its pieces and not randomly attack,
-		// so skip this code.
-
-		// Conversely, if the player is losing, there is value
-		// in keeping pieces in structures unmoved to
-		// confuse the opponent which structure holds the flag,
-		// forcing the opponent to randomly attack.
-
-			if (isWinning(c) > VALUE_SIX)
-				continue;
-
-		// The value of attacking unknown unmoved pieces decreases
-		// as pieces are removed from the board.
-		// But this value should not be too high,
-		// otherwise the AI will sacrifice
-		// two pieces just for one discovery.
-
-			int value = Math.min(npieces[c]/2, VALUE_SIX);
- 
-		// Add value to unknown unmoved pieces to encourage discovery.
-		// Pieces are worth more on the back ranks
-		// because the flag is more likely in the rear.
-		// note: *3 to outgain -depth late capture penalty
-
-			for ( int k = 12; k <= 120; k++ ) {
-				Piece p = getPiece(k);
-				if (p == null)
-					continue;
-				if (p.hasMoved()
-					|| p.isKnown()
-					|| p.isSuspectedRank())
-					continue;
-				if (k >= 56)
-					unmovedValue[k] = (k/11-7) * 3 + (int)value;
-				else
-					unmovedValue[k] = (4-k/11) * 3 + (int)value;
-			}
-
-		// Encourage movement of front line pieces
-		// to clear a path so that pieces can move easily
-		// from side to side.
-
-			for (int x = 0; x < 9; x++)
-				unmovedValue[Grid.getIndex(x, yside(1-c,3))] = -(int)value;
-
 		} else if (c == Settings.bottomColor) {
 
 		// Player color c did not surround his flags with
@@ -2784,8 +2792,9 @@ public class TestingBoard extends Board
 					break;
 			}
 
-		if (lowestUnknownExpendableRank < 5
-			&& rankAtLarge(Settings.topColor, Rank.ONE) == 0
+		if (lowestUnknownExpendableRank == 0
+			|| (lowestUnknownExpendableRank < 5
+			&& rankAtLarge(Settings.topColor, Rank.ONE) == 0)
 			&& unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SPY) > 0)
 			lowestUnknownExpendableRank = 10;
 
@@ -3893,7 +3902,8 @@ public class TestingBoard extends Board
 		// about 60%.
 
 		if (npieces[Settings.bottomColor] >= 32
-			&& (fprank == Rank.FIVE || fprank == Rank.SIX)) {
+			&& (fprank == Rank.FIVE || fprank == Rank.SIX)
+			&& !isBombStructure(m.getTo())) {
 			int index = tp.getIndex();
 			int count = 0;
 			for (int d : dir) {
@@ -4219,7 +4229,7 @@ public class TestingBoard extends Board
 	public int unknownValue(Piece fp, Piece tp)
 	{
 		assert tp.getRank() == Rank.UNKNOWN : "target piece is known? (" + tp.getRank() + ")";
-		assert lowestUnknownExpendableRank != 0 : "unknownValue should be known";
+		assert lowestUnknownExpendableRank != 0 : "unknownValue: unknown rank should be known.";
 
 		int r = fp.getRank().toInt();
 
@@ -4325,11 +4335,6 @@ public class TestingBoard extends Board
 		}
 
 		popMove();
-	}
-
-	public void pushNullMove()
-	{
-                undoList.add(null);
 	}
 
 	public void popMove()
@@ -5467,6 +5472,24 @@ public class TestingBoard extends Board
 		diff = diff * diff;
 
 		return values[fp.getColor()][fprank.toInt()] / diff;
+	}
+
+	// 
+	// isBombStructure() is used when navigating a foray
+	// into the the opponents unmoved pieces.
+	// Note that genDestBombedFlag() sets the suspected rank to Bomb
+	// of only the last structure remaining.
+	// So if there are multiple structures remaining,
+	// an AI piece must still try to avoid them.
+
+	// TBD: this needs to be an array created by possibleFlag()
+
+	boolean isBombStructure(int i)
+	{
+		return (i == 100
+			|| i == 109
+			|| i == 112
+			|| i == 119);
 	}
 }
 

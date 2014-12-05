@@ -17,25 +17,30 @@
 
 package com.cjmalloy.stratego;
 
-import com.cjmalloy.stratego.BMove;
+import java.util.EnumSet;
+
 
 // the transposition table entry
-class TTEntry {
-  public long key; // should be at least 64-bit to be safe
-  public BMove move;
-  public int score;
-  public int flag;
+public class TTEntry {
+  public int turn;	// for debugging
+  public long hash; // should be at least 64-bit to be safe
+  public int value;
   public int depth;
-  public int distance;
 
-	public TTEntry(long hash, int from, int to) {
-		  key = hash;
-		  move = new BMove(from, to);
-	}
+           public enum Flags {
+                EXACT,
+                LOWERBOUND,
+                UPPERBOUND
+            }
 
-	public void clear()
-	{
-		key = 0;
+        public EnumSet<Flags> flags = EnumSet.noneOf(Flags.class);
+
+	public TTEntry(int t, long h, int v, int d, Flags f) {
+		turn = t;
+		hash = h;
+		value = v;
+		depth = d;
+		flags.add(f);
 	}
 }
 

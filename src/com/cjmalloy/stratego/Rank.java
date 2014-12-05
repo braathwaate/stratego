@@ -20,21 +20,26 @@ package com.cjmalloy.stratego;
 
 public enum Rank
 {
-	WATER,
-	ONE,
-	TWO,
-	THREE,
-	FOUR,
-	FIVE,
-	SIX,
-	SEVEN,
-	EIGHT,
-	NINE,
-	SPY,
-	BOMB,
-	FLAG,
-	UNKNOWN,
-	NIL;
+	WATER("W"),
+	ONE("1"),
+	TWO("2"),
+	THREE("3"),
+	FOUR("4"),
+	FIVE("5"),
+	SIX("6"),
+	SEVEN("7"),
+	EIGHT("8"),
+	NINE("9"),
+	SPY("S"),
+	BOMB("B"),
+	FLAG("F"),
+	UNKNOWN("?"),
+	NIL("-");
+
+	public String value;
+	Rank(String s) {
+		value = s;
+	}
 
 	static public final int WINS = 1;
 	static public final int EVEN = -1;

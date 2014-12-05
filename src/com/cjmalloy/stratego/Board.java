@@ -20,6 +20,8 @@ package com.cjmalloy.stratego;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.lang.Long;
 import java.util.Random;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -59,9 +61,10 @@ public class Board
 	protected static int[] dir = { -11, -1,  1, 11 };
 	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
 	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
+	protected static long[] turnHash = new long[2];
 	protected long hash = 0;
 
-	protected static TTEntry[] ttable = new TTEntry[2<<22];
+	protected static HashMap<Long, UndoMove>  boardHistory = new HashMap<Long, UndoMove>();
 
         protected int[][] knownRank = new int[2][15];   // discovered ranks
         protected int[][] trayRank = new int[2][15];    // ranks in trays
@@ -84,6 +87,26 @@ public class Board
 				boardHash[k][m][c][r][i] = -n;
 			else
 				boardHash[k][m][c][r][i] = n;
+		}
+
+	// An identical position differs depending on whose turn it is.
+	// For example,
+	// R8 R9	-- B5
+	// -- B5	R8 --
+	// (A)		 (B)
+	//
+	// Red has the move and can reach position B
+	// by R9xB5, B5 moves up, R8 moves down.  Blue now has the move.
+	//
+	// (B) can also be reached if Red plays R8 down, Blue plays B5xR9.
+	// Red now has the move.
+
+		for ( int t = 0; t < 2; t++) {
+			long n = rnd.nextLong();
+			if (n < 0)
+				turnHash[t] = -n;
+			else
+				turnHash[t] = n;
 		}
 	}
 	
@@ -294,9 +317,7 @@ public class Board
 
 		hash = 0;
 
-		for (TTEntry t : ttable)
-			if (t != null)
-				t.clear();
+		boardHistory.clear();
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -345,6 +366,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (grid.getPiece(i, j) != null)
+
 				grid.getPiece(i,j).setShown(false);
 
 		hideTray();
@@ -382,6 +404,15 @@ public class Board
 	// square, its apparent rank would also change.  The only case
 	// worth distinguishing is an unknown AI Nine moving more than one
 	// square.
+	//
+
+	public void rehash(long v)
+	{
+		if (v < 0)
+			v = -v;
+		hash ^= v;
+	}
+
 	public void rehash(Piece p, int i)
 	{
 		Rank rank;
@@ -406,21 +437,6 @@ public class Board
 		grid.setPiece(i, p);
 		if (p != null)
 			rehash(p, i);
-	}
-
-	// return TRUE if the current board position
-	// has been seen before
-	public boolean dejavu()
-	{
-		int size = undoList.size();
-		if (size <= 2)
-			return false;
-		for ( int k = size-2; k >= 0; k -= 2) {
-			UndoMove u = undoList.get(k);
-			if (u.hash == hash)
-				return true;
-		}
-		return false;
 	}
 
 	public UndoMove getLastMove()
@@ -462,8 +478,7 @@ public class Board
 		UndoMove um = new UndoMove(fp, tp, from, to, hash, 0);
 		undoList.add(um);
 
-		int index = (int)(hash % ttable.length);
-		ttable[index] = new TTEntry(hash, from, to);
+		boardHistory.put(hash^turnHash[undoList.size()%2], um);
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -594,7 +609,7 @@ public class Board
 				continue;
 
 			if (p.isKnown()
-				&& p.getRank() != Rank.BOMB
+				&& p.getApparentRank() != Rank.BOMB
 				&& (knownProtector == null
 					|| knownProtector.getRank().toInt() > p.getRank().toInt()))
 				knownProtector = p;
@@ -671,7 +686,7 @@ public class Board
 
 		// strong unknown protector confirmed
 
-			int r = chased.getRank().toInt();
+			int r = chased.getApparentRank().toInt();
 
 		// One cannot be protected.
 			if (r == 1)
@@ -681,7 +696,7 @@ public class Board
 
 			if (chaser.isKnown()) {
 				attackerRank = chaser.getApparentRank().toInt();
-				assert attackerRank < r : "known chaser must chase unknown or lower rank";
+				assert attackerRank < r : "known chaser " + attackerRank + "  must chase unknown or lower rank, not " + chased.getApparentRank();
 				r = attackerRank - 1;
 			} else {
 
@@ -706,7 +721,7 @@ public class Board
 		// known piece is protector
 
 			if (knownProtector != null
-				&& knownProtector.getRank().toInt() <= r)
+				&& knownProtector.getApparentRank().toInt() <= r)
 				return;
 
 		// Only a Spy can protect a piece attacked by a One.
@@ -1146,7 +1161,7 @@ public class Board
 				continue;
 			if (i == aimove.getTo()) {
 				// chase confirmed
-				return dejavu();
+				return isRepeatedPosition();
 			}
 			// we are being chased, so repetitive moves OK
 			if (i == aimove.getFrom())
@@ -1155,7 +1170,7 @@ public class Board
 		// no chases
 		// return false;
 		// prevent looping
-		return dejavu();
+		return isRepeatedPosition();
 	}
 
 	// Because of limited search depth, the completion of
@@ -1334,9 +1349,8 @@ public class Board
 		// does not expect the opponent to abide
 		// by this rule as coded.
 
-		int index = (int)(hash % ttable.length);
-		TTEntry entry = ttable[index];
-		if (entry == null || entry.key != hash)
+		UndoMove entry = boardHistory.get(hash^turnHash[undoList.size()%2]);
+		if (entry == null)
 			return false;
 
 		// Position has been reached before
@@ -1370,10 +1384,7 @@ public class Board
 		}
 		Collections.sort(tray);
 
-		int index = (int)(hash % ttable.length);
-		TTEntry entry = ttable[index];
-		if (entry != null)
-			entry.clear();
+		boardHistory.remove(hash);
 	}
 
 
@@ -1505,6 +1516,11 @@ public class Board
 	public int rankAtLarge(int color, Rank rank)
 	{
 		return rankAtLarge(color, rank.toInt());
+	}
+
+	public long getHash()
+	{
+		return hash^turnHash[undoList.size()%2];
 	}
 }
 
