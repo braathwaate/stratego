@@ -23,6 +23,18 @@ public class BMove
 	protected int from;
 	protected int to;
 
+	public BMove()
+	{
+		from = 0;
+		to = 0;
+	}
+
+	public BMove(BMove m)
+	{
+		from = m.from;
+		to = m.to;
+	}
+
 	public BMove(int f, int t)
 	{
 		from = f;
@@ -39,6 +51,12 @@ public class BMove
 	{
 	    from = m.from;
 	    to = m.to;
+	}
+
+	public void clear()
+	{
+	    from = 0;
+	    to = 0;
 	}
 
 	public int getFrom()
@@ -71,7 +89,7 @@ public class BMove
 		return to / 11 - 1;
 	}
 
-	public boolean equals(Object m)
+	@Override public boolean equals(Object m)
         {
                 return from==((BMove)m).from && to==((BMove)m).to;
 	}

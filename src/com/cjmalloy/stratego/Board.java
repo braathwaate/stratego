@@ -1349,7 +1349,12 @@ public class Board
 		// does not expect the opponent to abide
 		// by this rule as coded.
 
-		UndoMove entry = boardHistory.get(hash^turnHash[undoList.size()%2]);
+		// Note that the hash is XORed with 1 - undoList.size()%2
+		// This tests if the opposing player
+		// has seen the position that the
+		// current player has just created.
+		// 
+		UndoMove entry = boardHistory.get(hash^turnHash[1-undoList.size()%2]);
 		if (entry == null)
 			return false;
 

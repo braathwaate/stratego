@@ -55,14 +55,15 @@ public class AI implements Runnable
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[][] hh = new int[121][121];	// move history heuristic
-	private TTEntry[] ttable;
+	private TTEntry[] ttable = new TTEntry[2<<22]; // 4194304
 	private final int QSMAX = 3;	// maximum qs search depth
 	MoveValuePair bestMove = null;
 	long stopTime = 0;
+	int moveRoot = 0;
 
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
-		protected int value;
+		int value;
 		boolean unknownScoutFarMove = false;
 		MoveValuePair(BMove m, boolean s) {
 			move = m;
@@ -214,6 +215,7 @@ public class AI implements Runnable
 
 	public void run() 
 	{
+		long startTime = System.currentTimeMillis();
 		aiLock.lock();
                 try
                 {
@@ -226,7 +228,6 @@ public class AI implements Runnable
 		// etc, etc
 			log("Settings.aiLevel:" + Settings.aiLevel);
 			log("Settings.twoSquares:" + Settings.twoSquares);
-			long startTime = System.currentTimeMillis();
 			stopTime = startTime
 				+ Settings.aiLevel * Settings.aiLevel * 100;
 
@@ -242,7 +243,6 @@ public class AI implements Runnable
 		finally
 		{
 			System.runFinalization();
-			System.gc(); 
 
 		// note: no assertions here, because they overwrite
 		// earlier assertions
@@ -256,12 +256,18 @@ public class AI implements Runnable
 			else {
 				logMove(0, board, bestMove.move, 0, bestMove.value, 0, "");
 				logFlush("");
+				long t = System.currentTimeMillis() - startTime;
+				t = System.currentTimeMillis() - startTime;
+				log("aiReturnMove() at " + t + "ms");
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(bestMove.move.getFrom()), bestMove.move));
 			}
 
 			logFlush("----");
 
+			long t = System.currentTimeMillis() - startTime;
+			t = System.currentTimeMillis() - startTime;
+			log("exit getBestMove() at " + t + "ms");
 			aiLock.unlock();
 		}
 	}
@@ -435,7 +441,14 @@ public class AI implements Runnable
 		BMove tmpM = null;
 		bestMove = null;
 		int bestMoveValue = 0;
-		ttable = new TTEntry[2<<22]; // 4194304, clear transposition table
+
+		// Because of substantial pre-processing before each move,
+		// the entries in the transposition table
+		// should be cleared to prevent anomolies.
+		// But this is a tradeoff, because retaining the
+		// the entries leads to increased search depth.
+		//ttable = new TTEntry[2<<22]; // 4194304, clear transposition table
+		moveRoot = b.undoList.size();
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -669,13 +682,14 @@ public class AI implements Runnable
 			return;		// ai trapped
 		}
 
+		BMove killerMove = new BMove();
 		for (MoveValuePair mvp : moveList) {
 			tmpM = mvp.move;
 
 			// logMove(n, b, tmpM, 0, 0, 0, "");
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			int vm = -negamax(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, new BMove(0,0)); 
+			int vm = -negamax(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, killerMove); 
 
 			mvp.setValue(vm);
 			long h = b.getHash();
@@ -982,33 +996,67 @@ public class AI implements Runnable
 
 	private int negamax(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
 	{
+		if (bestMove != null
+			&& stopTime != 0
+			&& System.currentTimeMillis( ) > stopTime)
+			throw new InterruptedException();
+
 		int alphaOrig = alpha;
 		long hashOrig = b.getHash();
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
-		if (entry != null
-			&& entry.hash == hashOrig
-			&& entry.depth >= n) {
-			assert entry.turn == turn : "transposition table bug";
+		BMove ttMove = null;
 
-			if (entry.flags.contains(TTEntry.Flags.EXACT))
-				return entry.value;
-			else if (entry.flags.contains(TTEntry.Flags.LOWERBOUND))
-				alpha = Math.max(alpha, entry.value);
-			else if (entry.flags.contains(TTEntry.Flags.UPPERBOUND))
-				beta = Math.min(beta, entry.value);
-			if (alpha >= beta)
-				return entry.value;
+		// use best move from transposition table for move ordering
+		if (entry != null
+			&& entry.hash == hashOrig) {
+			if (entry.depth - (moveRoot - entry.moveRoot) >= n
+				&& (chasePiece != null || entry.type == TTEntry.SearchType.BROAD )) {
+			assert moveRoot >= entry.moveRoot : "moveRoot increments, so this is not possible";
+				if (entry.flags == TTEntry.Flags.EXACT) {
+					killerMove.set(entry.bestMove);
+					return entry.bestValue;
+				}
+				else if (entry.flags == TTEntry.Flags.LOWERBOUND)
+					alpha = Math.max(alpha, entry.bestValue);
+				else if (entry.flags== TTEntry.Flags.UPPERBOUND)
+					beta = Math.min(beta, entry.bestValue);
+				if (alpha >= beta) {
+					killerMove.set(entry.bestMove);
+					return entry.bestValue;
+				}
+			}
+
+		// best move entries in the table are not tried
+		// if they are a null move
+		// or a duplicate of the killer move
+
+			ttMove = entry.bestMove;
+			if (ttMove.getFrom() == 0
+				|| (killerMove != null
+					&& ttMove.equals(killerMove)))
+				ttMove = null;
+			else if (entry.turn != turn) { //debug
+				log(n + ":" + turn + " bad turn entry");
+				ttMove = null;
+			} else {
+				int from = ttMove.getFrom();
+				int to = ttMove.getTo();
+				Piece fp = b.getPiece(from);
+				Piece tp = b.getPiece(to);
+				if (fp == null
+					|| fp.getColor() != turn
+					|| (tp != null && tp.getColor() == turn)) {
+					log(n + ":" + Grid.getX(from) + " " + Grid.getY(from) + " " + Grid.getX(to) + " " + Grid.getY(to)  + " bad tt entry");
+					ttMove = null;
+
+				}
+			}
 		}
 
 		UndoMove lastmove = b.getLastMove();
 		if (n < 1 || (lastmove != null && lastmove.tp != null && lastmove.tp.getRank() == Rank.FLAG))
 			return negQS(qs(b, turn, depth, QSMAX, false), turn);
-
-		if (bestMove != null
-			&& stopTime != 0
-			&& System.currentTimeMillis( ) > stopTime)
-			throw new InterruptedException();
 
 
 		// If the chaser is N or more squares away, then
@@ -1038,29 +1086,67 @@ public class AI implements Runnable
 				return negQS(qs(b, turn, depth, QSMAX, false), turn);
 		}
 
-		int bestValue = negamax2(b, n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove);
+		int vm = negamax2(b, n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove, ttMove);
 
 		assert hashOrig == b.getHash() : "hash changed";
 
-		TTEntry.Flags flag;
-		if (bestValue <= alphaOrig)
-			flag = TTEntry.Flags.UPPERBOUND;
-		else if (bestValue >= beta)
-			flag = TTEntry.Flags.LOWERBOUND;
+		// reuse existing entry and avoid garbage collection
+		if (entry == null) {
+			entry = new TTEntry();
+			ttable[index] = entry;
+		}
+
+		if (vm <= alphaOrig)
+			entry.flags = TTEntry.Flags.UPPERBOUND;
+		else if (vm >= beta)
+			entry.flags = TTEntry.Flags.LOWERBOUND;
 		else
-			flag = TTEntry.Flags.EXACT;
+			entry.flags = TTEntry.Flags.EXACT;
 
-		ttable[index] = new TTEntry(turn, b.getHash(), bestValue, n, flag);
+		if (chasePiece != null)
+			entry.type = TTEntry.SearchType.DEEP;
+		else
+			entry.type = TTEntry.SearchType.BROAD;
+		entry.moveRoot = moveRoot;
+		entry.hash = b.getHash();
+		entry.bestValue = vm;
+		entry.bestMove = new BMove(killerMove);
+		entry.turn = turn;	//debug
 
-		return bestValue;
+		return vm;
 	}
 
 
-	private int negamax2(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove) throws InterruptedException
+	private int negamax2(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove, BMove ttMove) throws InterruptedException
 	{
-		BMove bestmove = null;
 		int bestValue = -9999;
 		int valueB = b.getValue();
+		BMove kmove = new BMove();
+		BMove bestmove = null;
+
+		if (ttMove != null) {
+			// logMove(n, b, ttMove, valueB, 0, 0, "");
+			b.move(ttMove, depth, false);
+
+
+			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+
+			long h = b.getHash();
+			b.undo();
+
+			logMove(n, b, ttMove, valueB, negQS(vm, turn), h, "te");
+
+			alpha = Math.max(alpha, vm);
+
+			if (alpha >= beta) {
+				hh[ttMove.getFrom()][ttMove.getTo()]+=n;
+				killerMove.set(ttMove);
+				return vm;
+			}
+
+			bestValue = vm;
+			bestmove = ttMove;
+		}
 
 		// Try the killer move before move generation
 		// to save time if the killer move causes ab pruning.
@@ -1074,28 +1160,27 @@ public class AI implements Runnable
 			&& fp.getColor() == turn
 			&& Grid.isAdjacent(kfrom, kto)
 			&& (tp == null || tp.getColor() != turn)) {
-			BMove tmpM = new BMove(kfrom, kto);
 			// logMove(n, b, tmpM, valueB, 0, 0, "");
-			b.move(tmpM, depth, false);
+			b.move(killerMove, depth, false);
 
 
-			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 
 			long h = b.getHash();
 			b.undo();
 
-			logMove(n, b, tmpM, valueB, negQS(vm, turn), h, "");
+			logMove(n, b, killerMove, valueB, negQS(vm, turn), h, "km");
 
 			if (vm > bestValue) {
-				bestmove = tmpM;
 				bestValue = vm;
+				bestmove = killerMove;
 			}
 
 			alpha = Math.max(alpha, vm);
 
 			if (alpha >= beta) {
 				hh[kfrom][kto]+=n;
-				return vm;
+				return bestValue;
 			}
 		}
 
@@ -1120,12 +1205,6 @@ public class AI implements Runnable
 			{
 				MoveValuePair mvp = moveList.get(i);
 
-			// skip killer move
-				if (mvp.move != null
-					&& mvp.move.getFrom() == kfrom
-					&& mvp.move.getTo() == kto)
-					continue;
-
 				max = mvp;
 				int tj = i;
 				for (int j = i + 1; j < moveList.size(); j++) {
@@ -1136,6 +1215,15 @@ public class AI implements Runnable
 					}
 				}
 				moveList.set(tj, mvp);
+
+		// skip ttMove and killerMove
+
+				if (max.move != null
+					&& ((killerMove != null
+						&& max.move.equals(killerMove))
+						|| (ttMove != null
+						&& max.move.equals(ttMove))))
+					continue;
 			}
 
 			int vm = 0;
@@ -1147,12 +1235,9 @@ public class AI implements Runnable
 		// for the opponent.  Even if the board is the same,
 		// the outcome is different if the player is different.
 		// So set a new hash and reset it after the move.
-
-				Random rnd = new Random();
-				long rndlong = rnd.nextLong();
-				b.rehash(rndlong);
-				vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
-				b.rehash(rndlong);
+				b.pushNullMove();
+				vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+				b.popMove();
 				log(n + ": (null move) " + valueB + " " + negQS(vm, turn));
 			} else {
 
@@ -1217,7 +1302,7 @@ public class AI implements Runnable
 					b.move(max.move, depth, max.unknownScoutFarMove);
 			} else
 				b.move(max.move, depth, max.unknownScoutFarMove);
-			vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, killerMove);
+			vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 
 			long h = b.getHash();
 
@@ -1240,7 +1325,8 @@ public class AI implements Runnable
 		if (bestmove != null) {
 			hh[bestmove.getFrom()][bestmove.getTo()]+=n;
 			killerMove.set(bestmove);
-		}
+		} else
+			killerMove.clear();
 
 		return bestValue;
 	}

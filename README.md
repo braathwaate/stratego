@@ -36,9 +36,8 @@ About the AI (Artificial Intelligence)
 --------------------------------------
 
 The AI algorithm is the generic minimax with alpha-beta pruning.
-Iterative deepening and heuristic history is used 
+Iterative deepening, transposition table, heuristic history and killer move are used 
 for move ordering to increase pruning success.
-Killer move is used for efficiency.
 Quiescent Search and Extended Search are used to reduce
 the horizon effect resulting from a very shallow search depth.
 Move generation abides by the Two-Square and More-Squares rules.
@@ -70,7 +69,8 @@ When an opponent piece appears to act as a strong chase piece
 or protector, the AI tries to attack it with pieces of
 expendable rank to confirm its suspicions.
 
-Static position analysis is used to determine piece destinations.
+Static position analysis (aka oracle or pre-processing)
+is used to determine piece destinations.
 Success is largely dependent on the AI in gaining
 knowledge of opponent piece rank.
 The AI creates plans (using a maze-running algorithm)
@@ -110,10 +110,11 @@ Areas for improvements are:
 	B. Attack flag structures.
 	C. Protect its flag.
 	D. Determine opponent piece ranks through bluffing or baiting.
-  5. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
-  6. Opponent bots.  Improve or add opponent bots in 
+  5. Static position analysis.  Unlike chess, stratego probably requires more pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.
+  6. Setups.  Many of the initial setups, especially the non-bombed setups are ridiculous.  If you encounter one of these setups, remove the line from resource/ai.cfg.  Better yet, run an automated test against the AI evaluator and remove the setups that lose badly.  Another idea: design an automated test using just the bad setups and improve the ai win ratio with just bad setups.  (You can find the one that was used in the first line of ai.out.)
+  7. Opponent bots.  Improve or add opponent bots in 
 [Stratego AI Evaluator](https://github.com/braathwaate/strategoevaluator).
-  7. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does not support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
+  8. Add AI player to TCP/IP server.  The Stratego server supports two person play over TCP/IP.  Currently it does not support playing the AI over TCP/IP.  The AI player should be added to the Lobby so that any player can play the AI over TCP/IP.   The server will need to fork the AI player upon player request.  Add a new View object (like the AITest object) to create an AI client for TCP/IP play.
 
 AI Regression Testing
 ---------------------
@@ -136,6 +137,10 @@ while a modified AI may take more moves to win any individual game
 (and it must win all games against all agents),
 the aggregate of all moves to win a set of games must be less.
 Finally, a new release must win a majority of games against the prior release.
+
+It would also be useful to have a suite of test positions.
+This would require the AI to read in a position with both unknown
+and revealed pieces.
 
 References
 ----------

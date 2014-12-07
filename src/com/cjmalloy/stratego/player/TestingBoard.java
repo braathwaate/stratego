@@ -830,7 +830,7 @@ public class TestingBoard extends Board
 		} else {
 			int count = 0;
 			int rs;
-			for (rs = r+1; rs<8 && count == 0; rs++) {
+			for (rs = r+1; rs<8 && count < 3; rs++) {
 				int n = rankAtLarge(1-c, rs);
 				v += values[1-c][rs] * n;
 				count += n;
@@ -1190,7 +1190,7 @@ public class TestingBoard extends Board
 				&& (p.getColor() == Settings.topColor
 					|| hasFewExpendables(p.getColor())
 					|| p.getIndex() < 56))
-				genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
+				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
 
 		// Only 1 active unknown piece
 		// is assigned to chase an opponent piece.
@@ -2166,8 +2166,10 @@ public class TestingBoard extends Board
 		// (Note: maybe_count == 0 calls setExpendableEights even
 		// if there are not any left.  This is necessary because
 		// Flag value > aiBombValue > Eight value.)
-		if (maybe_count == 0 || maybe_count < rankAtLarge(1-c, Rank.EIGHT))
+		if (maybe_count == 0 || maybe_count + 1 < rankAtLarge(1-c, Rank.EIGHT))
 			// at least 1 opponent color eight is expendable
+			// (The AI keeps one more Eight around than
+			// necessary to insure for an unforeseen mortality).
 			setExpendableEights(1-c);
 
 		if (maybe_count >= 1) {
@@ -2496,7 +2498,23 @@ public class TestingBoard extends Board
 		// because the attacker can move these out of the way,
 		// but this causes bunching up of attackers).
 
-			if (p != null && j != to)
+			if (p != null
+				&& j != to
+
+		// If the caller is invincible,
+		// then the maze continues through moved pieces.
+		// The hope is that the moved pieces
+		// will eventually move.  This should not cause major
+		// stacking problems when there are few invincible
+		// pieces.  This tries to address the situation where
+		// the invincible piece is known and the opponent
+		// targets the players moved pieces.  The player
+		// is targeting the opponents invincible piece, but it
+		// needs to see through moved pieces.
+
+				&& (guard == Rank.NIL
+					|| !(p.hasMoved()
+						&& isInvincible(guard, 1-color))))
 				continue;
 
 		// check for guarded squares
@@ -2521,12 +2539,8 @@ public class TestingBoard extends Board
 						if (result == Rank.WINS
 							|| result == Rank.UNK
 								&& !((guard == Rank.ONE && !hasSpy(color))
-									|| guard != Rank.ONE && guard.toInt() <= invincibleRank[1-color]))
+									|| guard != Rank.ONE && isInvincible(guard,1-color)))
 							isGuarded = true;
-				if (j == 1 && hasSpy(p.getColor()))
-					guarded = GUARDED_UNKNOWN;
-				else
-					guarded = GUARDED_OPEN;
 					} else if (!gp.isKnown())
 						isGuarded = true;
 				}
@@ -2949,10 +2963,15 @@ public class TestingBoard extends Board
 	//
 	// TBD: this should be assigned in constructor statically
 	//
+	public boolean isInvincible(Rank rank, int color) 
+	{
+		return (rank.toInt() <= invincibleRank[color]);
+	}
+
 	public boolean isInvincible(Piece p) 
 	{
 		Rank rank = p.getRank();
-		return (rank.toInt() <= invincibleRank[p.getColor()]);
+		return isInvincible(rank, p.getColor());
 	}
 
 	//
@@ -3108,7 +3127,7 @@ public class TestingBoard extends Board
 
 		// If the One is killed (by a Spy), demote SPY value
 		if (p.getRank() == Rank.SPY) {
-			assert rankWon == Rank.ONE : "Spy can only win One"; 
+			assert rankWon == Rank.ONE : "Spy can only win One but won " + rankWon; 
 			p.setAiValue(values[p.getColor()][Rank.SEVEN.toInt()] - 10);
 		}
 	}
@@ -3192,15 +3211,28 @@ public class TestingBoard extends Board
 		// handled in LOSES.  But an unknown opponent bomb
 		// could be any piece, so this is handled in UNK.
 		//
-		// Note that only worthless bombs become unknowns.
-		// This allows an Eight to approach them and attack.
+		// An Eight is allowed to approach suspected bombs and attack.
 		// But for other ranks, this is a bit aggressive, because
-		// because the suspected bomb structure could contain a
-		// lower ranked piece.
+		// because the suspected bomb could be a lower ranked piece.
+
+		// Should the Eight be allowed to pass or attack a
+		// suspected worthless bomb?  The prior code
+		// made any suspected worthless bomb an unknown.
+		// This prevents the Eight from passing it to get at the
+		// bomb structure.  The new code puts the Eight
+		// at risk, perhaps unnecessarily if there is some other
+		// path to the bomb structure.  Thus the AI needs to
+		// be relatively confident that the suspected bomb
+		// really is a bomb before marking it suspected.
+		// The AI also tries to retain one more Eight than
+		// the number of bomb structures to insure against loss.
+		// A player cannot waste pieces on trying to identify
+		// worthless bombs.
 
 		if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
 			&& fpcolor == Settings.bottomColor
-			&& (fp.aiValue() == 0 || tprank != Rank.EIGHT)) {
+			// && (fp.aiValue() == 0 || tprank != Rank.EIGHT)) {
+			&& tprank != Rank.EIGHT) {
 			fp.setRank(Rank.UNKNOWN);
 			fprank = Rank.UNKNOWN;
 		}
@@ -4337,6 +4369,11 @@ public class TestingBoard extends Board
 		popMove();
 	}
 
+	public void pushNullMove()
+	{
+		undoList.add(null);
+	}
+
 	public void popMove()
 	{
 		undoList.remove(undoList.size()-1);
@@ -4939,7 +4976,7 @@ public class TestingBoard extends Board
 		//
 		// The determination of the target is more computationally
 		// expensive than just basing the risk on the attacker
-		// rank.  To simplify, the AI sets the risk to zero
+		// rank.  To simplify, the AI reduces the risk
 		// if the depth is greater than two moves away.
 		// This makes the assumption that if the attacker is
 		// far away, there is likely some other target it
@@ -4947,11 +4984,10 @@ public class TestingBoard extends Board
 		// away, the AI assumes that attacker is aiming for
 		// this piece, and it needs to assess the risk.
 
-		int risk;
+		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 		if (depth > 3)
-			risk = 0;
-		else
-			risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
+			risk /= depth;
+
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
 

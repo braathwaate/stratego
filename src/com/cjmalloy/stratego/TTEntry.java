@@ -22,25 +22,36 @@ import java.util.EnumSet;
 
 // the transposition table entry
 public class TTEntry {
-  public int turn;	// for debugging
-  public long hash; // should be at least 64-bit to be safe
-  public int value;
-  public int depth;
 
-           public enum Flags {
-                EXACT,
-                LOWERBOUND,
-                UPPERBOUND
-            }
+	// A deep search is a forward pruned search to reach some goal.
+	// A broad search is the standard search.
+	// If an entry was created during a deep search, it can
+	// only be reused if a deep search is running.
+	// A broad search entry can be reused by either search.
 
-        public EnumSet<Flags> flags = EnumSet.noneOf(Flags.class);
+	public enum SearchType {
+		BROAD,
+		DEEP
+	}
+	public SearchType type;	// deep or broad search
+	public int moveRoot;
 
-	public TTEntry(int t, long h, int v, int d, Flags f) {
-		turn = t;
-		hash = h;
-		value = v;
-		depth = d;
-		flags.add(f);
+	public long hash; // should be at least 64-bit to be safe
+	public BMove bestMove;
+	public int bestValue;
+	public int depth;
+	public int turn;
+
+	public enum Flags {
+		EXACT,
+		LOWERBOUND,
+		UPPERBOUND
+	}
+
+        public Flags flags;
+
+	public TTEntry()
+	{
 	}
 }
 
