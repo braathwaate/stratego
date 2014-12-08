@@ -3132,6 +3132,15 @@ public class TestingBoard extends Board
 		}
 	}
 
+	public void move(BMove m, int depth)
+	{
+		Piece fp = getPiece(m.getFrom());
+		boolean unknownScoutFarMove = 
+			!fp.isKnown()
+				&& !Grid.isAdjacent(m.getFrom(), m.getTo());
+		move(m, depth, unknownScoutFarMove);
+	}
+
 	public void move(BMove m, int depth, boolean unknownScoutFarMove)
 	{
 		Piece fp = getPiece(m.getFrom());

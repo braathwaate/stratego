@@ -61,6 +61,19 @@ public class AI implements Runnable
 	long stopTime = 0;
 	int moveRoot = 0;
 
+	enum MoveType {
+		TWO_SQUARES,
+		POSS_TWO_SQUARES,
+		CHASED,
+		CHASER,
+		REPEATED,
+		KM,	// killer move
+		TE,	// transposition table entry
+		REMOVE_REPEATED,
+		REMOVE_TWO_SQUARES,
+		OK
+	}
+
 	public class MoveValuePair implements Comparable<MoveValuePair> {
 		BMove move = null;
 		int value;
@@ -254,7 +267,7 @@ public class AI implements Runnable
 			else if (board.getPiece(bestMove.move.getFrom()) == null)
  				log("bestMove from " + bestMove.move.getFrom() + " to " + bestMove.move.getTo() + " but from piece is null?");
 			else {
-				logMove(0, board, bestMove.move, 0, bestMove.value, 0, "");
+				logMove(0, board, bestMove.move, 0, bestMove.value, 0, MoveType.OK);
 				logFlush("");
 				long t = System.currentTimeMillis() - startTime;
 				t = System.currentTimeMillis() - startTime;
@@ -482,7 +495,7 @@ public class AI implements Runnable
 
 		// Two Squares Rule
 			if (b.isTwoSquares(tmpM)) {
-				logMove(0, b, tmpM, 0, 0, 0, "removed two squares");
+				logMove(0, b, tmpM, 0, 0, 0, MoveType.REMOVE_TWO_SQUARES);
 				moveList.remove(k);
 				continue;
 			}
@@ -517,7 +530,7 @@ public class AI implements Runnable
 
 				b.undo();
 				if (isRepeated)
-					logMove(0, b, tmpM, 0, 0, 0, "removed repeated");
+					logMove(0, b, tmpM, 0, 0, 0, MoveType.REMOVE_REPEATED);
 			}
 
 			assert b.getValue() == 0 : "Board value not zero?";
@@ -689,7 +702,7 @@ public class AI implements Runnable
 			// logMove(n, b, tmpM, 0, 0, 0, "");
 			b.move(tmpM, 0, mvp.unknownScoutFarMove);
 
-			int vm = -negamax(b, n-1, alpha, 9999, Settings.bottomColor, 1, chasedPiece, chasePiece, killerMove); 
+			int vm = -negamax(b, n-1, -9999, -alpha, Settings.bottomColor, 1, chasedPiece, chasePiece, killerMove); 
 
 			mvp.setValue(vm);
 			long h = b.getHash();
@@ -700,7 +713,7 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(mvp.move.getTo());
 			if (tp != null)
 				v = b.actualValue(tp);
-			logMove(n, b, tmpM, v, vm, h, "");
+			logMove(n, b, tmpM, v, vm, h, MoveType.OK);
 
 			if (vm > alpha)
 			{
@@ -1120,13 +1133,12 @@ public class AI implements Runnable
 	private int negamax2(TestingBoard b, int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, BMove killerMove, BMove ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
-		int valueB = b.getValue();
 		BMove kmove = new BMove();
 		BMove bestmove = null;
 
 		if (ttMove != null) {
-			// logMove(n, b, ttMove, valueB, 0, 0, "");
-			b.move(ttMove, depth, false);
+			// logMove(n, b, ttMove, b.getValue(), 0, 0, "");
+			b.move(ttMove, depth);
 
 
 			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
@@ -1134,7 +1146,7 @@ public class AI implements Runnable
 			long h = b.getHash();
 			b.undo();
 
-			logMove(n, b, ttMove, valueB, negQS(vm, turn), h, "te");
+			logMove(n, b, ttMove, b.getValue(), negQS(vm, turn), h, MoveType.TE);
 
 			alpha = Math.max(alpha, vm);
 
@@ -1160,27 +1172,26 @@ public class AI implements Runnable
 			&& fp.getColor() == turn
 			&& Grid.isAdjacent(kfrom, kto)
 			&& (tp == null || tp.getColor() != turn)) {
-			// logMove(n, b, tmpM, valueB, 0, 0, "");
-			b.move(killerMove, depth, false);
+			MoveType mt = makeMove(b, n, turn, depth, killerMove, false);
+			if (mt != MoveType.TWO_SQUARES
+				&& mt != MoveType.POSS_TWO_SQUARES
+				&& mt != MoveType.REPEATED) {
+				int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+				long h = b.getHash();
+				b.undo();
+				logMove(n, b, killerMove, b.getValue(), negQS(vm, turn), h, MoveType.KM);
+				
+				if (vm > bestValue) {
+					bestValue = vm;
+					bestmove = killerMove;
+				}
 
+				alpha = Math.max(alpha, vm);
 
-			int vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
-
-			long h = b.getHash();
-			b.undo();
-
-			logMove(n, b, killerMove, valueB, negQS(vm, turn), h, "km");
-
-			if (vm > bestValue) {
-				bestValue = vm;
-				bestmove = killerMove;
-			}
-
-			alpha = Math.max(alpha, vm);
-
-			if (alpha >= beta) {
-				hh[kfrom][kto]+=n;
-				return bestValue;
+				if (alpha >= beta) {
+					hh[kfrom][kto]+=n;
+					return bestValue;
+				}
 			}
 		}
 
@@ -1238,77 +1249,21 @@ public class AI implements Runnable
 				b.pushNullMove();
 				vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 				b.popMove();
-				log(n + ": (null move) " + valueB + " " + negQS(vm, turn));
+				log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
 			} else {
+				MoveType mt = makeMove(b, n, turn, depth, max.move, max.unknownScoutFarMove);
+				if (mt == MoveType.TWO_SQUARES
+					|| mt == MoveType.POSS_TWO_SQUARES
+					|| mt == MoveType.REPEATED)
+					continue;
 
-		// NOTE: FORWARD TREE PRUNING (minor)
-		// isRepeatedPosition() discards repetitive moves.
-		// This is done now rather than during move
-		// generation because most moves
-		// are pruned off by alpha-beta,
-		// so calls to isRepeatedPosition() are also pruned off,
-		// saving a heap of time.
+				vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 
-			// logMove(n, b, max.move, valueB, 0, 0, "");
+				long h = b.getHash();
 
-			if (b.isTwoSquares(max.move)) {
-				logMove(n, b, max.move, valueB, 0, 0, "two squares");
-				continue;
-			}
+				b.undo();
 
-			String note = "";
-
-		// AI always abides by Two Squares rule
-		// even if box is not checked (AI plays nice).
-
-			if (Settings.twoSquares
-				|| turn == Settings.topColor) {
-
-				if (b.isChased(max.move)) {
-
-		// Piece is being chased, so repetitive moves OK
-		// but can it lead to a two squares result?
-
-					if (b.isPossibleTwoSquares(max.move)) {
-						logMove(n, b, max.move, valueB, 0, 0, "poss two squares");
-						continue;
-					}
-
-					b.move(max.move, depth, max.unknownScoutFarMove);
-					note = "chased";
-				} else if (turn == Settings.topColor) {
-
-					if (b.isTwoSquaresChase(max.move)) {
-
-			// Piece is chasing, so repetitive moves OK
-			// (until Two Squares Rule kicks in)
-
-						b.move(max.move, depth, max.unknownScoutFarMove);
-						note = "chaser";
-					} else {
-
-		// Because isRepeatedPosition() is more restrictive
-		// than More Squares, the AI does not expect
-		// the opponent to abide by this rule as coded.
-
-						b.move(max.move, depth, max.unknownScoutFarMove);
-						if (b.isRepeatedPosition()) {
-							b.undo();
-							logMove(n, b, max.move, valueB, 0, 0, "repeated");
-							continue;
-						}
-					}
-				} else
-					b.move(max.move, depth, max.unknownScoutFarMove);
-			} else
-				b.move(max.move, depth, max.unknownScoutFarMove);
-			vm = -negamax(b, n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
-
-			long h = b.getHash();
-
-			b.undo();
-
-			logMove(n, b, max.move, valueB, negQS(vm, turn), h, note);
+				logMove(n, b, max.move, b.getValue(), negQS(vm, turn), h, mt);
 			}
 
 			if (vm > bestValue) {
@@ -1331,6 +1286,70 @@ public class AI implements Runnable
 		return bestValue;
 	}
 
+	private MoveType makeMove(TestingBoard b, int n, int turn, int depth, BMove tryMove, boolean unknownScoutFarMove)
+	{
+		// NOTE: FORWARD TREE PRUNING (minor)
+		// isRepeatedPosition() discards repetitive moves.
+		// This is done now rather than during move
+		// generation because most moves
+		// are pruned off by alpha-beta,
+		// so calls to isRepeatedPosition() are also pruned off,
+		// saving a heap of time.
+
+		MoveType mt = MoveType.OK;
+
+		if (b.isTwoSquares(tryMove)) {
+			logMove(n, b, tryMove, b.getValue(), 0, 0, MoveType.TWO_SQUARES);
+			return MoveType.TWO_SQUARES;
+		}
+
+		// AI always abides by Two Squares rule
+		// even if box is not checked (AI plays nice).
+
+		if (Settings.twoSquares
+			|| turn == Settings.topColor) {
+
+			if (b.isChased(tryMove)) {
+
+	// Piece is being chased, so repetitive moves OK
+	// but can it lead to a two squares result?
+
+				if (b.isPossibleTwoSquares(tryMove)) {
+					logMove(n, b, tryMove, b.getValue(), 0, 0, MoveType.POSS_TWO_SQUARES);
+					return MoveType.POSS_TWO_SQUARES;
+				}
+
+				b.move(tryMove, depth, unknownScoutFarMove);
+				mt = MoveType.CHASED;
+			} else if (turn == Settings.topColor) {
+
+				if (b.isTwoSquaresChase(tryMove)) {
+
+		// Piece is chasing, so repetitive moves OK
+		// (until Two Squares Rule kicks in)
+
+					b.move(tryMove, depth, unknownScoutFarMove);
+					mt = MoveType.CHASER;
+				} else {
+
+	// Because isRepeatedPosition() is more restrictive
+	// than More Squares, the AI does not expect
+	// the opponent to abide by this rule as coded.
+
+					b.move(tryMove, depth, unknownScoutFarMove);
+					if (b.isRepeatedPosition()) {
+						b.undo();
+						logMove(n, b, tryMove, b.getValue(), 0, 0, MoveType.REPEATED);
+						return MoveType.REPEATED;
+					}
+				}
+			} else
+				b.move(tryMove, depth, unknownScoutFarMove);
+		} else
+			b.move(tryMove, depth, unknownScoutFarMove);
+
+		return mt;
+	}
 
 	String logPiece(Piece p)
 	{
@@ -1374,30 +1393,33 @@ public class AI implements Runnable
 	}
 
 
-	void logMove(int n, Board b, BMove move, int valueB, int value, long hash, String note)
+	void logMove(int n, Board b, BMove move, int valueB, int value, long hash, MoveType mt)
 	{
 	int color = b.getPiece(move.getFrom()).getColor();
+	String s;
 	if (b.getPiece(move.getTo()) == null) {
-	log(n + ":" + color
+	s = n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + ")"
-	+ logFlags(b.getPiece(move.getFrom())) + " "
-	+ valueB + " " + value + " " + note);
+	+ logFlags(b.getPiece(move.getFrom()));
 	} else {
 		char X = 'x';
 		if (n == 0)
 			X = 'X';
-	log(n + ":" + color
+	s = n + ":" + color
 + " " + move.getFromX() + " " + move.getFromY() + " " + move.getToX() + " " + move.getToY()
 + " (" + logPiece(b.getPiece(move.getFrom())) + X + logPiece(b.getPiece(move.getTo())) + ")"
-	+ logFlags(b.getPiece(move.getFrom())) + " " + logFlags(b.getPiece(move.getTo()))
-	+ " " + valueB + " " + value + " " + note);
+	+ logFlags(b.getPiece(move.getFrom())) + " " + logFlags(b.getPiece(move.getTo()));
 	}
+	s +=  " " + valueB + " " + value;
+	if (mt != MoveType.OK)
+		s += " " + mt;
+	log(s);
 	}
 
 	public void logMove(Move m)
 	{
-		logMove(0, board, m, 0, 0, 0, "");
+		logMove(0, board, m, 0, 0, 0, MoveType.OK);
 	}
 
 	private void log(String s)
