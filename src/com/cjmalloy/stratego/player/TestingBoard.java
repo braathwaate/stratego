@@ -1039,12 +1039,25 @@ public class TestingBoard extends Board
 	
 	protected void flee(Piece p)
 	{
+
+	// The retreat pattern pushes the piece away and towards
+	// its back rank which is usually safer.
+	// This needs to handle the following case:
+	// xx xx -- --
+	// xx xx -- --
+	// -- -- R3 B1
+	// Red Three should move up the board rather than to the left.
+	//
+	// The 1's in the retreat pattern are safe squares.  setFleePlan()
+	// does not override chase plans on these squares if the
+	// piece is already on these squares.
+
 		int retreat[][] = {
-			{1, 1, 1, 1, 1},
-			{2, 2, 2, 2, 2},
-			{3, 3, 3, 3, 3},
-			{4, 4, 4, 4, 4},
-			{5, 5, 5, 5, 5}
+			{1, 1, 2, 1, 1},
+			{1, 2, 3, 2, 1},
+			{3, 3, 4, 3, 3},
+			{3, 4, 5, 4, 3},
+			{4, 5, 6, 5, 4}
 		};
 
 		int fi = p.getIndex();
@@ -1498,10 +1511,12 @@ public class TestingBoard extends Board
 				|| valueStealth[1-p.getColor()][chasedRank-1] == 0
 				|| (isInvincible(p)
 					&& !(chasedRank == 1 && hasSpy(1-p.getColor()))))
-			&& isWinning(1-p.getColor()) >= 0)
+			&& isWinning(1-p.getColor()) >= 0) {
 
 			// go for an even exchange
-			genNeededPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), chasedRank, DEST_PRIORITY_CHASE);
+			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, p.getRank());
+			genNeededPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), chasedRank, DEST_PRIORITY_CHASE);
+		}
 	}
 
 	// cache the winFight values for faster evaluation
