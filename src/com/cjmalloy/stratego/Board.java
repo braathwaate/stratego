@@ -198,7 +198,7 @@ public class Board
 	}
 
 	// TRUE if valid attack
-	public boolean attack(BMove m)
+	public boolean attack(Move m)
 	{
 		if (validAttack(m))
 		{
@@ -1050,7 +1050,7 @@ public class Board
 		} // i
 	}
 
-	public boolean move(BMove m)
+	public boolean move(Move m)
 	{
 		if (getPiece(m.getTo()) != null)
 			return false;
@@ -1115,7 +1115,7 @@ public class Board
 	// times non-stop between the same two
 	// squares, regardless of what the opponent is doing.
 	//
-	public boolean isTwoSquares(BMove m)
+	public boolean isTwoSquares(int m)
 	{
 		int size = undoList.size();
 		if (size < 6)
@@ -1124,16 +1124,16 @@ public class Board
 		// AI always abides by Two Squares rule
 		// even if box is not checked (AI plays nice).
 		if (Settings.twoSquares
-			|| getPiece(m.getFrom()).getColor() == Settings.topColor) {
-			BMove prev = undoList.get(size-2);
+			|| getPiece(Move.unpackFrom(m)).getColor() == Settings.topColor) {
+			UndoMove prev = undoList.get(size-2);
 			if (prev == null)
 				return false;
-			BMove prevprev = undoList.get(size-6);
+			UndoMove prevprev = undoList.get(size-6);
 			if (prevprev == null)
 				return false;
 			return prevprev.equals(prev)
-				&& m.getFrom() == prev.getTo()
-				&& m.getTo() == prev.getFrom();
+				&& Move.unpackFrom(m) == prev.getTo()
+				&& Move.unpackTo(m) == prev.getFrom();
 		} else
 			// let opponent get away with it
 			return false;
@@ -1152,8 +1152,8 @@ public class Board
 		int size = undoList.size();
 		if (size < 2)
 			return false;
-		BMove aimove = undoList.get(size-1);
-		BMove oppmove = undoList.get(size-2);
+		UndoMove aimove = undoList.get(size-1);
+		UndoMove oppmove = undoList.get(size-2);
 
 		for (int d : dir) {
 			int i = oppmove.getTo() + d;
@@ -1212,30 +1212,30 @@ public class Board
 	// Blue Two has the move and approaches Red Three.
 	// Position 1 could be seen as a false Two Squares ending.
 
-	public boolean isPossibleTwoSquares(BMove m)
+	public boolean isPossibleTwoSquares(int m)
 	{
 		UndoMove m2 = getLastMove(2);
 		if (m2 == null)
 			return false;
 
 		// not back to the same square?
-		if (m2.getFrom() != m.getTo())
+		if (m2.getFrom() != Move.unpackTo(m))
 			return false;
 
 		// is a capture?
-		if (getPiece(m.getTo()) != null)
+		if (getPiece(Move.unpackTo(m)) != null)
 			return false;
 
 		// not the same piece?
-		if (m2.getPiece() != getPiece(m.getFrom()))
+		if (m2.getPiece() != getPiece(Move.unpackFrom(m)))
 			return false;
 
 		// not an adjacent move (i.e., nine far move)
-		if (!Grid.isAdjacent(m.getFrom(), m.getTo()))
+		if (!Grid.isAdjacent(Move.unpackFrom(m), Move.unpackTo(m)))
 			return false;
 
 		// test for three squares (which is legal)
-		Piece p = getPiece(m.getTo() + (m.getTo() - m.getFrom()));
+		Piece p = getPiece(Move.unpackTo(m) + (Move.unpackTo(m) - Move.unpackFrom(m)));
 		if (p == null || p.getColor() != m2.getPiece().getColor())
 			return false;
 
@@ -1245,37 +1245,37 @@ public class Board
 
 		// Did chase piece start non-adjacent to chaser?
 		// If so, this is a possible two squares ending.
-		return !Grid.isAdjacent(oppmove3.getFrom(), m.getFrom());
+		return !Grid.isAdjacent(oppmove3.getFrom(), Move.unpackFrom(m));
 	}
 
-	public boolean isChased(BMove m)
+	public boolean isChased(int m)
 	{
 		UndoMove oppmove = getLastMove(1);
 		if (oppmove == null)
 			return false;
-		return Grid.isAdjacent(oppmove.getTo(),  m.getFrom());
+		return Grid.isAdjacent(oppmove.getTo(),  Move.unpackFrom(m));
 	}
 
 	// chasing moves back to the square where the chasing piece
 	// came from in the directly preceding turn are always allowed
 	// as long as this does not violate the
 	// Two-Squares Rule / Five-Moves-on-Two-Squares Rule.
-	public boolean isTwoSquaresChase(BMove m)
+	public boolean isTwoSquaresChase(int m)
 	{
-		BMove m2 = getLastMove(2);
+		UndoMove m2 = getLastMove(2);
 		if (m2 == null)
 			return false;
 
 		// not back to square where the chasing piece came from?
-		if (m2.getFrom() != m.getTo())
+		if (m2.getFrom() != Move.unpackTo(m))
 			return false;
 
 		// not a chasing move?
-		BMove oppmove = getLastMove(1);
+		UndoMove oppmove = getLastMove(1);
 		if (oppmove == null)
 			return false;
 
-		if (!Grid.isAdjacent(oppmove.getTo(),  m.getTo()))
+		if (!Grid.isAdjacent(oppmove.getTo(),  Move.unpackTo(m)))
 			return false;
 
 		// Will the AI eventually be blocked by Two Squares?
@@ -1322,7 +1322,8 @@ public class Board
 		// and position A = C
 		// and moves 2 and 4 are not equal (if they are equal, it
 		// means we are at position D)
-		if (m.equals(m4)
+		if (Move.unpackFrom(m) == m4.getFrom()
+			&& Move.unpackTo(m) == m4.getTo()
 			&& hash == m4.hash
 			&& !m2.equals(m6))
 			return false;
@@ -1371,10 +1372,10 @@ public class Board
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
 			Piece fp = undo.getPiece();
-			Piece tp = getPiece(undo.to);
+			Piece tp = getPiece(undo.getTo());
 			fp.copy(undo.fpcopy);
-			setPiece(undo.getPiece(), undo.from);
-			setPiece(undo.tp, undo.to);
+			setPiece(undo.getPiece(), undo.getFrom());
+			setPiece(undo.tp, undo.getTo());
 			if (undo.tp != null) {
 				undo.tp.copy(undo.tpcopy);
 				if (tp == null) {
@@ -1393,7 +1394,7 @@ public class Board
 	}
 
 
-	private void scoutLose(BMove m)
+	private void scoutLose(Move m)
 	{
 		Spot tmp = getScoutLooseFrom(m);
 
@@ -1402,7 +1403,7 @@ public class Board
 		setPiece(null, m.getTo());
 	}
 	
-	private Spot getScoutLooseFrom(BMove m)
+	private Spot getScoutLooseFrom(Move m)
 	{
 		if (m.getFromX() == m.getToX())
 		{
@@ -1420,7 +1421,7 @@ public class Board
 		}
 	}
 	
-	protected boolean validAttack(BMove m)
+	protected boolean validAttack(Move m)
 	{
 		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
 			return false;
@@ -1436,7 +1437,7 @@ public class Board
 	}
 
 	// TRUE if piece moves to legal square
-	public boolean validMove(BMove m)
+	public boolean validMove(Move m)
 	{
 		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
 			return false;
@@ -1445,7 +1446,7 @@ public class Board
 			return false;
 		
 		//check for rule: "a player may not move their piece back and fourth.." or something
-		if (isTwoSquares(m))
+		if (isTwoSquares(m.getMove()))
 			return false;
 
 		switch (fp.getRank())

@@ -124,6 +124,11 @@ public class Grid
 			|| d == -1;
 	}
 
+	static public boolean isAdjacent(int m)
+	{
+		return isAdjacent(Move.unpackFrom(m), Move.unpackTo(m));
+	}
+
 	// number of steps between indicies
 	static public int steps(int f, int t)
 	{

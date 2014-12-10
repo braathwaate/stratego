@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 
 import com.cjmalloy.stratego.Board;
-import com.cjmalloy.stratego.BMove;
 import com.cjmalloy.stratego.Grid;
 import com.cjmalloy.stratego.Move;
 import com.cjmalloy.stratego.UndoMove;
@@ -1075,6 +1074,8 @@ public class TestingBoard extends Board
 			if (x < 0 || x > 9 || y < 0 || y > 9)
 				continue;
 			int i = Grid.getIndex(x, y);
+			if (!isValid(i))
+				continue;
 			if (p.getColor() == Settings.topColor)
 				tmp[i] = retreat[j][4-k];
 			else
@@ -1105,14 +1106,29 @@ public class TestingBoard extends Board
 
 
 			for (int j = 4; j > invincibleWinRank[1-p.getColor()]; j--) {
+				if (knownRankAtLarge(1-p.getColor(), j) != 0) {
+
 		// The AI discourages its low ranked pieces from getting
 		// too close to unknown unmoved pieces,
 		// because this is often how a piece becomes trapped.
 		// This does not apply to its known invincible pieces,
 		// which it allows to get close to any piece.
 
-				if (knownRankAtLarge(1-p.getColor(), j) != 0) {
-					if (p.hasMoved() || j <= invincibleRank[1-p.getColor()])
+		// Commented out for version 9.2.
+		// This defensive strategy works quite well, but
+		// it leads to draws if the opponent *never* chases
+		// the AI piece.  The AI piece has to approach unknown
+		// territory and bait the opponent into chasing it, thereby
+		// allowing the AI to guess its rank.  The AI has to rely
+		// on the search tree to protect it from entrapment.
+		// Once the opponent piece rank is suspected, then the
+		// AI piece can flee back to its protective rank and send
+		// an expendable piece to confirm the rank of the chaser.
+		// Its a risky strategy given the shallow depth of the
+		// search tree, but this can be rectified by deeper
+		// searching in the future.
+
+		//			if (p.hasMoved() || j <= invincibleRank[1-p.getColor()])
 						continue;
 
 		// If the chasing rank is unknown, it is discouraged
@@ -3147,25 +3163,24 @@ public class TestingBoard extends Board
 		}
 	}
 
-	public void move(BMove m, int depth)
+	public void move(int m, int depth)
 	{
-		Piece fp = getPiece(m.getFrom());
+		Piece fp = getPiece(Move.unpackFrom(m));
 		boolean unknownScoutFarMove = 
-			!fp.isKnown()
-				&& !Grid.isAdjacent(m.getFrom(), m.getTo());
+			!fp.isKnown() && !Grid.isAdjacent(m);
 		move(m, depth, unknownScoutFarMove);
 	}
 
-	public void move(BMove m, int depth, boolean unknownScoutFarMove)
+	public void move(int m, int depth, boolean unknownScoutFarMove)
 	{
-		Piece fp = getPiece(m.getFrom());
-		Piece tp = getPiece(m.getTo());
+		Piece fp = getPiece(Move.unpackFrom(m));
+		Piece tp = getPiece(Move.unpackTo(m));
 		moveHistory(fp, tp, m);
 
 		if (depth == 0)
-			assert hash == hashTest : "bug: hash changed before move "  + m.getFrom() + " to " + m.getTo();
+			assert hash == hashTest : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
 
-		setPiece(null, m.getFrom());
+		setPiece(null, Move.unpackFrom(m));
 		int vm = 0;
 
 		// Moving an unknown scout reveals its rank.
@@ -3190,7 +3205,7 @@ public class TestingBoard extends Board
 		// intact to prevent the opponent from guessing the
 		// real structure.
 
-				vm += -VALUE_MOVED -values[fpcolor][r]/100 -unmovedValue[m.getFrom()];
+				vm += -VALUE_MOVED -values[fpcolor][r]/100 -unmovedValue[Move.unpackFrom(m)];
 		}
 
 		if (tp == null) { // move to open square
@@ -3201,19 +3216,19 @@ public class TestingBoard extends Board
 
 			if (activeRank[fpcolor][r] == fp
 				|| activeRank[fpcolor][r] == null && neededRank[fpcolor][r])
-				vm += planv(planA[fpcolor][r], m.getFrom(), m.getTo());
+				vm += planv(planA[fpcolor][r], Move.unpackFrom(m), Move.unpackTo(m));
 			else if (fp.hasMoved()
 					|| fp.isKnown()
 					|| neededRank[fpcolor][r])
-				vm += planv(planB[fpcolor][r], m.getFrom(), m.getTo());
+				vm += planv(planB[fpcolor][r], Move.unpackFrom(m), Move.unpackTo(m));
 			if (unknownScoutFarMove) {
 				makeKnown(fp);
 				vm -= stealthValue(fp);
 			}
 
-			fp.setIndex(m.getTo());
+			fp.setIndex(Move.unpackTo(m));
 			fp.moves++;
-			setPiece(fp, m.getTo());
+			setPiece(fp, Move.unpackTo(m));
 
 		} else { // attack
 
@@ -3222,7 +3237,7 @@ public class TestingBoard extends Board
 		// perhaps with different hash because of
 		// change in "known" status and perhaps rank).
 
-			setPiece(null, m.getTo());
+			setPiece(null, Move.unpackTo(m));
 
 			Rank tprank = tp.getRank();
 
@@ -3278,7 +3293,7 @@ public class TestingBoard extends Board
 		// thinks it is winning and wants to speed up the game.
 
 			if (tp.moves == 0 && isExpendable(fp))
-				vm += unmovedValue[m.getTo()];
+				vm += unmovedValue[Move.unpackTo(m)];
 
 		// The ai assumes that any unknown piece
 		// will take a known or flag bomb
@@ -3503,7 +3518,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFleeLow() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fp, tprank, m.getTo());
+					vm = Math.min(vm, valueBluff(fp, tprank, Move.unpackTo(m)));
 
 				if (depth != 0
 					&& fpcolor == Settings.topColor
@@ -3514,8 +3529,9 @@ public class TestingBoard extends Board
 					&& tprank.toInt() <= 4
 					&& fp.getActingRankFleeLow() != tprank 
 					&& !unknownScoutFarMove
-					&& isEffectiveBluff(m))
-					vm -= valueBluff(tp, fprank, m.getTo());
+					&& isEffectiveBluff(m)) {
+					vm = Math.min(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
+				}
 
 		// Consider the following example.
 		// -- R1 --
@@ -3561,8 +3577,8 @@ public class TestingBoard extends Board
 					&& fprank != Rank.EIGHT) {
 					fp.moves++;
 					makeKnown(fp);
-					setPiece(fp, m.getTo());
-					fp.setIndex(m.getTo());
+					setPiece(fp, Move.unpackTo(m));
+					fp.setIndex(Move.unpackTo(m));
 				}
 
 		// If the opponent attacker is invincible and is
@@ -3639,8 +3655,7 @@ public class TestingBoard extends Board
 					&& fp.getActingRankFleeLow() != tprank
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m)) {
-					vm += valueBluff(m, fp, tp);
-					vm -= valueBluff(tp, fprank, m.getTo());
+					vm = Math.min(vm, valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -3656,7 +3671,7 @@ public class TestingBoard extends Board
 					makeWinner(tp, fprank);
 					makeKnown(tp);
 					vm -= fpvalue;
-					setPiece(tp, m.getTo());
+					setPiece(tp, Move.unpackTo(m));
 				}
 
 				break;
@@ -3785,7 +3800,7 @@ public class TestingBoard extends Board
 					&& fprank.toInt() <= 4
 					&& tp.getActingRankFleeLow() != fprank
 					&& isEffectiveBluff(m))
-					vm += valueBluff(fp, tprank, m.getTo());
+					vm = Math.min(vm, valueBluff(fp, tprank, Move.unpackTo(m)));
 
 				else if (fpcolor == Settings.bottomColor)
 					vm += apparentWinValue(depth,
@@ -3806,8 +3821,8 @@ public class TestingBoard extends Board
 				} // fp not known
 
 				fp.moves++;
-				setPiece(fp, m.getTo()); // won
-				fp.setIndex(m.getTo());
+				setPiece(fp, Move.unpackTo(m)); // won
+				fp.setIndex(Move.unpackTo(m));
 				break;
 
 			case Rank.UNK:
@@ -3959,7 +3974,7 @@ public class TestingBoard extends Board
 
 		if (npieces[Settings.bottomColor] >= 32
 			&& (fprank == Rank.FIVE || fprank == Rank.SIX)
-			&& !isBombStructure(m.getTo())) {
+			&& !isBombStructure(Move.unpackTo(m))) {
 			int index = tp.getIndex();
 			int count = 0;
 			for (int d : dir) {
@@ -4096,13 +4111,13 @@ public class TestingBoard extends Board
 					else 
 						makeWinner(tp, fprank);
 					makeKnown(tp);
-					setPiece(tp, m.getTo());
+					setPiece(tp, Move.unpackTo(m));
 
 			} else {
 				makeKnown(fp);
 				fp.moves++;
-				setPiece(fp, m.getTo()); // won
-				fp.setIndex(m.getTo());
+				setPiece(fp, Move.unpackTo(m)); // won
+				fp.setIndex(Move.unpackTo(m));
 			}
 
 
@@ -4232,10 +4247,10 @@ public class TestingBoard extends Board
 						makeKnown(fp);
 
 						fp.moves++;
-						setPiece(fp, m.getTo()); // won
-						fp.setIndex(m.getTo());
+						setPiece(fp, Move.unpackTo(m)); // won
+						fp.setIndex(Move.unpackTo(m));
 					} else
-						setPiece(tp, m.getTo());
+						setPiece(tp, Move.unpackTo(m));
 				}
 				break;
 			} // switch
@@ -4366,31 +4381,33 @@ public class TestingBoard extends Board
 		return tpvalue;
 	}
 
-        protected void moveHistory(Piece fp, Piece tp, BMove m)
+        protected void moveHistory(Piece fp, Piece tp, int m)
         {
-                undoList.add(new UndoMove(fp, tp, m.getFrom(), m.getTo(), hash, value));
+                undoList.add(new UndoMove(fp, tp, Move.unpackFrom(m), Move.unpackTo(m), hash, value));
 	}
 
 	public void undo()
 	{
 		UndoMove um = getLastMove();
-		value = um.value;
-		Piece fp = um.getPiece();
+		if (um != null) {
+			value = um.value;
+			Piece fp = um.getPiece();
 
-		// remove piece at target to update hash
-		setPiece(null, um.getTo());
+			// remove piece at target to update hash
+			setPiece(null, um.getTo());
 
-		// place original piece and restore hash
-		fp.copy(um.fpcopy);
-		setPiece(fp, um.getFrom());
+			// place original piece and restore hash
+			fp.copy(um.fpcopy);
+			setPiece(fp, um.getFrom());
 
-		// place target piece and restore hash
-		if (um.tp != null) {
-			um.tp.copy(um.tpcopy);
-			setPiece(um.tp, um.getTo());
+			// place target piece and restore hash
+			if (um.tp != null) {
+				um.tp.copy(um.tpcopy);
+				setPiece(um.tp, um.getTo());
+			}
 		}
 
-		popMove();
+		undoList.remove(undoList.size()-1);
 	}
 
 	public void pushNullMove()
@@ -4398,11 +4415,6 @@ public class TestingBoard extends Board
 		undoList.add(null);
 	}
 
-	public void popMove()
-	{
-		undoList.remove(undoList.size()-1);
-	}
-	
 	// If the prior move was to the target square,
 	// then the opponent must consider whether the ai is bluffing.
 	// This could occur if the opponent moves a piece next to an
@@ -4440,17 +4452,17 @@ public class TestingBoard extends Board
 	// acquire an actingRankFlee which permanently marks it as a weaker
 	// piece.
 
-	public boolean isEffectiveBluff(BMove m)
+	public boolean isEffectiveBluff(int m)
 	{
 		// (note that getLastMove(2) is called to get the prior
 		// move, because the current move is already on the
 		// stack when isEffectiveBluff() is called)
 		UndoMove prev = getLastMove(2);
-		if (prev != null && m.getTo() == prev.getTo())
+		if (prev != null && Move.unpackTo(m) == prev.getTo())
 		 	return true;
 
 		prev = getLastMove(3);
-		if (prev != null && m.getFrom() == prev.getTo())
+		if (prev != null && Move.unpackFrom(m) == prev.getTo())
 		 	return true;
 
 		return false;
@@ -4580,7 +4592,7 @@ public class TestingBoard extends Board
 	// Red Five moves towards unknown Red.  The board is
 	// then evaluated as in the above example.
 
-	protected int valueBluff(BMove m, Piece fp, Piece tp)
+	protected int valueBluff(int m, Piece fp, Piece tp)
 	{
 		// (note that getLastMove(2) is called to get the prior
 		// move, because the current move is already on the

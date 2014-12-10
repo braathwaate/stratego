@@ -17,27 +17,46 @@
 
 package com.cjmalloy.stratego;
 
-import com.cjmalloy.stratego.BMove;
-
-public class Move extends BMove
+public class Move
 {
+	// Prior to version 9.2, Move was extended from BMove.
+	// BMove was a simple class containing from and to.
+	// When the transposition table was introduced in version 9.2,
+	// garbage collection became very slow, because the heap
+	// became fragmented as the move objects were retained in
+	// the transposition table.  This reveals one of the failings
+	// in java, that all objects have to be allocated from the
+	// heap.  The allocation is not slow, but if the heap becomes
+	// fragmented, garbage collection becomes an issue.
+	// As a result, when 9.2 played older versions
+	// with both using the same timeclock setting,
+	// version 9.2 used much more CPU time.
+	//
+	// The only objects in Java that are not allocated from
+	// the heap are primitive objects.  So the solution (hack)
+	// was to make BMove an int, packing the from and to into
+	// a single int.  This is not to save memory, but to avoid
+	// heap allocation during move generation and to avoid
+	// objects in the transposition table.
+
+	private int move;
 	private Piece piece = null;
 
 	public Move(Piece p, int f, int t)
 	{
-		super(f,t);
+		move = packMove(f, t);
 		piece = p;
 	}
 
 	public Move(Piece p, Spot f, Spot t)
 	{
-		super(f, t);
+		move = packMove(f, t);
 		piece = p;
 	}
 
-	public Move(Piece p, BMove bm)
+	public Move(Piece p, int m)
 	{
-		super(bm.from, bm.to);
+		move = m;
 		piece = p;
 	}
 
@@ -46,8 +65,91 @@ public class Move extends BMove
 		return piece;
 	}
 
+	static public int packMove(int f, int t)
+	{
+		return (f << 7) + t;
+	}
+	static public int packMove(Spot f, Spot t)
+	{
+        	int from = f.getX() + 1 + (f.getY() + 1) * 11 ;
+        	int to = t.getX() + 1 + (t.getY() + 1) * 11 ;
+
+		return packMove(from, to);
+	}
+
+	static public int unpackFrom(int m)
+	{
+		return (m >> 7);
+	}
+
+	static public int unpackTo(int m)
+	{
+		return m & 0x7F;
+	}
+
+        static public int unpackFromX(int m)
+        {
+                return unpackFrom(m) % 11 - 1;
+        }
+
+        static public int unpackFromY(int m)
+        {
+                return unpackFrom(m) / 11 - 1;
+        }
+
+        static public int unpackToX(int m)
+        {
+                return unpackTo(m) % 11 - 1;
+        }
+
+        static public int unpackToY(int m)
+        {
+                return unpackTo(m) / 11 - 1;
+        }
+
+	public int getMove()
+	{
+		return move;
+	}
+
+	public void setMove(int m)
+	{
+		move = m;
+		piece = null;
+	}
+
+	public int getFrom()
+	{
+		return unpackFrom(move);
+	}
+
+	public int getTo()
+	{
+		return unpackTo(move);
+	}
+
+	public int getFromX()
+        {
+                return unpackFromX(move);
+        }
+
+        public int getFromY()
+        {
+                return unpackFromY(move);
+        }
+
+        public int getToX()
+        {
+                return unpackToX(move);
+        }
+
+        public int getToY()
+        {
+                return unpackToY(move);
+        }
+
 	public boolean equals(Object m)
 	{
-		return super.equals(m) && piece.equals(((Move)m).piece);
+		return move == ((Move)m).move && piece.equals(((Move)m).piece);
 	}
 }

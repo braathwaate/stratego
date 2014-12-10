@@ -37,7 +37,7 @@ public class TTEntry {
 	public int moveRoot;
 
 	public long hash; // should be at least 64-bit to be safe
-	public BMove bestMove;
+	public int bestMove;
 	public int bestValue;
 	public int depth;
 	public int turn;
