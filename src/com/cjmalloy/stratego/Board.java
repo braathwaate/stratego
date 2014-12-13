@@ -204,7 +204,7 @@ public class Board
 		{
 			Piece fp = getPiece(m.getFrom());
 			Piece tp = getPiece(m.getTo());
-			moveHistory(fp, tp, m.getFrom(), m.getTo());
+			moveHistory(fp, tp, m.getMove());
 
 			fp.setShown(true);
 			fp.makeKnown();
@@ -473,9 +473,9 @@ public class Board
 
 	// stores the state prior to the move
 	// the hash is the position prior to the move
-	protected void moveHistory(Piece fp, Piece tp, int from, int to)
+	protected void moveHistory(Piece fp, Piece tp, int m)
 	{
-		UndoMove um = new UndoMove(fp, tp, from, to, hash, 0);
+		UndoMove um = new UndoMove(fp, tp, m, hash, 0);
 		undoList.add(um);
 
 		boardHistory.put(hash^turnHash[undoList.size()%2], um);
@@ -500,6 +500,7 @@ public class Board
 		// 
 
 		// movement aways
+		int from = Move.unpackFrom(m);
 		for (int d : dir) {
 			int chaser = from + d;
 			if (!isValid(chaser))
@@ -958,6 +959,26 @@ public class Board
 						}
 						continue;
 					}
+
+		// Because ranks 5-9 are often hellbent on discovery,
+		// an adjacent unknown piece next to the chaser should
+		// not be misinterpreted as a protector.
+		// Example 1:
+		// R? B6 -- B?
+		//
+		// Example 2: 
+		// R? -- B6
+		// -- B? --
+		// Unknown Blue moves towards Blue Six (in Example 1) or
+		// Blue Six moves towards unknown Red in Example 2.
+
+		// If Unknown Blue is viewed as a protector, it would acquire
+		// a chase rank of 4.  But Unknown Blue might not
+		// care about protecting Blue 6, if Blue intends
+		// to attack unknown Red anyway.
+
+					if (chaser.getRank().toInt() >= 5)
+						continue;
 				}
 
 		// If the chaser is a lower or equal rank to the chased piece,
@@ -1058,7 +1079,7 @@ public class Board
 		if (validMove(m))
 		{
 			Piece fp = getPiece(m.getFrom());
-			moveHistory(fp, null, m.getFrom(), m.getTo());
+			moveHistory(fp, null, m.getMove());
 
 			setPiece(null, m.getFrom());
 			setPiece(fp, m.getTo());
@@ -1231,7 +1252,7 @@ public class Board
 			return false;
 
 		// not an adjacent move (i.e., nine far move)
-		if (!Grid.isAdjacent(Move.unpackFrom(m), Move.unpackTo(m)))
+		if (!Grid.isAdjacent(m))
 			return false;
 
 		// test for three squares (which is legal)
@@ -1318,14 +1339,18 @@ public class Board
 		if (m6 == null)
 			return false;
 
-		// If moves 1 and 3 are equal
-		// and position A = C
-		// and moves 2 and 4 are not equal (if they are equal, it
-		// means we are at position D)
-		if (Move.unpackFrom(m) == m4.getFrom()
-			&& Move.unpackTo(m) == m4.getTo()
+		// (1) If the proposed move and the move four plies ago
+		// are equal,
+		// (2) and the current position and the position four plies ago
+		// are equal,
+		// (3) and the current square and to-square six plies ago
+		// are not equal,
+		// (if they are equal, it  means we are at position D
+		// rather than at position C)
+		// -- then this is a repetitive move
+		if (m == m4.getMove()
 			&& hash == m4.hash
-			&& !m2.equals(m6))
+			&& Move.unpackFrom(m) != m6.getTo())
 			return false;
 
 		return true;

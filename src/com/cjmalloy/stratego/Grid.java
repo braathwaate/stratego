@@ -114,6 +114,14 @@ public class Grid
 		}
 	}
 
+	public boolean hasAdjacentPiece(int i)
+	{
+		return (grid[i+11] != null && grid[i+11] != water)
+			|| (grid[i-11] != null && grid[i-11] != water)
+			|| (grid[i+1] != null && grid[i+1] != water)
+			|| (grid[i-1] != null && grid[i-1] != water);
+	}
+
 	// isAdjacent is the same as steps() == 1 but perhaps faster
 	static public boolean isAdjacent(int f, int t)
 	{

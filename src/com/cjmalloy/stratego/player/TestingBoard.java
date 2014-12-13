@@ -204,9 +204,6 @@ public class TestingBoard extends Board
 				values[c][j] = startValues[j];
 				valueStealth[c][j] = 0;
 			}
-			for (int j=0;j<10;j++) {
-				lowerRankCount[c][j] = 99;
-			}
 		} // color c
 
 		// ai only knows about known opponent pieces
@@ -1084,7 +1081,7 @@ public class TestingBoard extends Board
 
 		if (p.isKnown() || p.isSuspectedRank())
 			for (int j = 5; j > p.getRank().toInt(); j--) {
-				if (lowerRankCount[p.getColor()][j-2] >= 2) {
+				if (lowerRankCount[p.getColor()][j-1] >= 2) {
 					setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 					setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 				}
@@ -1213,13 +1210,22 @@ public class TestingBoard extends Board
 		// The chase is limited to the AI side of the board
 		// until there are no opponent expendable pieces remaining
 		// as a gross effort to limit the Spy's vulernability.
+		//
+		// Note the use of GUARDED_MOVED.  GUARDED_MOVED is used
+		// for Eights and invincible pieces, because unmoved enemy ranks
+		// are no detriment to the goal.  Here, GUARDED_MOVED
+		// is not quite right, because unmoved ranks do pose
+		// a threat to the Spy.  But this is better than
+		// any of the other options.
 
 			else if (chasedRank == 1
 				&& p.isKnown()
 				&& (p.getColor() == Settings.topColor
 					|| hasFewExpendables(p.getColor())
-					|| p.getIndex() < 56))
-				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
+					|| p.getIndex() < 56)) {
+				int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.SPY);
+				genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
+			}
 
 		// Only 1 active unknown piece
 		// is assigned to chase an opponent piece.
@@ -1475,7 +1481,7 @@ public class TestingBoard extends Board
 
 			} else if (j <= invincibleWinRank[1-p.getColor()]
 				|| (j != 1
-					&& lowerRankCount[p.getColor()][j-2] < 2
+					&& lowerRankCount[p.getColor()][j-1] < 2
 					&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])) {
 				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				// tbd: PlanB as well
@@ -2532,10 +2538,10 @@ public class TestingBoard extends Board
 			if (p != null
 				&& j != to
 
-		// If the caller is invincible,
+		// If the caller is invincible or the Spy,
 		// then the maze continues through moved pieces.
 		// The hope is that the moved pieces
-		// will eventually move.  This should not cause major
+		// will eventually move.  This should not cause
 		// stacking problems when there are few invincible
 		// pieces.  This tries to address the situation where
 		// the invincible piece is known and the opponent
@@ -2545,7 +2551,8 @@ public class TestingBoard extends Board
 
 				&& (guard == Rank.NIL
 					|| !(p.hasMoved()
-						&& isInvincible(guard, 1-color))))
+						&& (isInvincible(guard, 1-color)
+							|| guard == Rank.SPY))))
 				continue;
 
 		// check for guarded squares
@@ -2957,10 +2964,8 @@ public class TestingBoard extends Board
 			}
 
 		// Another useful count is the number of opponent pieces with
-		// lower rank than an invincible rank.  If an invincible rank
-		// has only 1 opponent piece of lower rank
-		// remaining on the board and that piece is known
-		// or suspected (which makes the rank invincible),
+		// lower rank.  If a rank has only 1 opponent piece
+		// of lower rank remaining on the board,
 		// then it safe for the rank to venture out,
 		// because it takes two pieces of lower
 		// rank to corner another piece.
@@ -2973,10 +2978,8 @@ public class TestingBoard extends Board
 		for (int c = RED; c <= BLUE; c++) {
 			int count = 0;
 			for (int r = 1; r <= 10; r++) {
-				if (unknownRankAtLarge(c, r) != 0)
-					break;
-				count += rankAtLarge(c, r);
 				lowerRankCount[c][r-1] = count;
+				count += rankAtLarge(c, r);
 			}
 		}
 
@@ -3350,17 +3353,23 @@ public class TestingBoard extends Board
 		// exchange is even, tprank must also be the same rank,
 		// so this is a known evenly valued exchange,
 		// unless the AI piece is unknown (because of stealth).
-		// However, if the AI is winning, the AI must neutralize 
-		// the attacker's invincible pieces, so the AI deems this
-		// as an even exchange, even if it still has stealth.
+		//
+		// However, even if the AI piece is unknown and
+		// the opponent piece is known, the AI must always neutralize 
+		// the attacker's invincible pieces, because otherwise
+		// they just run amok obliterating all of the AI's
+		// moved pieces. So the AI deems this
+		// as an even exchange, even if the AI piece still has stealth.
+		// If the opponent has more lower ranked pieces than the AI,
+		// these exchanges may expedite a lost ending,
+		// but there really isn't any choice.
 
 				if (tp.hasMoved()
 					&& fpcolor == Settings.bottomColor
 					&& fp.isKnown()
 					&& isInvincible(fp)) {
 					if  (!tp.isKnown()
-						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor))
-						&& isWinning(Settings.topColor) > VALUE_FIVE)
+						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
 						vm -= 10;
 					else
 						vm += actualValue(tp) - fpvalue;
@@ -3368,8 +3377,7 @@ public class TestingBoard extends Board
 					&& tp.isKnown()
 					&& isInvincible(tp)) {
 					if  (!fp.isKnown()
-						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor))
-						&& isWinning(Settings.topColor) > VALUE_FIVE)
+						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
 						vm += 10;
 					else
 						vm += actualValue(tp) - fpvalue;
@@ -4383,7 +4391,7 @@ public class TestingBoard extends Board
 
         protected void moveHistory(Piece fp, Piece tp, int m)
         {
-                undoList.add(new UndoMove(fp, tp, Move.unpackFrom(m), Move.unpackTo(m), hash, value));
+                undoList.add(new UndoMove(fp, tp, m, hash, value));
 	}
 
 	public void undo()
@@ -5206,6 +5214,12 @@ public class TestingBoard extends Board
 			else if (isFleeing(tp, fp))
 				return Rank.LOSES;	// maybe not
 
+		// This was commented out in version 9.2 because
+		// the AI could be up by a Five at the beginning of
+		// the game, then push its known Five along opponent
+		// ranks without concern.  The inevitable result was
+		// losing its known Five to a Four.
+		//
 		// As a last ditch effort to avoid a draw,
 		// and the AI is winning, the AI encourages its
 		// expendable pieces to randomly attack unknowns,
@@ -5217,10 +5231,10 @@ public class TestingBoard extends Board
 		// if the piece subsequently moves, it becomes a target.
 		// This is a non-symmetric rule.
 
-			else if (isExpendable(tp)
-				&& !fp.hasMoved()
-				&& isWinning(Settings.topColor) >= VALUE_FIVE)
-				return Rank.LOSES;	// maybe not
+		//	else if (isExpendable(tp)
+		//		&& !fp.hasMoved()
+		//		&& isWinning(Settings.topColor) >= VALUE_FIVE)
+		//		return Rank.LOSES;	// maybe not
 
 		// If the opponent no longer has any unknown expendable
 		// pieces nor a dangerous unknown rank,
