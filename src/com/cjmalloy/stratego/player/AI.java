@@ -846,26 +846,20 @@ public class AI implements Runnable
 	
 	private int qs(TestingBoard b, int turn, int depth, int n, boolean flee, QSCache qsc)
 	{
-		int valueB = b.getValue();
 		if (n < 1)
-			return valueB;
-
-		int best = valueB;
+			return b.getValue();
 
 		boolean bestFlee = false;
-		int nextBest = best;
+		int nextBest = -9999;	// default value not significant
 
-		if (!flee) {
 		// try fleeing
-			int vm = qs(b, 1-turn, depth+1, n-1, true, qsc);
+		int best = qs(b, 1-turn, depth+1, n-1, true, qsc);
 
-		// "best" is valueB after
+		// "best" is b.getValue() after
 		// opponent's best attack if player can flee.
-		// So usually qs is valueB, unless the
+		// So usually qs is b.getValue(), unless the
 		// opponent has two good attacks or the player
 		// piece under attack is cornered.
-			best = vm;
-		}
 
 		for (Piece fp : b.pieces[turn]) {
 			if (fp == null)	// end of list
@@ -1239,6 +1233,7 @@ public class AI implements Runnable
 					}
 				}
 				moveList.set(tj, mvp);
+				moveList.set(i, max);
 
 		// skip ttMove and killerMove
 

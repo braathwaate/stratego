@@ -1257,7 +1257,7 @@ public class Board
 
 		// test for three squares (which is legal)
 		Piece p = getPiece(Move.unpackTo(m) + (Move.unpackTo(m) - Move.unpackFrom(m)));
-		if (p == null || p.getColor() != m2.getPiece().getColor())
+		if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
 			return false;
 
 		UndoMove oppmove3 = getLastMove(3);

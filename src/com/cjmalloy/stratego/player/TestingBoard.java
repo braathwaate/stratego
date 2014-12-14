@@ -546,11 +546,11 @@ public class TestingBoard extends Board
 		// Destination Value Matrices depends on piece values
 		// so that needs to be called later.
 
+		setUnmovedValues();	// chase and possibleFlag depend on this
 		possibleFlag();
 		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
-		setUnmovedValues();	// chase depends on this
 
 		for (int i=12;i<=120;i++) {
 			if (!isValid(i))
@@ -975,34 +975,9 @@ public class TestingBoard extends Board
 		// note: *3 to outgain -depth late capture penalty
 
 		for ( int k = 12; k <= 120; k++ ) {
-			unmovedValue[k] = 0;
-			Piece p = getPiece(k);
-			if (p == null)
-				continue;
-			if (p.hasMoved()
-				|| p.isKnown()
-				|| p.isSuspectedRank())
-				continue;
-			if (k >= 56) {
-
-		// The value of attacking unknown unmoved pieces decreases
-		// as pieces are removed from the board.
-		// But this value should not be too high,
-		// otherwise the AI will sacrifice
-		// two pieces just for one discovery.
-
-				int value = Math.min(npieces[Settings.bottomColor]/2, VALUE_SIX);
+		 	unmovedValue[k] = 0;
+ 		}
  
-				if (isWinning(Settings.topColor) > VALUE_SIX)
-					unmovedValue[k] = (k/11-7) * 3 + (int)value;
-			} else {
-				int value = Math.min(npieces[Settings.topColor]/2, VALUE_SIX);
-
-				if (isWinning(Settings.bottomColor) > VALUE_SIX)
-					unmovedValue[k] = (4-k/11) * 3 + (int)value;
-			}
-		}
-
 		// Encourage movement of front line pieces
 		// to clear a path so that pieces can move easily
 		// from side to side.
@@ -1338,15 +1313,15 @@ public class TestingBoard extends Board
 		// Note that GUARDED_MOVED is set to avoid conflict
 		// with moved pieces.
 
-			if (unmovedValue[i] > VALUE_MOVED) {
-				for ( int j : expendableRank )
-					if (knownRankAtLarge(1-p.getColor(), j) != 0) {
-						int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
-						genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
-						genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
-					}
-			}
-			return;
+		//	if (unmovedValue[i] > VALUE_MOVED) {
+		//		for ( int j : expendableRank )
+		//			if (knownRankAtLarge(1-p.getColor(), j) != 0) {
+		//				int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
+		//				genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
+		//				genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
+		//			}
+		//	}
+		//	return;
 		}
 
 		// Multiple lower known invincible ranks
@@ -2211,10 +2186,37 @@ public class TestingBoard extends Board
 
 		if (maybe_count >= 1) {
 
-			for (int i = 0; i < maybe_count; i++)
+			for (int i = 0; i < maybe_count; i++) {
 				genDestBombedFlag(maybe[i], maybe_count, open_count);
 
-			// eights become more valuable now
+		// Unmoved pieces that remain in structures that could
+		// contain the flag should remain unmoved if possible,
+		// to confuse the opponent about the flag location,
+		// unless the player is winning by a large edge.
+
+		// unmovedValue[] distorts unknown exchanges, so this
+		// needs to be as low as necessary to keep the
+		// pieces unmoved.  This distortion shows up in
+		// close exchanges.  For example,
+		// | R4 --
+		// | B5 B?
+		// | B? B? B?
+		// -------
+		// R4xB5 and B?xR4 is 50 - 100 + 40 (Two stealth) = -10.
+		// But if B? is on the back rank, the unmovedValue is 6,
+		// plus VALUE_MOVED (5), which leads Red to attack.
+
+				if (isWinning(c) < VALUE_THREE) {
+					for (int j = 1; maybe[i][j] != 0; j++) {
+						int bi = maybe[i][j];
+						int y = yside(c, Grid.getY(bi));
+						unmovedValue[bi] += (3-y) * 2;
+					}
+				}
+			}
+
+		// eights become more valuable now
+
 			int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
 			if (maybe_count <= 3 && maybe_count > eightsAtLarge)
 				values[1-c][Rank.EIGHT.toInt()]
@@ -2428,6 +2430,7 @@ public class TestingBoard extends Board
 		// it opens it up to combined attack by other pieces.
 		if (intact)
 			p.setAiValue(aiBombValue(p.getColor()));
+		
 
 		// stay near but don't get in the way
 		int near;
@@ -3295,8 +3298,21 @@ public class TestingBoard extends Board
 		// target the Eights.  The AI only does this if it
 		// thinks it is winning and wants to speed up the game.
 
-			if (tp.moves == 0 && isExpendable(fp))
-				vm += unmovedValue[Move.unpackTo(m)];
+		// Version 9.2 no longer gives a bonus to attack
+		// a piece with an unmovedValue, because these pieces
+		// are likely bombs.
+
+		// TBD: give more thought about what pieces to attack
+		// if the AI is winning and the opponent is stalling.
+		// If the opponent has moved many of its pieces, it
+		// is better to attack those, but if the opponent
+		// has kept its pieces unmoved, it is better to attack those.
+		// These attacks should be conceived to allow a
+		// lower ranked AI piece in the area to profit from
+		// the discovery in some way.
+
+		//	if (tp.moves == 0 && isExpendable(fp))
+		//		vm += unmovedValue[Move.unpackTo(m)];
 
 		// The ai assumes that any unknown piece
 		// will take a known or flag bomb
