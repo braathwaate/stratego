@@ -9,8 +9,8 @@ and mainly offers a much improved AI and some other features.
 Download
 --------
 
-[Stratego player v0.9.1][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.1/stratego_v0.9.1.jar
+[Stratego player v0.9.2][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.2/stratego_v0.9.2.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -45,7 +45,7 @@ Move generation abides by the Two-Square and More-Squares rules.
 The search time is adjustable with the Settings menu.
 At the default depth (1 tick)
 it completes within a fraction of a second
-usually completing about 3-5 ply depending on the speed of the desktop.
+usually completing about 5 ply depending on the speed of the desktop.
 
 The evaluation function is based on material gained versus lost
 as well as opponent piece rank discovery.
