@@ -1054,14 +1054,17 @@ public class TestingBoard extends Board
 				tmp[i] = retreat[j][k];
 		}
 
-		if (p.isKnown() || p.isSuspectedRank())
+		if (p.isKnown() || p.isSuspectedRank()) {
+			int r = 5;
+			if (isInvincible(p))
+				r = 10;
 			for (int j = 5; j > p.getRank().toInt(); j--) {
 				if (lowerRankCount[p.getColor()][j-1] >= 2) {
 					setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 					setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 				}
 			}
-		else
+		} else
 
 		// While an opponent piece does not deliberately
 		// flee from an unknown ai piece of lower rank,
@@ -1436,14 +1439,14 @@ public class TestingBoard extends Board
 		// to chase an opponent pieces because of the risk of
 		// discovery of its piece and loss of stealth.
 		//
-		// One issue is whether to use GUARDED_OPEN or GUARDED_UNKNOWN.
-		// With GUARDED_OPEN, the low ranked piece is drawn towards
+		// One issue is when to use GUARDED_MOVED or GUARDED_UNKNOWN.
+		// With GUARDED_MOVED, the low ranked piece is drawn towards
 		// the unknown but  will not be able to chase past an unknown
 		// opponent piece because of discovery.  But the expendable
 		// pieces can, and the idea is to use the expendable pieces
 		// to push the opponent piece into an area where it can
 		// be attacked by the low ranked piece. 
-		// GUARDED_OPEN increases the risk of discovery of its
+		// GUARDED_MOVED increases the risk of discovery of its
 		// low ranked piece.
 		//
 		// With GUARDED_UNKNOWN, opponent pieces can hide
@@ -1451,14 +1454,19 @@ public class TestingBoard extends Board
 		// resulting in a draw even when the AI
 		// had discovered all of the opponents low ranked pieces.
 		//
-		// TBD: at some point later in the game, GUARDED_OPEN
-		// should be used for both the chaser and the expendables.
+		// The compromise is to use GUARDED_MOVED only when
+		// the opponent has few expendables that might try to
+		// attack the low ranked piece.
 
 			} else if (j <= invincibleWinRank[1-p.getColor()]
 				|| (j != 1
 					&& lowerRankCount[p.getColor()][j-1] < 2
 					&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])) {
-				genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+				if (hasFewExpendables(p.getColor())) {
+					int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
+					genPlanA(1, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+				} else 
+					genPlanA(rnd.nextInt(2), destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				// tbd: PlanB as well
 				chaseWithUnknownExpendable(p, destTmp[GUARDED_UNKNOWN]);
 
@@ -2210,7 +2218,8 @@ public class TestingBoard extends Board
 					for (int j = 1; maybe[i][j] != 0; j++) {
 						int bi = maybe[i][j];
 						int y = yside(c, Grid.getY(bi));
-						unmovedValue[bi] += (3-y) * 2;
+						if (y == 0 || y == 1)
+							unmovedValue[bi] = (2-y) * 2;
 					}
 				}
 			}
@@ -3040,14 +3049,6 @@ public class TestingBoard extends Board
 
 	public void setNeededRank(int color, int rank)
 	{
-		// If the opponent has a known invincible rank,
-		// it will be hellbent on obliterating all
-		// moved pieces,
-		// so movement of additional pieces is discouraged.
-
-		if (rank > dangerousKnownRank)
-			return;
-
 		neededRank[color][rank-1] = true;
 	}
 
@@ -3174,12 +3175,6 @@ public class TestingBoard extends Board
 		Piece fp = getPiece(Move.unpackFrom(m));
 		boolean unknownScoutFarMove = 
 			!fp.isKnown() && !Grid.isAdjacent(m);
-		move(m, depth, unknownScoutFarMove);
-	}
-
-	public void move(int m, int depth, boolean unknownScoutFarMove)
-	{
-		Piece fp = getPiece(Move.unpackFrom(m));
 		Piece tp = getPiece(Move.unpackTo(m));
 		moveHistory(fp, tp, m);
 
@@ -3200,6 +3195,16 @@ public class TestingBoard extends Board
 		int r = fprank.toInt()-1;
 
 		if (!fp.isKnown() && fp.moves == 0) {
+
+		// If the opponent has a known invincible rank,
+		// it will be hellbent on obliterating all
+		// moved pieces,
+		// so movement of additional pieces is heavily discouraged.
+
+			if (fpcolor == Settings.topColor
+				&& r > dangerousKnownRank)
+				vm += -VALUE_MOVED;
+
 			if (!neededRank[fpcolor][r])
 
 		// Moving an unmoved piece needlessly is bad play

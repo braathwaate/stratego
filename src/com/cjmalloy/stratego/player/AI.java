@@ -671,7 +671,7 @@ public class AI implements Runnable
 
 		Move killerMove = new Move(null, 0);
 		QSCache qsc = new QSCache();
-		int vm = negamax(b, n, -9999, 9999, Settings.topColor, 0, chasedPiece, chasePiece, killerMove, qsc); 
+		int vm = negamax(b, n, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove, qsc); 
 		completedDepth = n;
 
 		log("-+-");
@@ -925,7 +925,7 @@ public class AI implements Runnable
 					canFlee = true;
 
 				int tmpM = Move.packMove(i, t);
-				b.move(tmpM, depth, false);
+				b.move(tmpM, depth);
 
 				int vm = qs(b, 1-turn, depth+1, n-1, false, qsc);
 
