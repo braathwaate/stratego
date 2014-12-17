@@ -32,23 +32,12 @@ import java.util.concurrent.locks.ReentrantLock;
 //
 public class Board
 {
-	protected static class UniqueID
-	{
-		private static int id = 0;
-		
-		static public int get()
-		{
-			id++;
-			return id;
-		}
-	}
-
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
 	public static final int RED  = 0;
 	public static final int BLUE = 1;
 	public static final Spot IN_TRAY = new Spot(-1, -1);
 	
-	protected Grid grid = new Grid();
+	public Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
 	protected ArrayList<Piece> red = new ArrayList<Piece>();
 	protected ArrayList<Piece> blue = new ArrayList<Piece>();
@@ -113,48 +102,48 @@ public class Board
 	public Board()
 	{
 		//create pieces
-		red.add(new Piece(UniqueID.get(), RED, Rank.FLAG));
-		red.add(new Piece(UniqueID.get(), RED, Rank.SPY));
-		red.add(new Piece(UniqueID.get(), RED, Rank.ONE));
-		red.add(new Piece(UniqueID.get(), RED, Rank.TWO));
+		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FLAG));
+		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SPY));
+		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.ONE));
+		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.TWO));
 		for (int j=0;j<2;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.THREE));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.THREE));
 		for (int j=0;j<3;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.FOUR));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FOUR));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.FIVE));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FIVE));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.SIX));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SIX));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.SEVEN));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SEVEN));
 		for (int j=0;j<5;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.EIGHT));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.EIGHT));
 		for (int j=0;j<8;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.NINE));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.NINE));
 		for (int j=0;j<6;j++)
-			red.add(new Piece(UniqueID.get(), RED, Rank.BOMB));
+			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.BOMB));
 
 		//create pieces
-		blue.add(new Piece(UniqueID.get(), BLUE, Rank.FLAG));
-		blue.add(new Piece(UniqueID.get(), BLUE, Rank.SPY));
-		blue.add(new Piece(UniqueID.get(), BLUE, Rank.ONE));
-		blue.add(new Piece(UniqueID.get(), BLUE, Rank.TWO));
+		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FLAG));
+		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SPY));
+		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.ONE));
+		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.TWO));
 		for (int j=0;j<2;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.THREE));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.THREE));
 		for (int j=0;j<3;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.FOUR));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FOUR));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.FIVE));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FIVE));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.SIX));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SIX));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.SEVEN));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SEVEN));
 		for (int j=0;j<5;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.EIGHT));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.EIGHT));
 		for (int j=0;j<8;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.NINE));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.NINE));
 		for (int j=0;j<6;j++)
-			blue.add(new Piece(UniqueID.get(), BLUE, Rank.BOMB));
+			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.BOMB));
 
 		tray.addAll(red);
 		tray.addAll(blue);
@@ -434,9 +423,11 @@ public class Board
 		if (bp != null)
 			rehash(bp, i);
 
-		grid.setPiece(i, p);
-		if (p != null)
+		if (p != null) {
+			grid.setPiece(i, p);
 			rehash(p, i);
+		} else
+			grid.clearPiece(i);
 	}
 
 	public UndoMove getLastMove()

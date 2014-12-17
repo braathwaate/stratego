@@ -28,7 +28,51 @@ public class Grid
 	private Piece[] grid = new Piece[133];
 	private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
 
-	protected static class UniqueID
+	// It is useful to answer the following grid questions quickly:
+	// 1. Does a piece have any legal moves (is it trapped)?
+	// 2. Does a piece have any possible attacks?
+	// 3. Are there any nearby enemy pieces?
+	//
+	// By keeping two 64-bit variables up-to-date on the locations
+	// of all the pieces, masks can be used to answer these questions.
+
+	protected BitGrid pieceBitGrid[] = new BitGrid[2];
+	static private boolean[] isWater = new boolean[133];
+	static protected BitGrid neighbor[][] = new BitGrid[3][121];
+
+	static {
+		setWater(2,4);
+		setWater(3,4);
+		setWater(2,5);
+		setWater(3,5);
+		setWater(6,4);
+		setWater(7,4);
+		setWater(6,5);
+		setWater(7,5);
+
+		for (int i = 0; i < 11; i++)
+			setWater(i);
+		for (int i = 0; i < 132; i+=11)
+			setWater(i);
+		for (int i = 121; i < 133; i++)
+			setWater(i);
+
+		for (int n = 0; n < 3; n++)
+		for (int f = 12; f <= 120; f++) {
+			if (!isValid(f))
+				continue;
+			neighbor[n][f] = new BitGrid();
+			for (int t = 12; t <= 120; t++) {
+				if (!isValid(t) || f == t)
+					continue;
+				if (steps(f,t) > n + 1)
+					continue;
+				neighbor[n][f].setBit(t);
+			}
+		}
+	}
+
+	public static class UniqueID
         {
                 private static int id = 0;
 
@@ -38,35 +82,29 @@ public class Grid
                         return id;
                 }
         }
-	
+
 	public Grid() 
 	{
-		setPiece(2,4,water);
-		setPiece(3,4,water);
-		setPiece(2,5,water);
-		setPiece(3,5,water);
-		setPiece(6,4,water);
-		setPiece(7,4,water);
-		setPiece(6,5,water);
-		setPiece(7,5,water);
+		for (int i = 0; i < 2; i++)
+			pieceBitGrid[i] = new BitGrid();
 
-		for (int i = 0; i < 11; i++)
-			setPiece(i,water);
-		for (int i = 0; i < 132; i+=11)
-			setPiece(i,water);
-		for (int i = 121; i < 133; i++)
-			setPiece(i,water);
-		int j = 0;
+		for (int i = 0; i < grid.length; i++)
+			if (isWater[i])
+				grid[i] = water;
 	}
 
 	public Grid(Grid g)
 	{
 		grid = g.grid.clone();
+		for (int i = 0; i < 2; i++) {
+			pieceBitGrid[i] = new BitGrid(g.pieceBitGrid[i]);
+		}
+
 	}
 
-	public boolean isValid(int i)
+	static public boolean isValid(int i)
 	{
-		return grid[i] != water;
+		return !isWater[i];
 	}
 
 	public Piece getPiece(int i) 
@@ -97,6 +135,24 @@ public class Grid
 	public void setPiece(int i, Piece p) 
 	{
 		grid[i] = p;
+		pieceBitGrid[p.getColor()].setBit(i);
+	}
+
+	static private void setWater(int i) 
+	{
+		isWater[i] = true;
+	}
+
+	static private void setWater(int x, int y) 
+	{
+		setWater(getIndex(x, y));
+	}
+
+	public void clearPiece(int i) 
+	{
+		grid[i] = null;
+		pieceBitGrid[0].clearBit(i);
+		pieceBitGrid[1].clearBit(i);
 	}
 
 	public void setPiece(int x, int y, Piece p) 
@@ -106,20 +162,34 @@ public class Grid
 
 	public void clear()
 	{
-		for (int i=0;i<132;i++) {
-			if (grid[i] != null && grid[i] != water)
-			{
-				grid[i] = null;
-			}
+		for (int i=12;i<=120;i++) {
+			if (isValid(i))
+				clearPiece(i);
 		}
+	}
+
+	public boolean hasMove(Piece p)
+	{
+		int i = p.getIndex();
+		return pieceBitGrid[p.getColor()].xorMask(neighbor[0][i]);
 	}
 
 	public boolean hasAdjacentPiece(int i)
 	{
-		return (grid[i+11] != null && grid[i+11] != water)
-			|| (grid[i-11] != null && grid[i-11] != water)
-			|| (grid[i+1] != null && grid[i+1] != water)
-			|| (grid[i-1] != null && grid[i-1] != water);
+		return pieceBitGrid[0].andMask(neighbor[0][i])
+			|| pieceBitGrid[1].andMask(neighbor[0][i]) ;
+	}
+
+	// same is isCloseToEnemy(0);
+	public boolean hasAttack(Piece p)
+	{
+		int i = p.getIndex();
+		return pieceBitGrid[1-p.getColor()].andMask(neighbor[0][i]);
+	}
+
+	public boolean isCloseToEnemy(int turn, int i, int n)
+	{
+		return pieceBitGrid[1-turn].andMask(neighbor[n][i]);
 	}
 
 	// isAdjacent is the same as steps() == 1 but perhaps faster

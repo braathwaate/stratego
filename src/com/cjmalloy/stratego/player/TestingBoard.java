@@ -993,20 +993,28 @@ public class TestingBoard extends Board
 
 	// A goal of this logic is to avoid becoming trapped by
 	// a team of lower ranks.  In the example below, Red Three
-	// should sense the approach of Blue One and Blue Two
-	// and cease its attack on Blue Four.
+	// should cease its attack on Blue Four and move up before
+	// Blue can trap it with the sequence:
+	// null   1c7-b7
+	// 3a9-a8 2b10-b9
+	// null   2b9-a10
+	// It takes 6 ply to discover this trap.  Because of the
+	// horizon effect, the AI really needs 8 ply.  So this logic
+	// is needed until the AI can search to this depth.
+	//
 	// (Fleeing takes priority over chasing).
-	// x R3 -- -- B1
-	// x -- -- -- --
-	// x R4 B2 -- --
-	// xxxxxxxxxxxxx
+	//
+	// 5  -- -- xx xx
+	// 6  -- -- xx xx
+	// 7  -- -- B1 --
+	// 8  -- -- -- --
+	// 9  R3 -- -- --
+	// 10 R4 B2 -- --
+	//    a  b  c  d
 	//
 	// This logic is also an offensive tactic, as the AI will
 	// try to trap an opponent piece between on its side of
 	// the board.
-	//
-	// As with the chase heuristic, more search depth would render
-	// this superfluous.
 	
 	protected void flee(Piece p)
 	{
