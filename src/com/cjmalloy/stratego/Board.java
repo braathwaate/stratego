@@ -314,11 +314,6 @@ public class Board
 		return grid.getPiece(x, y);
 	}
 	
-	public boolean isValid(int i)
-	{
-		return grid.isValid(i);
-	}
-	
 	public Piece getPiece(int i)
 	{
 		return grid.getPiece(i);
@@ -444,18 +439,17 @@ public class Board
 	}
 
 	// return if fleeing piece could be protected
-	public boolean isProtectedFlee(Piece fp, Piece tp, int i)
+	public boolean isProtectedFlee(Piece chasePiece, Piece chasedPiece, int chaser)
 	{
 		for (int d : dir) {
-			int j = i + d;
-			if (!isValid(j))
+			int j = chaser + d;
+			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
 			if (p != null
-				&& p != fp
-				&& p.getColor() == fp.getColor()
+				&& p.getColor() == chasePiece.getColor()
 				&& (p.getApparentRank() == Rank.UNKNOWN
-					|| p.getApparentRank().toInt() < tp.getApparentRank().toInt())) {
+					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
 				return true;
 			}
 		}
@@ -494,7 +488,7 @@ public class Board
 		int from = Move.unpackFrom(m);
 		for (int d : dir) {
 			int chaser = from + d;
-			if (!isValid(chaser))
+			if (!Grid.isValid(chaser))
 				continue;
 			Piece chasePiece = getPiece(chaser);
 			if (chasePiece != null
@@ -589,7 +583,7 @@ public class Board
 		int open = 0;
 		for (int d : dir) {
 			int j = i + d;
-			if (!isValid(j))
+			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
 			if (p == null) {
@@ -865,7 +859,7 @@ public class Board
 		}
 
 		for ( int i = 12; i <= 120; i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
 			if (p == null)
@@ -875,7 +869,7 @@ public class Board
 		}
 
 		for ( int i = 12; i <= 120; i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece chased = getPiece(i);
 
@@ -896,7 +890,7 @@ public class Board
 
 			for (int d : dir) {
 				int j = i + d;
-				if (!isValid(j))
+				if (!Grid.isValid(j))
 					continue;
 				Piece chaser = getPiece(j);
 				if (chaser == null
@@ -1169,7 +1163,7 @@ public class Board
 
 		for (int d : dir) {
 			int i = oppmove.getTo() + d;
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			if (i == aimove.getTo()) {
 				// chase confirmed
@@ -1439,7 +1433,7 @@ public class Board
 	
 	protected boolean validAttack(Move m)
 	{
-		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
+		if (!Grid.isValid(m.getTo()) || !Grid.isValid(m.getFrom()))
 			return false;
 		if (getPiece(m.getTo()) == null)
 			return false;
@@ -1455,7 +1449,7 @@ public class Board
 	// TRUE if piece moves to legal square
 	public boolean validMove(Move m)
 	{
-		if (!isValid(m.getTo()) || !isValid(m.getFrom()))
+		if (!Grid.isValid(m.getTo()) || !Grid.isValid(m.getFrom()))
 			return false;
 		Piece fp = getPiece(m.getFrom());
 		if (fp == null)

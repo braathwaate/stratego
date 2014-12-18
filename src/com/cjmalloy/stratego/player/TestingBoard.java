@@ -209,7 +209,7 @@ public class TestingBoard extends Board
 		// ai only knows about known opponent pieces
 		// so update the grid to only what is known
 		for (int i=12;i<=120;i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
 			if (p != null) {
@@ -281,7 +281,7 @@ public class TestingBoard extends Board
 				trayRank[c][Rank.BOMB.toInt()-1]) {
 
 			for (int i=12;i<=120;i++) {
-				if (!isValid(i))
+				if (!Grid.isValid(i))
 					continue;
 				Piece p = getPiece(i);
 				if (p == null)
@@ -553,7 +553,7 @@ public class TestingBoard extends Board
 		genValueStealth();	// depends on valuePieces
 
 		for (int i=12;i<=120;i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
 			if (p == null)
@@ -640,7 +640,7 @@ public class TestingBoard extends Board
 	void genPieceLists()
 	{
 		for (int i=12;i<=120;i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
 			if (p == null)
@@ -908,7 +908,7 @@ public class TestingBoard extends Board
 	void targetUnknownBlockers()
 	{
 		for (int i=12;i<=120;i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece tp = getPiece(i);
 			if (tp == null || tp.isKnown() || !tp.hasMoved())
@@ -1054,7 +1054,7 @@ public class TestingBoard extends Board
 			if (x < 0 || x > 9 || y < 0 || y > 9)
 				continue;
 			int i = Grid.getIndex(x, y);
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			if (p.getColor() == Settings.topColor)
 				tmp[i] = retreat[j][4-k];
@@ -1685,7 +1685,7 @@ public class TestingBoard extends Board
 		int destTmp2[] = genDestTmp(GUARDED_OPEN, color, pAttacker.getIndex());
 		for (int d : dir) {
 			int i = flagi + d;
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 
 		// if attacker is adjacent to flag, not much can be done
@@ -1798,7 +1798,7 @@ public class TestingBoard extends Board
 		for (int d : dir) {
 
 			int bi = flagi + d;
-			if (!isValid(bi))
+			if (!Grid.isValid(bi))
 				continue;
 			Piece bp = getPiece(bi);
 			assert (bp != null && bp.getRank() == Rank.BOMB) : "flagBombTarget() called on non-bombed flag";
@@ -1809,7 +1809,7 @@ public class TestingBoard extends Board
 
 			for (int dbomb : dir ) {
 				int bd = bi + dbomb;
-				if (!isValid(bd))
+				if (!Grid.isValid(bd))
 					continue;
 				if (getPiece(bd) != null)
 					continue;
@@ -1903,7 +1903,7 @@ public class TestingBoard extends Board
 		for (int d : dir) {
 			int j = pflag.getIndex() + d;
 				
-			if (!isValid(j))
+			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
 			if (p == null) {
@@ -2140,7 +2140,7 @@ public class TestingBoard extends Board
 			bombPattern[y*10+x][bpi++] = flag;
 			for (int d : dir) {
 				int bi = flag + d;
-				if (!isValid(bi))
+				if (!Grid.isValid(bi))
 					continue;
 				bombPattern[y*10+x][bpi++] = bi;
 			}
@@ -2396,7 +2396,7 @@ public class TestingBoard extends Board
 	private void possibleBomb()
 	{
 		for (int i = 78; i <= 120; i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece tp = getPiece(i);
 			if (tp != null
@@ -2405,7 +2405,7 @@ public class TestingBoard extends Board
 				boolean found = false;
 				for ( int d : dir ) {
 					int j = i + d;
-					if (!isValid(j))
+					if (!Grid.isValid(j))
 						continue;
 					Piece p = getPiece(j);
 					if (p != null && !p.hasMoved()) {
@@ -2453,9 +2453,9 @@ public class TestingBoard extends Board
 		int near;
 		if (p.getColor() == Settings.bottomColor) {
 			near =  j - 10;
-			if (!isValid(near))
+			if (!Grid.isValid(near))
 				near = j - 12;
-			assert isValid(near) : "near is not valid?";
+			assert Grid.isValid(near) : "near is not valid?";
 		} else
 			near = j;
 
@@ -2543,7 +2543,7 @@ public class TestingBoard extends Board
 		int count = 0;
 		while (count < queue.size()) {
 			int j = queue.get(count++);
-			if (!isValid(j))
+			if (!Grid.isValid(j))
 				continue;
 			int n = destTmp[j];
 
@@ -2580,7 +2580,7 @@ public class TestingBoard extends Board
 				boolean isGuarded = false;
 				for (int d : dir) {
 					int i = j + d;
-					if (!isValid(i))
+					if (!Grid.isValid(i))
 						continue;
 					if (i == to)
 						continue;
@@ -2611,7 +2611,7 @@ public class TestingBoard extends Board
 			// set the neighbors
 			for (int d : dir) {
 				int i = j + d;
-				if (!isValid(i) || destTmp[i] != DEST_VALUE_NIL)
+				if (!Grid.isValid(i) || destTmp[i] != DEST_VALUE_NIL)
 					continue;
 
 				destTmp[i] = n + 1;
@@ -2871,7 +2871,7 @@ public class TestingBoard extends Board
 			lowestUnknownExpendableRank = 10;
 
 		for (int i = 12; i <= 120; i++) {
-			if (!isValid(i))
+			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
 			if (p == null)
@@ -4016,7 +4016,7 @@ public class TestingBoard extends Board
 			int count = 0;
 			for (int d : dir) {
 				int i = index + d;
-				if (!isValid(i)) {
+				if (!Grid.isValid(i)) {
 					count++;
 					continue;
 				}
