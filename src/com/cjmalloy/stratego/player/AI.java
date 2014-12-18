@@ -53,7 +53,12 @@ public class AI implements Runnable
 	private CompControls engine = null;
 	private PrintWriter log;
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
-	private ArrayList<Integer> rootMoveList = null;
+	private ArrayList<ArrayList<Integer>> rootMoveList = null;
+	// static move ordering
+	static final int ATTACK = 0;
+	static final int APPROACH = 1;
+	static final int FLEE = 2;
+	static final int LAST = 3;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -322,12 +327,27 @@ public class AI implements Runnable
 		}
 	}
 
-	private void getMove(ArrayList<Integer> moveList, int f, int t)
+	private void addMove(ArrayList<Integer> moveList, int m)
 	{
-		moveList.add(Move.packMove(f, t));
+		moveList.add(m);
 	}
 
-	public boolean getMoves(ArrayList<Integer> moveList, Piece fp)
+	private void addMove(ArrayList<Integer> moveList, int f, int t)
+	{
+		addMove(moveList, Move.packMove(f, t));
+	}
+
+	private void addMove(ArrayList<ArrayList<Integer>> moveList, int color, int f, int t)
+	{
+		int type = LAST;
+		if (b.grid.isCloseToEnemy(color, t, 0))
+			type = APPROACH;
+		else if (b.grid.isCloseToEnemy(color, f, 0))
+			type = FLEE;
+		addMove(moveList.get(type), Move.packMove(f, t));
+	}
+
+	public boolean getMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
 		boolean hasMove = false;
 		int i = fp.getIndex();
@@ -375,8 +395,7 @@ public class AI implements Runnable
 				} else {
 
 		// move to open square
-					int tmpM = Move.packMove(i, t);
-					moveList.add(tmpM);
+					addMove(moveList, fpcolor, i, t);
 				}
 
 
@@ -393,7 +412,7 @@ public class AI implements Runnable
 					if (!p.isKnown()
 						&& p.getColor() == 1 - fpcolor
 						&& b.isValuable(p)) {
-						getMove(moveList, i, t);
+						addMove(moveList.get(ATTACK), i, t);
 					} // attack
 
 		// NOTE: FORWARD PRUNING
@@ -413,14 +432,16 @@ public class AI implements Runnable
 						t += d;
 						p = b.getPiece(t);
 					};
-					if (p.getColor() != 1 - fpcolor)
+					if (p.getColor() != 1 - fpcolor) {
 						t -= d;
-					getMove(moveList, i, t);
+						addMove(moveList, fpcolor, i, t);
+					} else
+						addMove(moveList.get(ATTACK), i, t);
 				} // nine
 			} else if (tp.getColor() != fp.getColor()) {
 
 		// attack
-				getMove(moveList, i, t);
+				addMove(moveList.get(ATTACK), i, t);
 			}
 		} // d
 
@@ -434,9 +455,12 @@ public class AI implements Runnable
 	// that waste more material in a position where
 	// the opponent has a sure favorable attack in the future,
 	// and the ai depth does not reach the position of exchange.
-	private ArrayList<Integer> getMoves(int turn, Piece chasePiece, Piece chasedPiece)
+	private ArrayList<ArrayList<Integer>> getMoves(int turn, Piece chasePiece, Piece chasedPiece)
 	{
-		ArrayList<Integer> moveList = new ArrayList<Integer>();
+		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
+		for (int i = 0; i <= LAST; i++)
+			moveList.add(new ArrayList<Integer>());
+
 		// FORWARD PRUNING
 		// chase deep search
 		// only examine moves adjacent to chase and chased pieces
@@ -457,7 +481,7 @@ public class AI implements Runnable
 			// has found protection, this could be a good
 			// way to end the chase.
 			// Add null move
-			moveList.add(0);
+			addMove(moveList.get(LAST), 0);
 
 		} else {
 		boolean hasMove = false;
@@ -471,7 +495,7 @@ public class AI implements Runnable
 		// FORWARD PRUNING
 		// Add null move
 		if (hasMove)
-			moveList.add(0);
+			addMove(moveList.get(LAST), 0);
 		}
 
 		return moveList;
@@ -610,9 +634,10 @@ public class AI implements Runnable
 					continue;
 
 				int count = 0;
-				for (int k = rootMoveList.size()-1; k >= 0; k--)
-				if (from == Move.unpackFrom(rootMoveList.get(k))) {
-					int to = Move.unpackTo(rootMoveList.get(k));
+				for (int mo = 0; mo <= LAST; mo++)
+				for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
+				if (from == Move.unpackFrom(rootMoveList.get(mo).get(k))) {
+					int to = Move.unpackTo(rootMoveList.get(mo).get(k));
 					Piece tp = b.getPiece(to);
 					if (tp != null) {
 					
@@ -655,18 +680,26 @@ public class AI implements Runnable
 					chasedPiece.setIndex(from);
 
 					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
-					for (int k = rootMoveList.size()-1; k >= 0; k--)
-						if (from != Move.unpackFrom(rootMoveList.get(k))
-							|| b.getPiece(Move.unpackTo(rootMoveList.get(k))) != null)
+					for (int mo = 0; mo <= LAST; mo++)
+					for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
+						if (from != Move.unpackFrom(rootMoveList.get(mo).get(k))
+							|| b.getPiece(Move.unpackTo(rootMoveList.get(mo).get(k))) != null)
 
-							rootMoveList.remove(k);
+							rootMoveList.get(mo).remove(k);
 
 					break;
 				}
 			}
 		}
 
-		if (rootMoveList.size() == 0) {
+		boolean hasMove = false;
+		for (int mo = 0; mo <= LAST; mo++)
+			if (rootMoveList.get(mo).size() != 0) {
+				hasMove = true;
+				break;
+			}
+
+		if (!hasMove) {
 			log("Empty move list");
 			return;		// ai trapped
 		}
@@ -1200,28 +1233,30 @@ public class AI implements Runnable
 		//
 		// implementation: selection sort
 
-		ArrayList<Integer> moveList = null;
+		ArrayList<ArrayList<Integer>> moveList = null;
 		if (depth == 0)
 			moveList = rootMoveList;
 		else
 			moveList = getMoves(turn, chasePiece, chasedPiece);
 
-		for (int i = 0; i < moveList.size(); i++) {
+		for (int mo = 0; mo <= LAST; mo++) {
+		ArrayList<Integer> ml = moveList.get(mo);
+		for (int i = 0; i < ml.size(); i++) {
 			int max;
 			{
-				int mvp = moveList.get(i);
+				int mvp = ml.get(i);
 
 				max = mvp;
 				int tj = i;
-				for (int j = i + 1; j < moveList.size(); j++) {
-					int tmvp = moveList.get(j);
+				for (int j = i + 1; j < ml.size(); j++) {
+					int tmvp = ml.get(j);
 					if (hh[tmvp] > hh[max]) {
 						max = tmvp;
 						tj = j;
 					}
 				}
-				moveList.set(tj, mvp);
-				moveList.set(i, max);
+				ml.set(tj, mvp);
+				ml.set(i, max);
 
 		// skip ttMove and killerMove
 
@@ -1272,6 +1307,7 @@ public class AI implements Runnable
 			if (alpha >= beta)
 				break;
 		} // moveList
+		} // move order
 
 		if (bestmove != 0) {
 			hh[bestmove]+=n;
