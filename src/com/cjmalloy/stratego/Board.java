@@ -797,20 +797,44 @@ public class Board
 		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
 			return;
 
-		// Chasing an unknown sets the chase rank to UNKNOWN.
-		// Once set, the chase rank
-		// is never changed again because if a piece chases an Unknown,
-		// it could be a bluffing high rank that will chase anything or
-		// less likely, but possible, it could be an invincible
-		// piece.  Its real identity can be determined only
-		// through attack.
-
 		Rank arank = chased.getActingRankChase();
-		if (arank == Rank.UNKNOWN)
-			return;
 
-		if (chaser.getApparentRank() == Rank.UNKNOWN
-			|| arank == Rank.NIL 
+		// An unknown chase rank, once set, is never changed again.
+		// This prevents being duped by random bluffing, where a high
+		// rank piece chases all pieces, low ranks
+		// as well as unknowns.  The AI believes
+		// that unknown pieces that chase AI unknowns are probably
+		// high ranked pieces and can be attacked by a Five or less.
+		//
+		// Prior to version 9.3, chasing an unknown always
+		// set the chase rank to UNKNOWN.
+		// The problem was that once the AI successfully
+		// trapped a low suspected rank that was forced to move
+		// pass AI unknowns, it lost its suspected rank
+		// and acquired the UNKNOWN rank.
+		// This led the AI to approach the now unknown opponent
+		// piece and thus lose its piece.
+		//
+		// In version 9.3, if a piece has a suspected rank
+		// of 4 or lower, the low rank is retained if the piece
+		// chases an unknown.  The side-effect is that the AI is duped
+		// by an opponent piece that chases a low ranked AI piece
+		// and then chases an unknown.  This bluff results in
+		// the AI wasting a piece trying to discover the true rank
+		// of the bluffing piece.  If the AI piece is not able
+		// to attack the bluffing piece, it can also lead to the
+		// AI miscalculation of other suspected ranks on the board,
+		// leading to a loss elsewhere.
+		//
+		// There is no way around this.  Bluffing makes assignment
+		// of suspected ranks a challenge.
+
+		if (arank == Rank.UNKNOWN)
+		 	return;
+
+		if (arank == Rank.NIL 
+			|| (chaser.getApparentRank() == Rank.UNKNOWN
+				&& arank.toInt() > 5)
 			|| arank.toInt() > chaser.getApparentRank().toInt())
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
 	}

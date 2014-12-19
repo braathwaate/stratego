@@ -349,7 +349,72 @@ public class AI implements Runnable
 		addMove(moveList.get(type), Move.packMove(f, t));
 	}
 
-	public boolean getMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	void getScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp) {
+		int i = fp.getIndex();
+		int fpcolor = fp.getColor();
+
+		for (int d : dir ) {
+			int t = i + d ;
+			if (!Grid.isValid(t))
+				continue;
+			Piece p = b.getPiece(t);
+			if (p != null)
+				continue;
+
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks and far rank
+
+			t += d;
+			p = b.getPiece(t);
+
+		// if next-to-adjacent square is invalid or contains
+		// the same color piece, a far move is not possible
+
+			if (p != null
+				&& p.getColor() != 1 - fpcolor)
+				continue;
+			while (p == null) {
+				t += d;
+				p = b.getPiece(t);
+			};
+			if (p.getColor() != 1 - fpcolor) {
+				t -= d;
+				addMove(moveList, fpcolor, i, t);
+			} else {
+				int mo = LOSES;
+				if (!p.isKnown())
+					mo = ATTACK;
+				addMove(moveList.get(mo), i, t);
+			}
+		} // dir
+	}
+
+	void getPossibleScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	{
+		int i = fp.getIndex();
+		int fpcolor = fp.getColor();
+
+		for (int d : dir ) {
+			int t = i + d ;
+			if (!Grid.isValid(t))
+				continue;
+			Piece p = b.getPiece(t);
+			if (p != null)
+				continue;
+
+			do {
+				t += d;
+				p = b.getPiece(t);
+			} while (p == null);
+			if (!p.isKnown()
+				&& p.getColor() == 1 - fpcolor
+				&& b.isValuable(p)) {
+				addMove(moveList.get(WINS), i, t);
+			} // attack
+		}
+	}
+
+	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
 		boolean hasMove = false;
 		int i = fp.getIndex();
@@ -373,6 +438,29 @@ public class AI implements Runnable
 		if (fprank == Rank.BOMB && fp.isKnown())
 			return false;
 
+		if (fprank == Rank.NINE)
+ 			getScoutFarMoves(moveList, fp);
+
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks on unknown
+		// valuable pieces.
+		// if there are no nines left, then skip this code
+		else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
+ 			getPossibleScoutFarMoves(moveList, fp);
+
+		// If a piece is too far to reach the enemy,
+		// there is no point in generating moves for it,
+		// because the value is determined only by pre-processing.
+		if (n != 0) {
+			int m = n / 2 + 1;
+			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m))
+				return true;
+
+			n = n / 2;
+			if (n >= Grid.NEIGHBORS)
+				n = 0;
+		}
+
 		for (int d : dir ) {
 			int t = i + d ;
 			if (!Grid.isValid(t))
@@ -389,62 +477,18 @@ public class AI implements Runnable
 		// For now, we just discard all unmoved unknown piece moves
 		// to an open square.
 			if (tp == null) {
-				if ((fprank == Rank.UNKNOWN || fprank == Rank.BOMB || fprank == Rank.FLAG)
-					&& !fp.hasMoved()) {
-		// ai bombs or flags cannot move
-					if (fpcolor == Settings.bottomColor)
+
+				// If a piece moves too far from the enemy,
+				// there is no point in generating moves for it,
+				// because the value is determined only by pre-processing.
+				if (n != 0 && !b.grid.isCloseToEnemy(fpcolor, t, n))
 						hasMove = true;
-				} else {
+				else
 
 		// move to open square
 					addMove(moveList, fpcolor, i, t);
-				}
 
 
-		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks on unknown
-		// valuable pieces.
-		// if there are no nines left, then skip this code
-				if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN) {
-					Piece p;
-					do {
-						t += d;
-						p = b.getPiece(t);
-					} while (p == null);
-					if (!p.isKnown()
-						&& p.getColor() == 1 - fpcolor
-						&& b.isValuable(p)) {
-						addMove(moveList.get(WINS), i, t);
-					} // attack
-
-		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks and far rank
-
-				} else if (fprank == Rank.NINE) {
-					t += d;
-					Piece p = b.getPiece(t);
-
-		// if next-to-adjacent square is invalid or contains
-		// the same color piece, a far move is not possible
-
-					if (p != null
-						&& p.getColor() != 1 - fpcolor)
-						continue;
-					while (p == null) {
-						t += d;
-						p = b.getPiece(t);
-					};
-					if (p.getColor() != 1 - fpcolor) {
-						t -= d;
-						addMove(moveList, fpcolor, i, t);
-					} else {
-						int mo = LOSES;
-						if (!p.isKnown())
-							mo = ATTACK;
-						addMove(moveList.get(mo), i, t);
-					}
-				} // nine
-		// else attack
 
 			} else if (tp.getColor() != fpcolor) {
 				int result = b.winFight(fp, tp);
@@ -473,7 +517,7 @@ public class AI implements Runnable
 	// that waste more material in a position where
 	// the opponent has a sure favorable attack in the future,
 	// and the ai depth does not reach the position of exchange.
-	private ArrayList<ArrayList<Integer>> getMoves(int turn, Piece chasePiece, Piece chasedPiece)
+	private ArrayList<ArrayList<Integer>> getMoves(int n, int turn, Piece chasePiece, Piece chasedPiece)
 	{
 		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
 		for (int i = 0; i <= LOSES; i++)
@@ -484,13 +528,13 @@ public class AI implements Runnable
 		// only examine moves adjacent to chase and chased pieces
 		// as they chase around the board
 		if (chasePiece != null) {
-			getMoves(moveList, chasedPiece);
+			getMoves(n, moveList, chasedPiece);
 			for (int d : dir ) {
 				int i = chasePiece.getIndex() + d;
 				if (i != chasedPiece.getIndex() && Grid.isValid(i)) {
 					Piece p = b.getPiece(i);
 					if (p != null && p.getColor() == turn)
-						getMoves(moveList, p );
+						getMoves(n, moveList, p );
 				}
 			}
 
@@ -506,7 +550,7 @@ public class AI implements Runnable
 		for (Piece np : b.pieces[turn]) {
 			if (np == null)	// end of list
 				break;
-			if (getMoves(moveList, np))
+			if (getMoves(n, moveList, np))
 				hasMove = true;
 		}
 
@@ -553,14 +597,15 @@ public class AI implements Runnable
 
 		unknownNinesAtLarge = b.unknownRankAtLarge(Settings.bottomColor, Rank.NINE);
 
-		rootMoveList = getMoves(Settings.topColor, null, null);
+		rootMoveList = getMoves(0, Settings.topColor, null, null);
 
 		boolean discardPly = false;	// horizon effect
 		completedDepth = 0;
 
 		for (int n = 1; n < MAX_PLY; n++) {
 
-		// FORWARD PRUNING:
+		// DEEP CHASE
+		//
 		// Some opponent AI bots like to chase pieces around
 		// the board relentlessly hoping for material gain.
 		// The opponent is able to chase the AI piece because
@@ -728,6 +773,20 @@ public class AI implements Runnable
 		completedDepth = n;
 
 		log("-+-");
+
+		// A null move may be returned on iterations other
+		// than the first iteration because of forward pruning.
+		// A null move is inserted in the tree when a move
+		// (usually several moves) are pruned off.
+		// If a null move is the best move, it means that
+		// a pruned move is as good (or possibly better)
+		// than any other move.  In this case,
+		// the best move is the best move from the first
+		// iteration where there was no forward pruning.
+		if (killerMove.getMove() == 0) {
+			log("Best move is null");
+			continue;
+		}
 
 		// To negate the horizon effect where the ai
 		// plays a losing move to delay a negative result
@@ -1268,17 +1327,34 @@ public class AI implements Runnable
 		// implementation: selection sort
 
 		ArrayList<ArrayList<Integer>> moveList = null;
-		if (depth == 0)
+
+		// Use rootMoveList for a chase because it
+		// is heavily pruned.
+		if (depth == 0
+			&& (n == 1 || chasePiece != null))
 			moveList = rootMoveList;
 		else
-			moveList = getMoves(turn, chasePiece, chasedPiece);
+			moveList = getMoves(n, turn, chasePiece, chasedPiece);
 
 		for (int mo = 0; mo <= LOSES; mo++) {
 
-			// FORWARD PRUNING
-			// Discard losing moves at deeper levels
-			if (mo == LOSES && depth != 0)
-				continue;
+			// It is tempting to discard moves in LOSES.
+			// This works if LOSES is always a loss.
+			// But there could be some cases where LOSES is
+			// actually a win.  TBD: fix this
+			// Here is an example:
+			// R4 -- R? --
+			// R? B? -- --
+			// -- xx xx --
+			// Unknown Blue was chasing Red Four and had
+			// a suspected rank of Three.  But then it
+			// got trapped by unknown Red pieces.  This
+			// gave it a chase rank of Unknown.  That
+			// makes it fair game to attack with Red Four.
+			// B?xR4 is LOSES, but then Blue actually plays
+			// B?xR4.
+			// if (mo == LOSES && depth != 0)
+			//	continue;
 
 			ArrayList<Integer> ml = moveList.get(mo);
 			for (int i = 0; i < ml.size(); i++) {
@@ -1303,7 +1379,11 @@ public class AI implements Runnable
 			// the outcome is different if the player is different.
 			// So set a new hash and reset it after the move.
 					b.pushNullMove();
-					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+
+			// Null moves are worth one point extra
+			// to encourage use of the best move from the first
+			// iteration when the position is quiescent.
+					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc) + 1;
 					b.undo();
 					log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
 				} else {

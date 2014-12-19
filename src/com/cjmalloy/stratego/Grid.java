@@ -38,7 +38,8 @@ public class Grid
 
 	protected BitGrid pieceBitGrid[] = new BitGrid[2];
 	static private boolean[] isWater = new boolean[133];
-	static protected BitGrid neighbor[][] = new BitGrid[3][121];
+	static public final int NEIGHBORS = 5;
+	static protected BitGrid neighbor[][] = new BitGrid[NEIGHBORS][121];
 
 	static {
 		setWater(2,4);
@@ -57,7 +58,7 @@ public class Grid
 		for (int i = 121; i < 133; i++)
 			setWater(i);
 
-		for (int n = 0; n < 3; n++)
+		for (int n = 0; n < NEIGHBORS; n++)
 		for (int f = 12; f <= 120; f++) {
 			if (!isValid(f))
 				continue;
