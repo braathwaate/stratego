@@ -63,7 +63,7 @@ public class TestingBoard extends Board
 	protected int[][] lowerRankCount = new int[2][10];
 	protected int[][][][] planA = new int[2][15][2][121];	// plan A
 	protected int[][][][] planB = new int[2][15][2][121];	// plan B
-	protected int[][] winRank = new int[15][15];	// winfight cache
+	protected int[][] winRank = new int[15][15]; // winfight cache
 	protected int[] piecesNotBomb = new int[2];
 	protected int[] sumValues = new int[2];
 	protected int value;	// value of board
@@ -5201,12 +5201,17 @@ public class TestingBoard extends Board
 		return v;
 	}
 
-	int winFight(Piece fp, Piece tp)
+	public int winFight(Rank fprank, Rank tprank)
+	{
+		return winRank[fprank.toInt()][tprank.toInt()];
+	}
+
+	public int winFight(Piece fp, Piece tp)
 	{
 		Rank fprank = fp.getRank();
 		Rank tprank = tp.getRank();
 
-		int result = winRank[fprank.toInt()][tprank.toInt()];
+		int result = winFight(fprank, tprank);
 
 		if (result == Rank.UNK) {
 

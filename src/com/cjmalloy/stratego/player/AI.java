@@ -55,10 +55,12 @@ public class AI implements Runnable
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private ArrayList<ArrayList<Integer>> rootMoveList = null;
 	// static move ordering
-	static final int ATTACK = 0;
-	static final int APPROACH = 1;
-	static final int FLEE = 2;
-	static final int LAST = 3;
+	static final int WINS = 0;
+	static final int ATTACK = 1;
+	static final int APPROACH = 2;
+	static final int FLEE = 3;
+	static final int OTHER = 4;
+	static final int LOSES = 5;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -339,7 +341,7 @@ public class AI implements Runnable
 
 	private void addMove(ArrayList<ArrayList<Integer>> moveList, int color, int f, int t)
 	{
-		int type = LAST;
+		int type = OTHER;
 		if (b.grid.isCloseToEnemy(color, t, 0))
 			type = APPROACH;
 		else if (b.grid.isCloseToEnemy(color, f, 0))
@@ -412,7 +414,7 @@ public class AI implements Runnable
 					if (!p.isKnown()
 						&& p.getColor() == 1 - fpcolor
 						&& b.isValuable(p)) {
-						addMove(moveList.get(ATTACK), i, t);
+						addMove(moveList.get(WINS), i, t);
 					} // attack
 
 		// NOTE: FORWARD PRUNING
@@ -435,13 +437,29 @@ public class AI implements Runnable
 					if (p.getColor() != 1 - fpcolor) {
 						t -= d;
 						addMove(moveList, fpcolor, i, t);
-					} else
-						addMove(moveList.get(ATTACK), i, t);
+					} else {
+						int mo = LOSES;
+						if (!p.isKnown())
+							mo = ATTACK;
+						addMove(moveList.get(mo), i, t);
+					}
 				} // nine
-			} else if (tp.getColor() != fp.getColor()) {
+		// else attack
 
-		// attack
-				addMove(moveList.get(ATTACK), i, t);
+			} else if (tp.getColor() != fpcolor) {
+				int result = b.winFight(fp, tp);
+				int mo = LOSES;
+				if (result == Rank.WINS ||
+					result == Rank.EVEN)
+					mo = WINS;
+				else if (result == Rank.LOSES
+					&& (fprank.toInt() <= 4
+						|| tp.isKnown()))
+					mo = LOSES;
+				else
+					mo = ATTACK;
+					
+				addMove(moveList.get(mo), i, t);
 			}
 		} // d
 
@@ -458,7 +476,7 @@ public class AI implements Runnable
 	private ArrayList<ArrayList<Integer>> getMoves(int turn, Piece chasePiece, Piece chasedPiece)
 	{
 		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
-		for (int i = 0; i <= LAST; i++)
+		for (int i = 0; i <= LOSES; i++)
 			moveList.add(new ArrayList<Integer>());
 
 		// FORWARD PRUNING
@@ -481,7 +499,7 @@ public class AI implements Runnable
 			// has found protection, this could be a good
 			// way to end the chase.
 			// Add null move
-			addMove(moveList.get(LAST), 0);
+			addMove(moveList.get(OTHER), 0);
 
 		} else {
 		boolean hasMove = false;
@@ -495,7 +513,7 @@ public class AI implements Runnable
 		// FORWARD PRUNING
 		// Add null move
 		if (hasMove)
-			addMove(moveList.get(LAST), 0);
+			addMove(moveList.get(OTHER), 0);
 		}
 
 		return moveList;
@@ -634,7 +652,7 @@ public class AI implements Runnable
 					continue;
 
 				int count = 0;
-				for (int mo = 0; mo <= LAST; mo++)
+				for (int mo = 0; mo <= LOSES; mo++)
 				for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
 				if (from == Move.unpackFrom(rootMoveList.get(mo).get(k))) {
 					int to = Move.unpackTo(rootMoveList.get(mo).get(k));
@@ -680,7 +698,7 @@ public class AI implements Runnable
 					chasedPiece.setIndex(from);
 
 					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
-					for (int mo = 0; mo <= LAST; mo++)
+					for (int mo = 0; mo <= LOSES; mo++)
 					for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
 						if (from != Move.unpackFrom(rootMoveList.get(mo).get(k))
 							|| b.getPiece(Move.unpackTo(rootMoveList.get(mo).get(k))) != null)
@@ -693,7 +711,7 @@ public class AI implements Runnable
 		}
 
 		boolean hasMove = false;
-		for (int mo = 0; mo <= LAST; mo++)
+		for (int mo = 0; mo <= LOSES; mo++)
 			if (rootMoveList.get(mo).size() != 0) {
 				hasMove = true;
 				break;
@@ -1153,6 +1171,22 @@ public class AI implements Runnable
 		return vm;
 	}
 
+	int sortMove(ArrayList<Integer> ml, int i)
+	{
+		int mvp = ml.get(i);
+		int max = mvp;
+		int tj = i;
+		for (int j = i + 1; j < ml.size(); j++) {
+			int tmvp = ml.get(j);
+			if (hh[tmvp] > hh[max]) {
+				max = tmvp;
+				tj = j;
+			}
+		}
+		ml.set(tj, mvp);
+		ml.set(i, max);
+		return max;
+	}
 
 	private int negamax2(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove, QSCache qsc) throws InterruptedException
 	{
@@ -1239,24 +1273,16 @@ public class AI implements Runnable
 		else
 			moveList = getMoves(turn, chasePiece, chasedPiece);
 
-		for (int mo = 0; mo <= LAST; mo++) {
-		ArrayList<Integer> ml = moveList.get(mo);
-		for (int i = 0; i < ml.size(); i++) {
-			int max;
-			{
-				int mvp = ml.get(i);
+		for (int mo = 0; mo <= LOSES; mo++) {
 
-				max = mvp;
-				int tj = i;
-				for (int j = i + 1; j < ml.size(); j++) {
-					int tmvp = ml.get(j);
-					if (hh[tmvp] > hh[max]) {
-						max = tmvp;
-						tj = j;
-					}
-				}
-				ml.set(tj, mvp);
-				ml.set(i, max);
+			// FORWARD PRUNING
+			// Discard losing moves at deeper levels
+			if (mo == LOSES && depth != 0)
+				continue;
+
+			ArrayList<Integer> ml = moveList.get(mo);
+			for (int i = 0; i < ml.size(); i++) {
+				int max = sortMove(ml, i);
 
 		// skip ttMove and killerMove
 
@@ -1266,47 +1292,46 @@ public class AI implements Runnable
 						|| (ttMove != 0
 						&& max == ttMove)))
 					continue;
-			}
 
-			int vm = 0;
-			if (max == 0) {
+				int vm = 0;
+				if (max == 0) {
 
-		// A null move does not change the board
-		// so it doesn't change the hash.  But the hash
-		// could have been saved (in ttable or possibly boardHistory)
-		// for the opponent.  Even if the board is the same,
-		// the outcome is different if the player is different.
-		// So set a new hash and reset it after the move.
-				b.pushNullMove();
-				vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
-				b.undo();
-				log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
-			} else {
-				MoveType mt = makeMove(n, turn, depth, max);
-				if (!(mt == MoveType.OK
-					|| mt == MoveType.CHASER
-					|| mt == MoveType.CHASED))
-					continue;
+			// A null move does not change the board
+			// so it doesn't change the hash.  But the hash
+			// could have been saved (in ttable or possibly boardHistory)
+			// for the opponent.  Even if the board is the same,
+			// the outcome is different if the player is different.
+			// So set a new hash and reset it after the move.
+					b.pushNullMove();
+					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+					b.undo();
+					log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
+				} else {
+					MoveType mt = makeMove(n, turn, depth, max);
+					if (!(mt == MoveType.OK
+						|| mt == MoveType.CHASER
+						|| mt == MoveType.CHASED))
+						continue;
 
-				vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
 
-				long h = b.getHash();
+					long h = b.getHash();
 
-				b.undo();
+					b.undo();
 
-				logMove(n, max, b.getValue(), negQS(vm, turn), h, mt);
-			}
+					logMove(n, max, b.getValue(), negQS(vm, turn), h, mt);
+				}
 
-			if (vm > bestValue) {
-				bestValue = vm;
-				bestmove = max;
-			}
+				if (vm > bestValue) {
+					bestValue = vm;
+					bestmove = max;
+				}
 
-			alpha = Math.max(alpha, vm);
+				alpha = Math.max(alpha, vm);
 
-			if (alpha >= beta)
-				break;
-		} // moveList
+				if (alpha >= beta)
+					break;
+			} // moveList
 		} // move order
 
 		if (bestmove != 0) {
