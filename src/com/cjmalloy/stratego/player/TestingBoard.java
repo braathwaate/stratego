@@ -76,6 +76,7 @@ public class TestingBoard extends Board
 	protected int lowestUnknownRank;
 	protected int lowestUnknownExpendableRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
+	protected int[] unknownPiecesRemaining = new int[2];
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
@@ -276,10 +277,8 @@ public class TestingBoard extends Board
 		// If all pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		if (40 - piecesInTray[c] - piecesNotBomb[c]
-			== 1 + Rank.getRanks(Rank.BOMB) - 
-				trayRank[c][Rank.BOMB.toInt()-1]) {
-
+		unknownPiecesRemaining[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
+		if (unknownPiecesRemaining[c] == 0) {
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
 					continue;
@@ -1563,12 +1562,16 @@ public class TestingBoard extends Board
 
 	// The number of unknown expendable pieces still at large
 	// greatly determines the relative safety of a valuable rank
-	// from discovery.  Note that expendables include Eights and
-	// because some expendable ranks may remained buried
-	// in bomb structures, this is rarely zero.
+	// from discovery.  Note that expendables include Eights.
+	// Because some expendable ranks may remained buried
+	// in bomb structures or simply are not being moved,
+	// uUnknownExpendableRankAtLarge is rarely zero.
+	// But this should not deter valuable ranks from attack.
+	// So the AI subtracts a percentage (1/3) of
+	// unknownPiecesRemaining in determining safety.
 	private boolean hasFewExpendables(int color)
 	{
-		return nUnknownExpendableRankAtLarge[color] <= 4;
+		return nUnknownExpendableRankAtLarge[color] - (unknownPiecesRemaining[color] / 3) <= 4;
 	}
 
 	// Target ai or opponent flag
@@ -3863,7 +3866,6 @@ public class TestingBoard extends Board
 				break;
 
 			case Rank.UNK:
-				int tpvalue = actualValue(tp);
 		// note: fpvalue is actualValue
 
 		// fp or tp is unknown
@@ -3979,12 +3981,12 @@ public class TestingBoard extends Board
 		// in an unknown exchange is at the start of the game when
 		// few of the pieces can move and most of the expendable
 		// pieces are still unknown.  This condition is slightly
-		// favorable to a kamikaze foray by a Five or Six, because 
+		// favorable to a kamikaze foray by a Six, because 
 		// winning a random encounter is greater than 50%
 		// even against an unmoved piece.
 		//
-		// A Five has to win two such encounters and a Six
-		// only one encounter.  Because the opponent often places
+		// A Six has to win only one such encounter.
+		// Because the opponent often places
 		// its higher ranks in the front line and bombs in the
 		// rear row, odds are improved for a foray into the front row.
 		//
@@ -3994,15 +3996,6 @@ public class TestingBoard extends Board
 		// is a valid rule.  One can also reason this intuitively
 		// as follows.
 		//
-		// A Five loses against 9 pieces (Bombs and 4s), but
-		// assume zero or one bombs in the front row.
-		// The Fours may or may not be near the front, so
-		// assume 3 spaces of protection on the front row.
-		// 3.5 spaces out of 10 is 35% risk of loss after the
-		// first attack.
-		// The probability of winning two pieces is maybe 80% * 65%
-		// or about 52%.
-		//
 		// A Six loses against 14 pieces (Bombs, 4s and 5s).
 		// Note that even if it wins only one piece and loses the
 		// next, it will also have won the stealth value of the
@@ -4010,7 +4003,7 @@ public class TestingBoard extends Board
 		// about 60%.
 
 		if (npieces[Settings.bottomColor] >= 32
-			&& (fprank == Rank.FIVE || fprank == Rank.SIX)
+			&& fprank == Rank.SIX
 			&& !isBombStructure(Move.unpackTo(m))) {
 			int index = tp.getIndex();
 			int count = 0;
@@ -4073,7 +4066,19 @@ public class TestingBoard extends Board
 			}
 		}
 
-		tpvalue = unknownValue(fp, tp);
+		int tpvalue;
+		if (fprank.toInt() > lowestUnknownRank)
+			tpvalue = unknownValue(fp, tp);
+		else {
+
+		// In an unknown attack, the AI loses its piece but gains
+		// the stealth value of the opposing piece.
+		// But if there are not any opposing pieces of lower rank,
+		// it gains only the stealth value of an Unknown.
+
+			assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownRank + " (see winFight())";
+			tpvalue = valueStealth[1-fpcolor][Rank.UNKNOWN.toInt()-1];
+		}
 
 		// If the AI attacks an unknown unmoved piece, reduce
 		// the value by the number of pieces remaining, because
@@ -4222,8 +4227,9 @@ public class TestingBoard extends Board
 		// piece, what is the probability that it will attack the
 		// AI piece?  The opponent piece only sees the apparent value
 		// of the AI piece.
+					assert fprank == Rank.ONE || lowestUnknownRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownRank + " (see winFight())";
 
-					tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, tpvalue, apparentValue(tp));
+					int tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
 
 		// Outcome is the negation as if ai
 		// were the attacker.
@@ -4293,12 +4299,15 @@ public class TestingBoard extends Board
 			} // switch
 
 			// prefer early successful attacks
-			// for both ai and opponent
+			// (but don't subtract too much, or the AI
+			// won't plan attacks on marginal wins)
 			if (vm > 0)
-				vm -= depth;
+				vm -= depth/2;
 			else
 			// otherwise delay it
-				vm += depth;
+			// (the opponent may not see the attack win,
+			// so don't assume that he will)
+				vm += depth/2;
 
 		} // else attack
 
@@ -5414,8 +5423,19 @@ public class TestingBoard extends Board
 	// the opponent still has many unknown bombs, an Eight could
 	// still be decisive in a game with few pieces remaining.)
 	//
-	// An expendable Eight is worth less than a Seven.
-	// but probably more than a Nine (cannot think of an example
+	// An expendable Eight is usually worth less than a Seven.
+	// The question is how much less.  It depends on the endgame.  If bombs
+	// are still very important, expendable Eights may be worth
+	// more than a Seven.  But usually an engame is all about
+	// lower ranks winning, so Sevens are worth more.
+	//
+	// If an Eight is worth 5 points less,
+	// then an unknown Seven may not want to attack an Eight
+	// and lose its stealth.  And a known Seven will not attack
+	// a protected Eight. 
+	//
+	// An expendable Eight is probably always worth more
+	// than a Nine (cannot think of an example
 	// where a Nine could be worth more?)
 	//
 	// TBD: need examples
@@ -5425,7 +5445,7 @@ public class TestingBoard extends Board
 
 	void setExpendableEights(int color)
 	{
-		values[color][Rank.EIGHT.toInt()] = values[color][Rank.SEVEN.toInt()] - 5;
+		values[color][Rank.EIGHT.toInt()] = values[color][Rank.SEVEN.toInt()] - 3;
 		values[color][Rank.NINE.toInt()] = values[color][Rank.EIGHT.toInt()] - 5;
 	}
 

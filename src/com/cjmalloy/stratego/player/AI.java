@@ -57,9 +57,9 @@ public class AI implements Runnable
 	// static move ordering
 	static final int WINS = 0;
 	static final int ATTACK = 1;
-	static final int APPROACH = 2;
-	static final int FLEE = 3;
-	static final int OTHER = 4;
+	static final int NULLMOVE = 2;
+	static final int APPROACH = 3;
+	static final int FLEE = 4;
 	static final int LOSES = 5;
 
 	private static int[] dir = { -11, -1,  1, 11 };
@@ -81,59 +81,6 @@ public class AI implements Runnable
 		TE,	// transposition table entry
 		IMMOBILE,
 		OK
-	}
-
-	private static final int QS_NIL = -10000;
-	class QSCache {
-		private int value;
-		QSCache() { value = QS_NIL; }
-
-		// The qs could be affected if an enemy piece
-		// is within two squares of the from-square or to-square.
-		// For example,
-		// B5 R6 -- R4
-		// Red Six is under attack by Blue Five.  The qs
-		// is affected if Red Four moves towards Red Six
-		// to protect it.  Similarly, if Red Four was protecting
-		// Red Six, and then it moved away, the qs
-		// would be affected.
-
-		// In version 9.2, QSCache maintained an actual
-		// cache of squares that affected the qs, and
-		// thus isAffected() would always return the correct result.
-		// Although isAffected() will now return true for moves
-		// that do not affect qs, these moves are few
-		// so recalculating the qs is no large performance penalty.
-		// And this eliminated the (small) cost of creating
-		// the cache.
-
-		boolean isAffected (TestingBoard b)
-		{
-			UndoMove um = b.getLastMove();
-			if (um == null)
-				return false;
-			if (um.tp != null)
-				return true;
-			int m = um.getMove();
-			int color = um.getPiece().getColor();
-			return b.grid.isCloseToEnemy(color, Move.unpackFrom(m), 1)
-				|| b.grid.isCloseToEnemy(color, Move.unpackTo(m), 1);
-		}
-
-		void setValue(int v)
-		{
-			value = v;
-		}
-
-		int getValue()
-		{
-			return value;
-		}
-		void clear()
-		{
-			value = QS_NIL;
-		}
-		
 	}
 
 	public AI(Board b, CompControls u) 
@@ -339,16 +286,6 @@ public class AI implements Runnable
 		addMove(moveList, Move.packMove(f, t));
 	}
 
-	private void addMove(ArrayList<ArrayList<Integer>> moveList, int color, int f, int t)
-	{
-		int type = OTHER;
-		if (b.grid.isCloseToEnemy(color, t, 0))
-			type = APPROACH;
-		else if (b.grid.isCloseToEnemy(color, f, 0))
-			type = FLEE;
-		addMove(moveList.get(type), Move.packMove(f, t));
-	}
-
 	void getScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp) {
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
@@ -379,7 +316,7 @@ public class AI implements Runnable
 			};
 			if (p.getColor() != 1 - fpcolor) {
 				t -= d;
-				addMove(moveList, fpcolor, i, t);
+				addMove(moveList.get(FLEE), i, t);
 			} else {
 				int mo = LOSES;
 				if (!p.isKnown())
@@ -414,6 +351,78 @@ public class AI implements Runnable
 		}
 	}
 
+	public void getAllMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	{
+		int i = fp.getIndex();
+		int fpcolor = fp.getColor();
+		Rank fprank = fp.getRank();
+
+		for (int d : dir ) {
+			int t = i + d ;
+			if (!Grid.isValid(t))
+				continue;
+			Piece tp = b.getPiece(t);
+
+			if (tp == null) {
+				addMove(moveList.get(FLEE), i, t);
+			} else if (tp.getColor() != fpcolor) {
+				int result = b.winFight(fp, tp);
+				int mo = LOSES;
+				if (result == Rank.WINS ||
+					result == Rank.EVEN)
+					mo = WINS;
+				else if (result == Rank.LOSES
+					&& (fprank.toInt() <= 4
+						|| tp.isKnown()))
+					mo = LOSES;
+				else
+					mo = ATTACK;
+					
+				addMove(moveList.get(mo), i, t);
+			}
+		} // d
+	}
+
+
+	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	{
+		boolean hasMove = false;
+		int i = fp.getIndex();
+		int fpcolor = fp.getColor();
+
+		for (int d : dir ) {
+			int t = i + d ;
+			if (!Grid.isValid(t))
+				continue;
+			Piece tp = b.getPiece(t);
+			if (tp != null)
+				continue;
+
+			// NOTE: FORWARD TREE PRUNING
+			// If a piece moves too far from the enemy,
+			// there is no point in generating moves for it,
+			// because the value is determined only by pre-processing.
+			if (n > 0) {
+				if (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2))
+					hasMove = true;
+				else
+					addMove(moveList.get(APPROACH), i, t);
+			} else if (n < 0) {
+				 if (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2))
+					addMove(moveList.get(APPROACH), i, t);
+				else
+					hasMove = true;
+			}
+
+		} // d
+
+		return hasMove;
+	}
+
+	// n > 0: prune off inactive moves
+	// n = 0; no pruning
+	// n < 0: prune off active moves
+
 	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
 		boolean hasMove = false;
@@ -427,7 +436,6 @@ public class AI implements Runnable
 			return false;
 
 		Rank fprank = fp.getRank();
-		int fpcolor = fp.getColor();
 
 		// Known bombs are removed from pieces[] but
 		// a bomb could become known in the search
@@ -451,63 +459,38 @@ public class AI implements Runnable
 		// If a piece is too far to reach the enemy,
 		// there is no point in generating moves for it,
 		// because the value is determined only by pre-processing.
-		if (n != 0) {
+		if (n > 0) {
+			int fpcolor = fp.getColor();
 			int m = n / 2 + 1;
 			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m))
 				return true;
 
-			n = n / 2;
-			if (n >= Grid.NEIGHBORS)
-				n = 0;
+			if (b.grid.hasAttack(fp)) {
+				getAllMoves(moveList, fp);
+				return false;
+			} else
+				return getApproachMoves(n, moveList, fp);
+
+		} else if (n < 0) {
+
+		// always return false to avoid null move
+
+			int fpcolor = fp.getColor();
+			int m = -n / 2 + 1;
+			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m)) {
+				getAllMoves(moveList, fp);
+				return false;
+			} else if (b.grid.hasAttack(fp)) {
+				return false;
+			} else {
+				getApproachMoves(n, moveList, fp);
+				return false;
+			}
+		} else {
+			getAllMoves(moveList, fp);
 		}
 
-		for (int d : dir ) {
-			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
-			Piece tp = b.getPiece(t);
-
-		// NOTE: FORWARD TREE PRUNING
-		// We don't actually know if an unknown unmoved piece
-		// can or will move, but usually we don't care
-		// unless it can attack an AI piece during the search.
-		//
-		// TBD: determine in advance which opponent pieces
-		// are able to attack an AI piece within the search window.
-		// For now, we just discard all unmoved unknown piece moves
-		// to an open square.
-			if (tp == null) {
-
-				// If a piece moves too far from the enemy,
-				// there is no point in generating moves for it,
-				// because the value is determined only by pre-processing.
-				if (n != 0 && !b.grid.isCloseToEnemy(fpcolor, t, n))
-						hasMove = true;
-				else
-
-		// move to open square
-					addMove(moveList, fpcolor, i, t);
-
-
-
-			} else if (tp.getColor() != fpcolor) {
-				int result = b.winFight(fp, tp);
-				int mo = LOSES;
-				if (result == Rank.WINS ||
-					result == Rank.EVEN)
-					mo = WINS;
-				else if (result == Rank.LOSES
-					&& (fprank.toInt() <= 4
-						|| tp.isKnown()))
-					mo = LOSES;
-				else
-					mo = ATTACK;
-					
-				addMove(moveList.get(mo), i, t);
-			}
-		} // d
-
-		return hasMove;
+		return false;
 	}
 
 
@@ -543,7 +526,7 @@ public class AI implements Runnable
 			// has found protection, this could be a good
 			// way to end the chase.
 			// Add null move
-			addMove(moveList.get(OTHER), 0);
+			addMove(moveList.get(NULLMOVE), 0);
 
 		} else {
 		boolean hasMove = false;
@@ -556,8 +539,13 @@ public class AI implements Runnable
 
 		// FORWARD PRUNING
 		// Add null move
+		// (NULLMOVE evaluates the move before other APPROACH moves,
+		// so that if the null move is equal in value,
+		// it will be the one selected as the best move.
+		// This allows the AI to subsequently chose an inactive move
+		// as the best move.
 		if (hasMove)
-			addMove(moveList.get(OTHER), 0);
+			addMove(moveList.get(NULLMOVE), 0);
 		}
 
 		return moveList;
@@ -768,8 +756,7 @@ public class AI implements Runnable
 		}
 
 		Move killerMove = new Move(null, 0);
-		QSCache qsc = new QSCache();
-		int vm = negamax(n, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove, qsc); 
+		int vm = negamax(n, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove); 
 		completedDepth = n;
 
 		log("-+-");
@@ -779,13 +766,39 @@ public class AI implements Runnable
 		// A null move is inserted in the tree when a move
 		// (usually several moves) are pruned off.
 		// If a null move is the best move, it means that
-		// a pruned move is as good (or possibly better)
-		// than any other move.  In this case,
-		// the best move is the best move from the first
-		// iteration where there was no forward pruning.
+		// a pruned move could be the best move.
+		//
+		// The dilemma is which move is really the best move?
+		// Moves are pruned off when they cannot create a
+		// result that can affect material balance within
+		// the search depth. (They are just too far from
+		// the enemy pieces.)
+		// Thus, a null move result indicates that the AI wants to
+		// keep its active pieces in their current positions.
+		//
+		// The best move must therefore be selected from
+		// the moves that were pruned off.  While this move may
+		// not be the best move (nor perhaps even a good move)
+		// it is the only way these pieces ever get activated,
+		// unless an opponent piece happens to come visiting,
+		// causing the moves to be considered.
+		//
+		// Why do this forward pruning?  If the AI
+		// were to consider all moves, then the best move
+		// would be found without all this rigmarole.
+		// The problem is that there are just too many moves
+		// to consider, resulting in shallow search depth.
+		// By pruning off inactive moves, depth is significantly
+		// increased (by 2-3 ply), making sure that the AI
+		// does not easily blunder material away.
+
 		if (killerMove.getMove() == 0) {
+			assert n != 1 : "null move on iteration 1";
 			log("Best move is null");
-			continue;
+			ArrayList<ArrayList<Integer>> saveRootMoveList = rootMoveList;
+			rootMoveList = getMoves(-n+1, Settings.topColor, null, null);
+			vm = negamax(1, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove); 
+			rootMoveList = saveRootMoveList;
 		}
 
 		// To negate the horizon effect where the ai
@@ -956,7 +969,7 @@ public class AI implements Runnable
 	// the difference in strength will become far more noticeable,
 	// because accuracy is necessary for optimal alpha-beta pruning.
 	
-	private int qs(int turn, int depth, int n, boolean flee, QSCache qsc)
+	private int qs(int turn, int depth, int n, boolean flee)
 	{
 		if (n < 1)
 			return b.getValue();
@@ -965,7 +978,7 @@ public class AI implements Runnable
 		int nextBest = -9999;	// default value not significant
 
 		// try fleeing
-		int best = qs(1-turn, depth+1, n-1, true, qsc);
+		int best = qs(1-turn, depth+1, n-1, true);
 
 		// "best" is b.getValue() after
 		// opponent's best attack if player can flee.
@@ -996,18 +1009,25 @@ public class AI implements Runnable
 		// TBD: Far attacks by nines or unknown pieces
 		// are not handled.  This would improve the
 		// accuracy of qs.  isMovable() would have to
-		// check the direction of the attack.  If nines
-		// are handled, then it would be impossible to
-		// to reuse the result in subsequent moves
-		// (tbd: use qs from prior move (or null move)
-		// if new move is not adjacent to any pieces involved
-		// in attack)
+		// check the direction of the attack.
 		//
 		// TBD: Another reason to handle far attacks is
 		// the deep chase code.  It relies on qs, so
 		// a known AI piece can be chased out of the
 		// way to permit an attack on an unknown AI piece
 		// without the AI realizing it.
+		//
+		// Version 9.2 cached the qs from the prior move
+		// so that it could reused if the new move
+		// is not adjacent to any enemy or protecting pieces,
+		// thus not affecting the qs result.
+		// (nines were not handled, because it would be impossible to
+		// to reuse the result in subsequent moves)
+		// Version 9.3 removed the cache entirely because the addition
+		// of forward pruning of inactive moves means that
+		// all end nodes are now active moves and always affect
+		// the qs result from move to move.
+		//
 
 			for (int d : dir ) {
 				boolean canFlee = false;
@@ -1025,7 +1045,7 @@ public class AI implements Runnable
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-				int vm = qs(1-turn, depth+1, n-1, false, qsc);
+				int vm = qs(1-turn, depth+1, n-1, false);
 
 				b.undo();
 
@@ -1057,29 +1077,6 @@ public class AI implements Runnable
 		return best;
 	}
 
-	// The QS calculation is time-consuming.
-	// Fortunately, only attacking and protecting moves affect the QS value
-	// so that often the QS value does not change from move to move.
-	// Once a QS value has been determined, subsequent moves that
-	// do not affect the QS can use the previous QS value.
-	private int qscache(int turn, int depth, int n, boolean flee, QSCache qsc)
-	{
-		int valueB = b.getValue();
-		if (qsc.getValue() == QS_NIL) {
-			int v = qs(turn, depth, n, flee, qsc);
-			if (qsc.isAffected(b))
-				qsc.clear();
-			else
-		// save the delta qs value after a quiescent move
-		// for possible reuse
-				qsc.setValue(v-valueB);
-			return v;
-		} else if (qsc.isAffected(b))
-			return qs(turn, depth, n, flee, null);
-
-		return valueB + qsc.getValue();
-	}
-
 	private int negQS(int qs, int turn)
 	{
 		if (turn == Settings.topColor)
@@ -1092,7 +1089,7 @@ public class AI implements Runnable
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
 
-	private int negamax(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, QSCache qsc) throws InterruptedException
+	private int negamax(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove) throws InterruptedException
 	{
 		if (bestMove != 0
 			&& stopTime != 0
@@ -1167,7 +1164,7 @@ public class AI implements Runnable
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG))
-			return negQS(qscache(turn, depth, QSMAX, false, qsc), turn);
+			return negQS(qs(turn, depth, QSMAX, false), turn);
 
 
 		// If the chaser is N or more squares away, then
@@ -1194,10 +1191,10 @@ public class AI implements Runnable
 
 		if (chasePiece != null && turn == Settings.bottomColor) {
 			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
-				return negQS(qscache(turn, depth, QSMAX, false, qsc), turn);
+				return negQS(qs(turn, depth, QSMAX, false), turn);
 		}
 
-		int vm = negamax2(n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove, ttMove, qsc);
+		int vm = negamax2(n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove, ttMove);
 
 		assert hashOrig == b.getHash() : "hash changed";
 
@@ -1247,11 +1244,10 @@ public class AI implements Runnable
 		return max;
 	}
 
-	private int negamax2(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove, QSCache qsc) throws InterruptedException
+	private int negamax2(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, 0);
-		qsc.clear();
 		int bestmove = 0;
 
 		if (ttMove != 0) {
@@ -1261,7 +1257,7 @@ public class AI implements Runnable
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 
-				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 
 				long h = b.getHash();
 				b.undo();
@@ -1297,7 +1293,7 @@ public class AI implements Runnable
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
-				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 				long h = b.getHash();
 				b.undo();
 				logMove(n, killerMove.getMove(), b.getValue(), negQS(vm, turn), h, MoveType.KM);
@@ -1380,11 +1376,9 @@ public class AI implements Runnable
 			// So set a new hash and reset it after the move.
 					b.pushNullMove();
 
-			// Null moves are worth one point extra
-			// to encourage use of the best move from the first
-			// iteration when the position is quiescent.
-					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc) + 1;
+					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 					b.undo();
+
 					log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
 				} else {
 					MoveType mt = makeMove(n, turn, depth, max);
@@ -1393,7 +1387,7 @@ public class AI implements Runnable
 						|| mt == MoveType.CHASED))
 						continue;
 
-					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove, qsc);
+					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
 
 					long h = b.getHash();
 
