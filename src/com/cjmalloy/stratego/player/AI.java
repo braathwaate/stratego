@@ -383,6 +383,38 @@ public class AI implements Runnable
 		} // d
 	}
 
+	public void getAttackMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	{
+		int i = fp.getIndex();
+		int fpcolor = fp.getColor();
+		Rank fprank = fp.getRank();
+
+		for (int d : dir ) {
+			int t = i + d ;
+			if (!Grid.isValid(t))
+				continue;
+			Piece tp = b.getPiece(t);
+
+			if (tp == null)
+				continue;
+
+			if (tp.getColor() != fpcolor) {
+				int result = b.winFight(fp, tp);
+				int mo = LOSES;
+				if (result == Rank.WINS ||
+					result == Rank.EVEN)
+					mo = WINS;
+				else if (result == Rank.LOSES
+					&& (fprank.toInt() <= 4
+						|| tp.isKnown()))
+					mo = LOSES;
+				else
+					mo = ATTACK;
+					
+				addMove(moveList.get(mo), i, t);
+			}
+		} // d
+	}
 
 	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
@@ -437,14 +469,49 @@ public class AI implements Runnable
 
 		Rank fprank = fp.getRank();
 
+		if (fprank == Rank.BOMB) {
+
 		// Known bombs are removed from pieces[] but
 		// a bomb could become known in the search
 		// tree.  We need to generate moves for suspected
 		// bombs because the bomb might actually be
 		// some other piece, but once the bomb becomes
 		// known, it ceases to move.
-		if (fprank == Rank.BOMB && fp.isKnown())
+
+			if (fp.isKnown())
+				return false;
+
+		// Unmoved unknown pieces really aren't very
+		// scary to the opponent, unless they can attack
+		// on their first move.  The AI has to generate
+		// moves for its unmoved unknown pieces because
+		// lower ranks may be needed for defense.  But it
+		// is unlikely (but possible) that the piece
+		// will be part of a successful attack.
+		//
+		// Prior to version 9.3, the AI didn't generate moves
+		// for any unknown unmoved opponent piece unless
+		// it could attack on its first move.  This effective
+		// forward pruning was generalized in 9.3 to include
+		// all inactive pieces.
+		//
+		// Yet an unknown bomb or suspected bomb is so unlikely to have
+		// any impact (except for attack on first move),
+		// even if the bomb is within the active area.
+		// that it is worthwhile to omit move
+		// generation for it except for attack on first move.
+		// This can increase the ply during the endgame,
+		// when unknown bombs dominate the remaining pieces.
+		//
+		// In addition, return false, to prevent the option
+		// of a null move.
+
+			if (!b.grid.hasAttack(fp))
+				return false;
+
+			getAttackMoves(moveList, fp);
 			return false;
+		}
 
 		if (fprank == Rank.NINE)
  			getScoutFarMoves(moveList, fp);
@@ -791,6 +858,19 @@ public class AI implements Runnable
 		// By pruning off inactive moves, depth is significantly
 		// increased (by 2-3 ply), making sure that the AI
 		// does not easily blunder material away.
+		//
+		// TBD: Search depth needs to be increased further.
+		// There is currently a grid bitmap for each color.
+		// This could be improved to indexed on rank, where
+		// each color rank bitmap contains the locations of
+		// all lower ranks.  This would allow fleeing moves
+		// to be generated for only pieces that should flee
+		// (when the indexed rank bitmap mask is non-zero)
+		// and attack/approach moves for pieces that can attack
+		// (when the indexed rank bitmap mask is zero).
+		//
+		// Alternatively, look at the planA/B matrices to
+		// determine direction.  Or use windowing.
 
 		if (killerMove.getMove() == 0) {
 			assert n != 1 : "null move on iteration 1";

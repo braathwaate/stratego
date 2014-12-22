@@ -1331,7 +1331,7 @@ public class TestingBoard extends Board
 		//				genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
 		//			}
 		//	}
-		//	return;
+			return;
 		}
 
 		// Multiple lower known invincible ranks
@@ -4298,16 +4298,52 @@ public class TestingBoard extends Board
 				break;
 			} // switch
 
-			// prefer early successful attacks
-			// (but don't subtract too much, or the AI
-			// won't plan attacks on marginal wins)
-			if (vm > 0)
-				vm -= depth/2;
-			else
-			// otherwise delay it
-			// (the opponent may not see the attack win,
-			// so don't assume that he will)
-				vm += depth/2;
+		// Prefer early successful attacks
+		//
+		// Note: it is impossible to determine what moves
+		// the opponent actually considers, so the AI cannot
+		// second-guess the opponent and play a suboptimal move,
+		// hoping the opponent will miss a good move.
+		//
+		// The depth adjustment here is intended to
+		// speed winning sequences and delay losing sequences.
+		// By delaying losing sequences, the opponent may misplay,
+		// but this cannot be predicted.  Generally, the AI
+		// will play the best move.
+		//
+		// However, consider the following example:
+		// RB -- RB -- --
+		// -- R5 -- R3 --
+		// -- B2 -- -- --
+		//
+		// Blue Two has moved towards Red Five.
+		// Red Five can move back, allowing Blue Two
+		// to trap it.  Red Five can move left, but
+		// the Two Squares rule will eventually push
+		// it right next to Red Three (in 8 ply), allowing Blue Two
+		// to fork Red Five and Blue Three.
+		//
+		// So Red knows that it can lose its Five.
+		// It this situation, Red should play out the sequence
+		// and hope that Blue Two misplays.
+		//
+		// This particularly affects deep chase, where
+		// the depth is very deep.  Few opponents will see
+		// this deep.
+		//
+		// This is important in tournament play with substandard
+		// bots.  Stratego is a game of logic, but chance plays
+		// an important part.  By forcing the opponent to play
+		// out a winning sequence, the AI can win more games.
+		//
+		// Depth value reduction
+		// 2 : 95%
+		// 4 : 90%
+		// 6 : 85%
+		// 8 : 80%
+		// 10+ : 75%
+
+			vm = vm * (20 - Math.min(depth, 10)/2) / 20;
 
 		} // else attack
 
