@@ -1483,17 +1483,16 @@ public class AI implements Runnable
 
 				alpha = Math.max(alpha, vm);
 
-				if (alpha >= beta)
-					break;
+				if (alpha >= beta) {
+					hh[bestmove]+=n;
+					killerMove.setMove(bestmove);
+					return vm;
+				}
 			} // moveList
 		} // move order
 
-		if (bestmove != 0) {
-			hh[bestmove]+=n;
-			killerMove.setMove(bestmove);
-		} else
-			killerMove.setMove(0);
-
+		hh[bestmove]+=n;
+		killerMove.setMove(bestmove);
 		return bestValue;
 	}
 
