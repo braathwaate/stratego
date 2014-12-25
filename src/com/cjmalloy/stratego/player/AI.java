@@ -33,6 +33,7 @@ import java.util.Collections;
 import javax.swing.JOptionPane;
 
 import com.cjmalloy.stratego.Board;
+import com.cjmalloy.stratego.BitGrid;
 import com.cjmalloy.stratego.Grid;
 import com.cjmalloy.stratego.Move;
 import com.cjmalloy.stratego.UndoMove;
@@ -65,7 +66,7 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
 	private TTEntry[] ttable = new TTEntry[2<<22]; // 4194304
-	private final int QSMAX = 3;	// maximum qs search depth
+	private final int QSMAX = 2;	// maximum qs search depth
 	int bestMove = 0;
 	long stopTime = 0;
 	int moveRoot = 0;
@@ -82,6 +83,87 @@ public class AI implements Runnable
 		IMMOBILE,
 		OK
 	}
+
+	// QS cache
+	// The QS calculation is time-consuming.
+	// Fortunately, only attacking and protecting moves affect the QS value
+	// so that often the QS value does not change from move to move.
+	// Once a QS value has been determined, subsequent moves that
+	// do not affect the QS can use the previous QS value.
+	class QSEntry {
+		long neighbors;
+		ArrayList<Integer> affected;
+		long hash;
+		int value;
+		int depth;
+		int turn;
+
+		QSEntry(int t, int d, long nb) {
+			turn = t;
+			depth = d;
+			neighbors = nb;
+			hash = 0;
+			value = 0;
+			affected = new ArrayList<Integer>();
+		}
+
+		void setAffected (int i, Board b)
+		{
+/*
+			Piece p = b.getPiece(i);
+			if (!affected.contains(i)) {
+				hash ^= Board.hashPiece(p, i);
+				for (int d : dir) {
+					int j = i + d;
+					if (!isValid(j))
+						continue;
+					Piece np = b.getPiece(j);
+					if (np == null)
+						continue;
+					hash ^= Board.hashPiece(np, j);
+				}
+				affected.add(i);
+			}
+*/
+		}
+
+		boolean isValid(int t, int d, long nb, Board b)
+		{
+/*
+			if (turn != t
+				|| depth != d
+				|| neighbors != nb)
+				return false;
+			long h = 0;
+			for (Integer i : affected) {
+				Piece p = b.getPiece(i);
+				h ^= Board.hashPiece(p, i);
+				for (int d : dir) {
+					int j = i + d;
+					if (!isValid(j))
+						continue;
+					Piece np = b.getPiece(j);
+					if (np == null)
+						continue;
+					h ^= Board.hashPiece(np, j);
+				}
+			}
+			return hash == h;
+*/
+return false;
+		}
+
+		void setValue(int v)
+		{
+			value = v;
+		}
+
+		int getValue()
+		{
+			return value;
+		}
+	}
+	private QSEntry[] QSCtable = new QSEntry[10007];
 
 	public AI(Board b, CompControls u) 
 	{
@@ -630,6 +712,8 @@ public class AI implements Runnable
 		// But this is a tradeoff, because retaining the
 		// the entries leads to increased search depth.
 		//ttable = new TTEntry[2<<22]; // 4194304, clear transposition table
+		QSCtable = new QSEntry [10007];
+
 		moveRoot = b.undoList.size();
 
 		// chase variables
@@ -1066,14 +1150,21 @@ public class AI implements Runnable
 		// opponent has two good attacks or the player
 		// piece under attack is cornered.
 
-		for (Piece fp : b.pieces[turn]) {
-			if (fp == null)	// end of list
-				break;
-			int i = fp.getIndex();
-			if (fp != b.getPiece(i))
-				continue;
-			if (!b.grid.hasAttack(fp))
-				continue;
+		long [] bg = new long[2];
+		b.grid.getNeighbors(1-turn, bg);
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg[bi];
+			while (data != 0) {
+				int ntz = Long.numberOfTrailingZeros(data);
+				int i = k + ntz;
+				data ^= (1l << ntz);
+
+				Piece fp = b.getPiece(i);
 
 		// Known bombs are removed from pieces[] but
 		// a bomb could become known in the search
@@ -1103,12 +1194,12 @@ public class AI implements Runnable
 		// thus not affecting the qs result.
 		// (nines were not handled, because it would be impossible to
 		// to reuse the result in subsequent moves)
+		//
 		// Version 9.3 removed the cache entirely because the addition
 		// of forward pruning of inactive moves means that
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
 		//
-
 			for (int d : dir ) {
 				boolean canFlee = false;
 				int t = i + d;	
@@ -1150,11 +1241,47 @@ public class AI implements Runnable
 				}
 			} // dir
 		} // pieces
+		} // k
 
 		if (bestFlee)
 			best = nextBest;
 
 		return best;
+	}
+
+	private int qscache(int turn, int depth, int n, boolean flee)
+	{
+		return qs(turn, depth, n, flee);
+/*
+		int valueB = b.getValue();
+		long neighbors = b.grid.xorNeighbors();
+		if (neighbors == 0)
+			return valueB;
+
+		QSEntry entry = QSCtable[(int)(neighbors % 10007)];
+		if (entry != null && entry.isValid(turn, depth, neighbors, b)) {
+			// return valueB + entry.getValue();
+			int v = valueB + entry.getValue();
+			int v2 = qs(turn, depth, n, flee, null);
+			if (v != v2)
+				log (String.format("bad qsentry %d", v));
+			return v2;
+		} else
+			entry = new QSEntry(turn, depth, neighbors);
+
+		// always overwrite existing table entry because qs
+		// changes with depth (because captures are less valuable)
+
+		int v = qs(turn, depth, n, flee, entry);
+
+		// save the delta qs value after a quiescent move
+		// for possible reuse
+
+		entry.setValue(v-valueB);
+		QSCtable[(int)(neighbors % 10007)] = entry;
+		return v;
+*/
+
 	}
 
 	private int negQS(int qs, int turn)
@@ -1243,8 +1370,9 @@ public class AI implements Runnable
 			|| (depth != 0
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
-				&& b.getLastMove().tp.getRank() == Rank.FLAG))
-			return negQS(qs(turn, depth, QSMAX, false), turn);
+				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
+			return negQS(qscache(turn, depth, QSMAX, false), turn);
+		}
 
 
 		// If the chaser is N or more squares away, then
@@ -1271,7 +1399,7 @@ public class AI implements Runnable
 
 		if (chasePiece != null && turn == Settings.bottomColor) {
 			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
-				return negQS(qs(turn, depth, QSMAX, false), turn);
+				return negQS(qscache(turn, depth, QSMAX, false), turn);
 		}
 
 		int vm = negamax2(n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove, ttMove);

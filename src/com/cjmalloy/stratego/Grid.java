@@ -193,6 +193,11 @@ public class Grid
 		return pieceBitGrid[1-turn].andMask(neighbor[n][i]);
 	}
 
+	public void getNeighbors(int turn, long [] bg)
+	{
+		pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], bg);
+	}
+
 	// isAdjacent is the same as steps() == 1 but perhaps faster
 	static public boolean isAdjacent(int f, int t)
 	{

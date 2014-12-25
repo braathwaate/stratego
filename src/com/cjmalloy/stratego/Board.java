@@ -397,19 +397,25 @@ public class Board
 		hash ^= v;
 	}
 
-	public void rehash(Piece p, int i)
+	static public long hashPiece(Piece p, int i)
 	{
 		Rank rank;
 		if (p.getColor() == Settings.topColor)
 			rank = p.getRank();
 		else
 			rank = p.getApparentRank();
-		hash ^= boardHash
+
+		return boardHash
 			[p.isKnown() ? 1 : 0]
 			[p.hasMoved() ? 1 : 0]
 			[p.getColor()]
 			[rank.toInt()-1]
 			[i];
+	}
+
+	public void rehash(Piece p, int i)
+	{
+		hash ^= hashPiece(p, i);
 	}
 	
 	public void setPiece(Piece p, int i)
