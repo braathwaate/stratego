@@ -48,7 +48,6 @@ public class Board
 	// correllating against all setups in the database
 	protected Rank[] setup = new Rank[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
-	protected static int[] dir2 = { -10, -11, -12, -1,  1, 10, 11, 12 };
 	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
 	protected static long[] turnHash = new long[2];
 	protected long hash = 0;

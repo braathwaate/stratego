@@ -643,12 +643,6 @@ return false;
 	}
 
 
-	// Quiescent search with only attack moves limits the
-	// horizon effect but does not eliminate it, because
-	// the ai is still prone to make bad moves 
-	// that waste more material in a position where
-	// the opponent has a sure favorable attack in the future,
-	// and the ai depth does not reach the position of exchange.
 	private ArrayList<ArrayList<Integer>> getMoves(int n, int turn, Piece chasePiece, Piece chasedPiece)
 	{
 		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
@@ -1036,7 +1030,7 @@ return false;
 			} else {
 				discardPly = true;
 				n += 1;
-				log("ply " + n + ": best move discarded.");
+				log("ply " + n-1 + ": best move discarded.");
 				continue;
 			}
 		}
@@ -1132,6 +1126,13 @@ return false;
 	// that as the tree is deepened further by coding improvements,
 	// the difference in strength will become far more noticeable,
 	// because accuracy is necessary for optimal alpha-beta pruning.
+	//
+	// Quiescent search with only attack moves limits the
+	// horizon effect but does not eliminate it, because
+	// the ai is still prone to make bad moves 
+	// that waste more material in a position where
+	// the opponent has a sure favorable attack in the future,
+	// and the ai depth does not reach the position of exchange.
 	
 	private int qs(int turn, int depth, int n, boolean flee)
 	{
@@ -1150,6 +1151,18 @@ return false;
 		// opponent has two good attacks or the player
 		// piece under attack is cornered.
 
+		// Note: the following code snippet is faster,
+		// especially for dense bitmaps:
+		// http://lemire.me/blog/archives/2013/12/23/even-faster-bitmap-decoding/
+// int pos = 0;
+// for(int k = 0; k < bitmaps.length; ++k) {
+//    long bitset = bitmaps[k];
+//    while (bitset != 0) {
+//      long t = bitset & -bitset;
+//      output[pos++] = k * 64 +  Long.bitCount(t-1);
+//      bitset ^= t;
+//    }
+// }
 		long [] bg = new long[2];
 		b.grid.getNeighbors(1-turn, bg);
 		for (int bi = 0; bi < 2; bi++) {

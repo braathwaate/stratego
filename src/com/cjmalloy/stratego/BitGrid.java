@@ -96,14 +96,16 @@ public class BitGrid
 
 	public void getNeighbors(BitGrid in, long [] out)
 	{
-		out[0] = ((low << 1) & in.low)
-			| ((low >>> 1) & in.low)
-			| ((low << 11) & in.low)
-			| (((low >>> 11) | ((in.high & 0x7fe) << 44)) & in.low);
+		out[0] = ((low << 1) 
+			| (low >>> 1)
+			| (low << 11)
+			| (low >>> 11)
+			| ((in.high & 0x7fe) << 44)) & in.low;
 
-		out[1] = ((high << 1) & in.high)
-			| ((high >>> 1) & in.high)
-			| ((high << 11) & in.high)
-			| (((high >>> 11) | ((in.low & 0x7fe) << 44)) & in.high);
+		out[1] = ((high << 1)
+			| (high >>> 1)
+			| (high << 11)
+			| (high >>> 11)
+			| (in.low >>> 44)) & in.high;
 	}
 }
