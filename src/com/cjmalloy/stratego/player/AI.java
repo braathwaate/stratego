@@ -1360,7 +1360,7 @@ public class AI implements Runnable
 		long hashOrig = getHash(n);
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
-		int ttMove = 0;
+		TTEntry ttBestMove = null;
 
 		if (entry != null
 			&& entry.hash == hashOrig
@@ -1390,40 +1390,17 @@ public class AI implements Runnable
 					return entry.bestValue;
 				}
 			}
+			ttBestMove = entry;
+
+		} else if (n > 0) {
+			long ttMoveHash = getHash(n-1);
+			TTEntry ttMoveEntry = ttable[(int)(ttMoveHash % ttable.length)];
+			if (ttMoveEntry != null
+				&& ttMoveEntry.hash == ttMoveHash
+				&& ttMoveEntry.turn == b.bturn)
+				ttBestMove = ttMoveEntry;
 		}
 
-		if (n > 0) {
-		long ttMoveHash = getHash(n-1);
-		TTEntry ttMoveEntry = ttable[(int)(ttMoveHash % ttable.length)];
-		if (ttMoveEntry != null
-			&& ttMoveEntry.hash == ttMoveHash
-			&& ttMoveEntry.turn == b.bturn)  {
-
-		// use best move from transposition table for move ordering
-		// best move entries in the table are not tried
-		// if they are a null move
-		// or a duplicate of the killer move
-
-			ttMove = ttMoveEntry.bestMove;
-			if (Move.unpackFrom(ttMove) == 0
-				|| (killerMove != null
-					&& ttMove == killerMove.getMove()))
-				ttMove = 0;
-			else {
-				int from = Move.unpackFrom(ttMove);
-				int to = Move.unpackTo(ttMove);
-				Piece fp = b.getPiece(from);
-				Piece tp = b.getPiece(to);
-				if (fp == null
-					|| fp.getColor() != b.bturn
-					|| (tp != null && tp.getColor() == b.bturn)) {
-					log(PV, n + ":" + Grid.getX(from) + " " + Grid.getY(from) + " " + Grid.getX(to) + " " + Grid.getY(to)  + " bad tt entry");
-					ttMove = 0;
-
-				}
-			}
-		}
-		}
 
 		if (n < 1
 			|| (depth != 0
@@ -1461,7 +1438,7 @@ public class AI implements Runnable
 				return negQS(qscache(depth));
 		}
 
-		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttMove);
+		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttBestMove);
 
 		assert hashOrig == getHash(n) : "hash changed";
 
@@ -1525,13 +1502,40 @@ public class AI implements Runnable
 		return max;
 	}
 
-	private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
+	boolean isValidMove(int move)
+	{
+		if (move == 0)
+			return true;
+
+		int from = Move.unpackFrom(move);
+		int to = Move.unpackTo(move);
+		Piece fp = b.getPiece(from);
+		Piece tp = b.getPiece(to);
+		if (fp == null
+			|| fp.getColor() != b.bturn
+			|| (tp != null && tp.getColor() == b.bturn))
+			return false;
+		return true;
+	}
+
+private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, TTEntry ttBestMove) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, 0);
 		int bestmove = 0;
 
-		if (ttMove != 0) {
+		if (ttBestMove != null
+			&& ttBestMove.bestMove != killerMove.getMove()) {
+
+		// use best move from transposition table for move ordering
+		// best move entries in the table are not tried
+		// if a duplicate of the killer move
+
+			int ttMove = ttBestMove.bestMove;
+			if (!isValidMove(ttMove))
+				log(PV, n + ":" + ttMove + " bad tt entry");
+			else {
+
 			// logMove(n, b, ttMove, b.getValue(), 0, 0, "");
 			MoveType mt = makeMove(n, depth, ttMove);
 			if (mt == MoveType.OK
@@ -1555,6 +1559,7 @@ public class AI implements Runnable
 
 				bestValue = vm;
 				bestmove = ttMove;
+			}
 			}
 		}
 
@@ -1642,40 +1647,23 @@ public class AI implements Runnable
 				if (max != 0
 					&& ((killerMove != null
 						&& max == killerMove.getMove())
-						|| (ttMove != 0
-						&& max == ttMove)))
+						|| (ttBestMove != null
+						&& max == ttBestMove.bestMove)))
 					continue;
 
-				int vm = 0;
-				if (max == 0) {
+				MoveType mt = makeMove(n, depth, max);
+				if (!(mt == MoveType.OK
+					|| mt == MoveType.CHASER
+					|| mt == MoveType.CHASED))
+					continue;
 
-			// A null move does not change the board
-			// so it doesn't change the hash.  But the hash
-			// could have been saved (in ttable or possibly boardHistory)
-			// for the opponent.  Even if the board is the same,
-			// the outcome is different if the player is different.
-			// So set a new hash and reset it after the move.
-					b.pushNullMove();
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 
-					vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
-					b.undo();
+				long h = b.getHash();
 
-					log(n + ": (null move) " + b.getValue() + " " + negQS(vm));
-				} else {
-					MoveType mt = makeMove(n, depth, max);
-					if (!(mt == MoveType.OK
-						|| mt == MoveType.CHASER
-						|| mt == MoveType.CHASED))
-						continue;
+				b.undo();
 
-					vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
-
-					long h = b.getHash();
-
-					b.undo();
-
-					logMove(n, max, b.getValue(), negQS(vm), h, mt);
-				}
+				logMove(n, max, b.getValue(), negQS(vm), h, mt);
 
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1708,6 +1696,18 @@ public class AI implements Runnable
 		// saving a heap of time.
 
 		MoveType mt = MoveType.OK;
+
+		if (tryMove == 0) {
+
+		// A null move does not change the board
+		// so it doesn't change the hash.  But the hash
+		// could have been saved (in ttable or possibly boardHistory)
+		// for the opponent.  Even if the board is the same,
+		// the outcome is different if the player is different.
+		// So set a new hash and reset it after the move.
+			b.pushNullMove();
+			return mt;
+		}
 
 		// Immobile Pieces
 		// Bombs and the Flag are not legal moves.  However,
@@ -1825,7 +1825,10 @@ public class AI implements Runnable
 
 	String logMove(Board b, int n, int move, MoveType mt)
 	{
-	
+
+	if (move == 0)
+		return "(null move)";
+
 	int color = b.getPiece(Move.unpackFrom(move)).getColor();
 	String s = "";
 	if (color == 1)
