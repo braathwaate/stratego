@@ -32,7 +32,9 @@ public class StrategoDriver
 		    else if (arg.equals("-2"))
 			Settings.twoSquares = true;
 		    else if (arg.equals("-v"))
-			Settings.debug = true;
+			Settings.debugLevel = 1;
+		    else if (arg.equals("-vv"))
+			Settings.debugLevel = 2;
 		    else if (arg.substring(0,2).equals("-l"))
 			Settings.aiLevel = Integer.parseInt(arg.substring(2));
 		    else if (arg.equals("-t")) {

@@ -53,6 +53,8 @@ public class AI implements Runnable
 	private TestingBoard b = null;
 	private CompControls engine = null;
 	private PrintWriter log;
+	static final int PV = 1;
+	static final int DETAIL = 2;
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private ArrayList<ArrayList<Integer>> rootMoveList = null;
 	// static move ordering
@@ -91,66 +93,13 @@ public class AI implements Runnable
 	// Once a QS value has been determined, subsequent moves that
 	// do not affect the QS can use the previous QS value.
 	class QSEntry {
-		long neighbors;
-		ArrayList<Integer> affected;
 		long hash;
 		int value;
 		int depth;
-		int turn;
 
-		QSEntry(int t, int d, long nb) {
-			turn = t;
+		QSEntry(int d, long h) {
 			depth = d;
-			neighbors = nb;
-			hash = 0;
-			value = 0;
-			affected = new ArrayList<Integer>();
-		}
-
-		void setAffected (int i, Board b)
-		{
-/*
-			Piece p = b.getPiece(i);
-			if (!affected.contains(i)) {
-				hash ^= Board.hashPiece(p, i);
-				for (int d : dir) {
-					int j = i + d;
-					if (!isValid(j))
-						continue;
-					Piece np = b.getPiece(j);
-					if (np == null)
-						continue;
-					hash ^= Board.hashPiece(np, j);
-				}
-				affected.add(i);
-			}
-*/
-		}
-
-		boolean isValid(int t, int d, long nb, Board b)
-		{
-/*
-			if (turn != t
-				|| depth != d
-				|| neighbors != nb)
-				return false;
-			long h = 0;
-			for (Integer i : affected) {
-				Piece p = b.getPiece(i);
-				h ^= Board.hashPiece(p, i);
-				for (int d : dir) {
-					int j = i + d;
-					if (!isValid(j))
-						continue;
-					Piece np = b.getPiece(j);
-					if (np == null)
-						continue;
-					h ^= Board.hashPiece(np, j);
-				}
-			}
-			return hash == h;
-*/
-return false;
+			hash = h;
 		}
 
 		void setValue(int v)
@@ -163,7 +112,25 @@ return false;
 			return value;
 		}
 	}
-	private QSEntry[] QSCtable = new QSEntry[10007];
+	private QSEntry[][] QSCtable;
+
+	static private long [][] depthHash = new long [2][MAX_PLY];
+	static {
+		Random rnd = new Random();
+               for ( int t = 0; t < 2; t++)
+                for ( int d = 0; d < MAX_PLY; d++) {
+                        long n = rnd.nextLong();
+
+                // It is really silly that java does not have unsigned
+                // so we lose a bit of precision.  hash has to
+                // be positive because we use it to index ttable.
+
+                        if (n < 0)
+                                depthHash[t][d] = -n;
+                        else
+                                depthHash[t][d] = n;
+                }
+	}
 
 	public AI(Board b, CompControls u) 
 	{
@@ -178,7 +145,7 @@ return false;
 	
 	public void getBoardSetup() throws IOException
 	{
-		if (Settings.debug)
+		if (Settings.debugLevel != 0)
 			log = new PrintWriter("ai.out", "UTF-8");
 	
 		File f = new File("ai.cfg");
@@ -339,9 +306,8 @@ return false;
 			else if (board.getPiece(Move.unpackFrom(bestMove)) == null)
  				log("bestMove from " + Move.unpackFrom(bestMove) + " to " + Move.unpackTo(bestMove) + " but from piece is null?");
 			else {
-				logPV(0, completedDepth);
-				logMove(0, bestMove, 0, 0, 0, MoveType.OK);
-				logFlush("");
+				logFlush("----");
+				log(PV, "\n" + logMove(b, 0, bestMove, MoveType.OK));
 				long t = System.currentTimeMillis() - startTime;
 				t = System.currentTimeMillis() - startTime;
 				log("aiReturnMove() at " + t + "ms");
@@ -706,7 +672,9 @@ return false;
 		// But this is a tradeoff, because retaining the
 		// the entries leads to increased search depth.
 		//ttable = new TTEntry[2<<22]; // 4194304, clear transposition table
-		QSCtable = new QSEntry [10007];
+
+		// clear the QS cache
+		QSCtable = new QSEntry [2][10007];
 
 		moveRoot = b.undoList.size();
 
@@ -901,7 +869,7 @@ return false;
 		}
 
 		Move killerMove = new Move(null, 0);
-		int vm = negamax(n, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove); 
+		int vm = negamax(n, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
 		completedDepth = n;
 
 		log("-+-");
@@ -955,7 +923,7 @@ return false;
 			log("Best move is null");
 			ArrayList<ArrayList<Integer>> saveRootMoveList = rootMoveList;
 			rootMoveList = getMoves(-n+1, Settings.topColor, null, null);
-			vm = negamax(1, -9999, 9999, Settings.topColor, 0, chasePiece, chasedPiece, killerMove); 
+			vm = negamax(1, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
 			rootMoveList = saveRootMoveList;
 		}
 
@@ -1029,8 +997,8 @@ return false;
 				discardPly = false;
 			} else {
 				discardPly = true;
+				log(1, "\nPV:" + n + " " + vm + ": best move discarded.");
 				n += 1;
-				log("ply " + n-1 + ": best move discarded.");
 				continue;
 			}
 		}
@@ -1038,6 +1006,8 @@ return false;
 		hh[bestMove]+=n;
 		log("-+++-");
 
+		log(1, "\nPV:" + n + " " + vm);
+		logPV(n, 0);
 		} // iterative deepening
 	}
 
@@ -1134,7 +1104,7 @@ return false;
 	// the opponent has a sure favorable attack in the future,
 	// and the ai depth does not reach the position of exchange.
 	
-	private int qs(int turn, int depth, int n, boolean flee)
+	private int qs(int depth, int n, boolean flee)
 	{
 		if (n < 1)
 			return b.getValue();
@@ -1143,7 +1113,9 @@ return false;
 		int nextBest = -9999;	// default value not significant
 
 		// try fleeing
-		int best = qs(1-turn, depth+1, n-1, true);
+		b.pushNullMove();
+		int best = qs(depth+1, n-1, true);
+		b.undo();
 
 		// "best" is b.getValue() after
 		// opponent's best attack if player can flee.
@@ -1163,15 +1135,15 @@ return false;
 //      bitset ^= t;
 //    }
 // }
-		long [] bg = new long[2];
-		b.grid.getNeighbors(1-turn, bg);
+		BitGrid bg = new BitGrid();
+		b.grid.getNeighbors(1-b.bturn, bg);
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
 			if (bi == 0)
 				k = 2;
 			else
 				k = 66;
-			long data = bg[bi];
+			long data = bg.get(bi);
 			while (data != 0) {
 				int ntz = Long.numberOfTrailingZeros(data);
 				int i = k + ntz;
@@ -1220,7 +1192,7 @@ return false;
 					continue;
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null || turn == tp.getColor())
+				if (tp == null || b.bturn == tp.getColor())
 					continue;
 
 				if (flee && isMovable(t))
@@ -1229,7 +1201,7 @@ return false;
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-				int vm = qs(1-turn, depth+1, n-1, false);
+				int vm = qs(depth+1, n-1, false);
 
 				b.undo();
 
@@ -1237,7 +1209,7 @@ return false;
 		// (if vm < best, the player will play
 		// some other move)
 
-				if (turn == Settings.topColor) {
+				if (b.bturn == Settings.topColor) {
 					if (vm > best) {
 						nextBest = best;
 						best = vm;
@@ -1262,44 +1234,103 @@ return false;
 		return best;
 	}
 
-	private int qscache(int turn, int depth, int n, boolean flee)
+	private int qscache(int depth)
 	{
-		return qs(turn, depth, n, flee);
-/*
+
+		BitGrid bg = new BitGrid();
+		b.grid.getNeighbors(bg);
 		int valueB = b.getValue();
-		long neighbors = b.grid.xorNeighbors();
-		if (neighbors == 0)
+
+		// As qs is defined, if there are no neighbors,
+		// qs is valueB
+
+		if (bg.get(0) == 0 && bg.get(1) == 0)
 			return valueB;
 
-		QSEntry entry = QSCtable[(int)(neighbors % 10007)];
-		if (entry != null && entry.isValid(turn, depth, neighbors, b)) {
+		// valueBluff() checks for a prior move capture,
+		// so qscache is invalid in this case
+
+		return qs(depth, QSMAX, false);
+/*
+
+		UndoMove um = b.getLastMove();
+		if (um != null && um.tp != null)
+			return qs(depth, QSMAX, false);
+
+		// calculate qshash to be sure
+		long qshash = 0;
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg.get(bi);
+			while (data != 0) {
+				int ntz = Long.numberOfTrailingZeros(data);
+				int i = k + ntz;
+				data ^= (1l << ntz);
+				Piece p = b.getPiece(i);
+
+		// If any of the pieces have an unknown rank
+		// along with chase rank and flee rank,
+		// the hash is invalid, because the AI uses
+		// this in determining the move value.
+		// TBD: fix this
+
+				Rank rank = p.getRank();
+				if ((bturn == Settings.topColor
+					&& rank == Rank.UNKNOWN)
+					&& (p.getActingRankChase() != Rank.NIL
+					|| p.getActingRankFleeLow() != Rank.NIL
+					|| p.getActingRankFleeHigh() != Rank.NIL))
+					return qs(depth, QSMAX, false);
+
+				qshash ^= b.hashPiece(bturn, p, i);
+			}
+		}
+
+		int qsindex = (int)(qshash % 10007);
+		QSEntry entry = QSCtable[b.bturn][qsindex];
+
+		if (entry != null
+			&& entry.hash == qshash
+			&& entry.depth == depth) {
 			// return valueB + entry.getValue();
 			int v = valueB + entry.getValue();
-			int v2 = qs(turn, depth, n, flee, null);
+			int v2 = qs(turn, depth, QSMAX, false);
 			if (v != v2)
-				log (String.format("bad qsentry %d", v));
+				log (PV, String.format("bad qsentry %d", v));
+			else
+				log (PV, String.format("qscache"));
 			return v2;
-		} else
-			entry = new QSEntry(turn, depth, neighbors);
+		}
+
+		if (entry == null)
+			entry = new QSEntry(depth, qshash);
+		else {
 
 		// always overwrite existing table entry because qs
 		// changes with depth (because captures are less valuable)
 
-		int v = qs(turn, depth, n, flee, entry);
+			entry.depth = depth;
+			entry.hash = qshash;
+		}
+
+		int v = qs(depth, QSMAX, false);
 
 		// save the delta qs value after a quiescent move
 		// for possible reuse
 
 		entry.setValue(v-valueB);
-		QSCtable[(int)(neighbors % 10007)] = entry;
+		QSCtable[turn][qsindex] = entry;
 		return v;
 */
-
 	}
 
-	private int negQS(int qs, int turn)
+	private int negQS(int qs)
 	{
-		if (turn == Settings.topColor)
+		if (b.bturn == Settings.topColor)
 			return qs;
 		else
 			return -qs;
@@ -1309,7 +1340,7 @@ return false;
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
 
-	private int negamax(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove) throws InterruptedException
+	private int negamax(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove) throws InterruptedException
 	{
 		if (bestMove != 0
 			&& stopTime != 0
@@ -1321,22 +1352,28 @@ return false;
 			for (int i = 0; i < depth; i++)
 				b.undo();
 
+			log(String.format("abort at %d", depth));
 			throw new InterruptedException();
 		}
 
 		int alphaOrig = alpha;
-		long hashOrig = b.getHash();
+		long hashOrig = getHash(n);
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
 		int ttMove = 0;
 
-		// use best move from transposition table for move ordering
 		if (entry != null
-			&& entry.hash == hashOrig) {
-			if (entry.turn != turn) //debug
-				log(n + ":" + turn + " bad turn entry");
-			else {
-			if (entry.depth - (moveRoot - entry.moveRoot) >= n
+			&& entry.hash == hashOrig
+			&& entry.turn == b.bturn
+			&& entry.depth == n) {
+
+		// Note that the same position at different depths
+		// or from prior moves does not have the same score,
+		// because the AI assigns less value to attacks
+		// at greater depths.  However, the best move 
+		// is still useful and often will generate the best score.
+
+			if (moveRoot == entry.moveRoot
 				&& (chasePiece != null || entry.type == TTEntry.SearchType.BROAD )) {
 				if (entry.flags == TTEntry.Flags.EXACT) {
 					killerMove.setMove(entry.bestMove);
@@ -1353,12 +1390,21 @@ return false;
 					return entry.bestValue;
 				}
 			}
+		}
 
+		if (n > 0) {
+		long ttMoveHash = getHash(n-1);
+		TTEntry ttMoveEntry = ttable[(int)(ttMoveHash % ttable.length)];
+		if (ttMoveEntry != null
+			&& ttMoveEntry.hash == ttMoveHash
+			&& ttMoveEntry.turn == b.bturn)  {
+
+		// use best move from transposition table for move ordering
 		// best move entries in the table are not tried
 		// if they are a null move
 		// or a duplicate of the killer move
 
-			ttMove = entry.bestMove;
+			ttMove = ttMoveEntry.bestMove;
 			if (Move.unpackFrom(ttMove) == 0
 				|| (killerMove != null
 					&& ttMove == killerMove.getMove()))
@@ -1369,14 +1415,14 @@ return false;
 				Piece fp = b.getPiece(from);
 				Piece tp = b.getPiece(to);
 				if (fp == null
-					|| fp.getColor() != turn
-					|| (tp != null && tp.getColor() == turn)) {
-					log(n + ":" + Grid.getX(from) + " " + Grid.getY(from) + " " + Grid.getX(to) + " " + Grid.getY(to)  + " bad tt entry");
+					|| fp.getColor() != b.bturn
+					|| (tp != null && tp.getColor() == b.bturn)) {
+					log(PV, n + ":" + Grid.getX(from) + " " + Grid.getY(from) + " " + Grid.getX(to) + " " + Grid.getY(to)  + " bad tt entry");
 					ttMove = 0;
 
 				}
 			}
-			}
+		}
 		}
 
 		if (n < 1
@@ -1384,7 +1430,7 @@ return false;
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
-			return negQS(qscache(turn, depth, QSMAX, false), turn);
+			return negQS(qscache(depth));
 		}
 
 
@@ -1410,21 +1456,34 @@ return false;
 		// flees, Blue Two moves right again, forking Red Five
 		// and Red Four.
 
-		if (chasePiece != null && turn == Settings.bottomColor) {
+		if (chasePiece != null && b.bturn == Settings.bottomColor) {
 			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
-				return negQS(qscache(turn, depth, QSMAX, false), turn);
+				return negQS(qscache(depth));
 		}
 
-		int vm = negamax2(n, alpha, beta, turn, depth, chasePiece, chasedPiece, killerMove, ttMove);
+		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttMove);
 
-		assert hashOrig == b.getHash() : "hash changed";
+		assert hashOrig == getHash(n) : "hash changed";
 
 		if (entry == null) {
 			entry = new TTEntry();
 			ttable[index] = entry;
 
-		// retain old entry if deeper and newer
-		} else if (entry.depth > n + (moveRoot - entry.moveRoot))
+		// Replacement scheme.
+		// Because the hash includes depth, shallower entries
+		// are automatically retained.  This is because a identical
+		// board position is evaluated differently at different
+		// depths, so the score is valid only at exactly the
+		// same depth.  So these entries can be helpful even
+		// at deeper searches.  They are also needed for PV
+		// because of repetitive moves.
+		//
+		// As such, replacement rarely
+		// happens until the table is mostly full.
+		// In the event of a collision,
+		// retain the entry if deeper and current
+		// (deeper entries have more time invested in them)
+		} else if (entry.depth > n && moveRoot == entry.moveRoot)
 			return vm;
 
 		// reuse existing entry and avoid garbage collection
@@ -1440,10 +1499,11 @@ return false;
 		else
 			entry.type = TTEntry.SearchType.BROAD;
 		entry.moveRoot = moveRoot;
-		entry.hash = b.getHash();
+		entry.hash = hashOrig;
 		entry.bestValue = vm;
 		entry.bestMove = killerMove.getMove();
-		entry.turn = turn;	//debug
+		entry.depth = n;
+		entry.turn = b.bturn;	//debug
 
 		return vm;
 	}
@@ -1465,7 +1525,7 @@ return false;
 		return max;
 	}
 
-	private int negamax2(int n, int alpha, int beta, int turn, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
+	private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, 0);
@@ -1473,17 +1533,17 @@ return false;
 
 		if (ttMove != 0) {
 			// logMove(n, b, ttMove, b.getValue(), 0, 0, "");
-			MoveType mt = makeMove(n, turn, depth, ttMove);
+			MoveType mt = makeMove(n, depth, ttMove);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 
-				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 
 				long h = b.getHash();
 				b.undo();
 
-				logMove(n, ttMove, b.getValue(), negQS(vm, turn), h, MoveType.TE);
+				logMove(n, ttMove, b.getValue(), negQS(vm), h, MoveType.TE);
 
 				alpha = Math.max(alpha, vm);
 
@@ -1507,17 +1567,17 @@ return false;
 		Piece fp = b.getPiece(kfrom);
 		Piece tp = b.getPiece(kto);
 		if (fp != null
-			&& fp.getColor() == turn
+			&& fp.getColor() == b.bturn
 			&& Grid.isAdjacent(kfrom, kto)
-			&& (tp == null || tp.getColor() != turn)) {
-			MoveType mt = makeMove(n, turn, depth, killerMove.getMove());
+			&& (tp == null || tp.getColor() != b.bturn)) {
+			MoveType mt = makeMove(n, depth, killerMove.getMove());
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
-				int vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 				long h = b.getHash();
 				b.undo();
-				logMove(n, killerMove.getMove(), b.getValue(), negQS(vm, turn), h, MoveType.KM);
+				logMove(n, killerMove.getMove(), b.getValue(), negQS(vm), h, MoveType.KM);
 				
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1551,7 +1611,7 @@ return false;
 			&& (n == 1 || chasePiece != null))
 			moveList = rootMoveList;
 		else
-			moveList = getMoves(n, turn, chasePiece, chasedPiece);
+			moveList = getMoves(n, b.bturn, chasePiece, chasedPiece);
 
 		for (int mo = 0; mo <= LOSES; mo++) {
 
@@ -1597,24 +1657,24 @@ return false;
 			// So set a new hash and reset it after the move.
 					b.pushNullMove();
 
-					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+					vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 					b.undo();
 
-					log(n + ": (null move) " + b.getValue() + " " + negQS(vm, turn));
+					log(n + ": (null move) " + b.getValue() + " " + negQS(vm));
 				} else {
-					MoveType mt = makeMove(n, turn, depth, max);
+					MoveType mt = makeMove(n, depth, max);
 					if (!(mt == MoveType.OK
 						|| mt == MoveType.CHASER
 						|| mt == MoveType.CHASED))
 						continue;
 
-					vm = -negamax(n-1, -beta, -alpha, 1 - turn, depth + 1, chasedPiece, chasePiece, kmove);
+					vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 
 					long h = b.getHash();
 
 					b.undo();
 
-					logMove(n, max, b.getValue(), negQS(vm, turn), h, mt);
+					logMove(n, max, b.getValue(), negQS(vm), h, mt);
 				}
 
 				if (vm > bestValue) {
@@ -1637,7 +1697,7 @@ return false;
 		return bestValue;
 	}
 
-	private MoveType makeMove(int n, int turn, int depth, int tryMove)
+	private MoveType makeMove(int n, int depth, int tryMove)
 	{
 		// NOTE: FORWARD TREE PRUNING (minor)
 		// isRepeatedPosition() discards repetitive moves.
@@ -1672,7 +1732,7 @@ return false;
 		// even if box is not checked (AI plays nice).
 
 		if (Settings.twoSquares
-			|| turn == Settings.topColor) {
+			|| b.bturn == Settings.topColor) {
 
 			if (b.isChased(tryMove)) {
 
@@ -1686,7 +1746,7 @@ return false;
 
 				b.move(tryMove, depth);
 				mt = MoveType.CHASED;
-			} else if (turn == Settings.topColor) {
+			} else if (b.bturn == Settings.topColor) {
 
 				if (b.isTwoSquaresChase(tryMove)) {
 
@@ -1714,6 +1774,11 @@ return false;
 			b.move(tryMove, depth);
 
 		return mt;
+	}
+
+	private long getHash(int d)
+	{
+		return b.getHash() ^ depthHash[b.bturn][d];
 	}
 
 	String logPiece(Piece p)
@@ -1758,12 +1823,11 @@ return false;
 	}
 
 
-	void logMove(Board b, int n, int move, int valueB, int value, long hash, MoveType mt)
+	String logMove(Board b, int n, int move, MoveType mt)
 	{
 	
 	int color = b.getPiece(Move.unpackFrom(move)).getColor();
-	String s;
-	s = n + ":";
+	String s = "";
 	if (color == 1)
 		s += "... ";
 	s += logPiece(b.getPiece(Move.unpackFrom(move)));
@@ -1786,57 +1850,59 @@ return false;
 		s += " " + logFlags(b.getPiece(Move.unpackFrom(move)));
 		s += " " + logFlags(b.getPiece(Move.unpackTo(move)));
 	}
-	s +=  " " + valueB + " " + value;
 	if (mt != MoveType.OK)
 		s += " " + mt;
-	log(s);
+	return s;
 	}
 
 	void logMove(int n, int move, int valueB, int value, long hash, MoveType mt)
 	{
-		logMove(b, n, move, valueB, value, hash, mt);
+		if (Settings.debugLevel != 0)
+			log(DETAIL, n + ":" + logMove(b, n, move, mt) + " " + valueB + " " + value);
 	}
 
 	public void logMove(Move m)
 	{
-		logMove(board, 0, m.getMove(), 0, 0, 0, MoveType.OK);
+		log(PV, logMove(board, 0, m.getMove(), MoveType.OK) + "\n");
+	}
+
+	private void log(int level, String s)
+	{
+		if (Settings.debugLevel >= level)
+			log.println(s);
 	}
 
 	private void log(String s)
 	{
-		if (Settings.debug)
-			log.println(s);
+		log(DETAIL, s);
 	}
 
 	public void logFlush(String s)
 	{
-		if (Settings.debug) {
+		if (Settings.debugLevel != 0) {
 			log.println(s);
 			log.flush();
 		}
 	}
 
-	private void logPV(int depth, int maxDepth)
+	private void logPV(int n, int depth)
 	{
-		if (maxDepth == 0)
+		if (n == 0)
 			return;
-		if (depth == 0)
-			log("PV:");
-		long hash = b.getHash();
+		long hash = getHash(n);
 		int index = (int)(hash % ttable.length);
 		TTEntry entry = ttable[index];
 		if (entry == null
 			|| hash != entry.hash)
 			return;
 		if (entry.bestMove == 0) {
-			log(depth + ":(null move)");
-			return;
-			// b.pushNullMove();
+			log(PV,  "   (null move)");
+			b.pushNullMove();
 		} else {
-			logMove(depth, entry.bestMove, 0, 0, 0, MoveType.OK);
+			log(PV, "   " + logMove(b, n, entry.bestMove, MoveType.OK));
 			b.move(entry.bestMove, depth);
 		}
-		logPV(++depth, --maxDepth);
+		logPV(--n, ++depth);
 		b.undo();
 	}
 }

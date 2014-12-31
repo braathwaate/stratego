@@ -26,7 +26,7 @@ public class Grid
 	// so that illegal moves are easily discarded
 
 	private Piece[] grid = new Piece[133];
-	private static Piece water = new Piece(UniqueID.get(), -1, Rank.WATER);
+	private static Piece water = new Piece(-1, Rank.WATER);
 
 	// It is useful to answer the following grid questions quickly:
 	// 1. Does a piece have any legal moves (is it trapped)?
@@ -80,6 +80,7 @@ public class Grid
                 static public int get()
                 {
                         id++;
+			assert id <= 81 : "Only 81 unique pieces including water";
                         return id;
                 }
         }
@@ -193,9 +194,20 @@ public class Grid
 		return pieceBitGrid[1-turn].andMask(neighbor[n][i]);
 	}
 
-	public void getNeighbors(int turn, long [] bg)
+	public void getNeighbors(int turn, BitGrid out)
 	{
-		pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], bg);
+		pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], out);
+	}
+
+	public void getNeighbors(BitGrid out)
+	{
+		BitGrid out1 = new BitGrid();
+		pieceBitGrid[0].getNeighbors(pieceBitGrid[1], out1);
+		pieceBitGrid[1].getNeighbors(pieceBitGrid[0], out1);
+
+		BitGrid out2 = new BitGrid(pieceBitGrid[0].low | pieceBitGrid[1].low, pieceBitGrid[0].high | pieceBitGrid[1].high);
+
+		out1.getNeighbors(out2, out);
 	}
 
 	// isAdjacent is the same as steps() == 1 but perhaps faster

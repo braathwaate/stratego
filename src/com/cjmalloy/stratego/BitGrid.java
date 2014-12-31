@@ -48,6 +48,15 @@ public class BitGrid
 
 	public BitGrid() { low = 0; high = 0; }
 	public BitGrid(BitGrid b) { low = b.low; high = b.high; }
+	public BitGrid(long l, long h) { low = l; high = h; }
+
+	public long get(int i)
+	{
+		if (i == 0)
+			return low;
+		else
+			return high;
+	}
 
 	public void setBit(int i) 
 	{
@@ -94,18 +103,18 @@ public class BitGrid
 	//
 	// This function returns 0 if there are no neighboring bits.
 
-	public void getNeighbors(BitGrid in, long [] out)
+	public void getNeighbors(BitGrid in, BitGrid out)
 	{
-		out[0] = ((low << 1) 
+		out.low |= ((low << 1) 
 			| (low >>> 1)
 			| (low << 11)
 			| (low >>> 11)
-			| ((in.high & 0x7fe) << 44)) & in.low;
+			| ((high & 0x7fe) << 53)) & in.low;
 
-		out[1] = ((high << 1)
+		out.high |= ((high << 1)
 			| (high >>> 1)
 			| (high << 11)
 			| (high >>> 11)
-			| (in.low >>> 44)) & in.high;
+			| (low >>> 53)) & in.high;
 	}
 }

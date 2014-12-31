@@ -36,20 +36,18 @@ public class Piece implements Comparable<Piece>
 
 	// a known piece can be not shown
 	// a shown piece can be unknown to the computer
-	    public enum Flags {
-		IS_SUSPECTED,
-		MAYBE_EIGHT,	// unknown piece could be an eight
-		IS_LESS,
-		IS_BLOCKER,
-		IS_SHOWN,	// visible on screen
-		IS_KNOWN	// known to players
-	    }
+	static private final int IS_SUSPECTED = 1 << 0;
+	static private final int MAYBE_EIGHT = 1 << 1;	// unknown piece could be an eight
+	static private final int IS_LESS = 1 << 2;
+	static private final int IS_BLOCKER = 1 << 3;
+	static private final int IS_KNOWN = 1 << 4;	// known to players
+	static private final int IS_SHOWN = 1 << 5;	// visible on screen
 
-	private EnumSet<Flags> flags = EnumSet.noneOf(Flags.class);
+	private int flags = 0;
 
-	public Piece(int id, int c, Rank r) 
+	public Piece(int c, Rank r) 
 	{
-		uniqueID = id;
+		uniqueID = Grid.UniqueID.get();
 		color = c;
 		rank = r;
 	}
@@ -68,7 +66,7 @@ public class Piece implements Comparable<Piece>
 		actingRankFleeLow = p.actingRankFleeLow;
 		actingRankFleeHigh = p.actingRankFleeHigh;
 		actingRankChase = p.actingRankChase;
-		flags = p.flags.clone();
+		flags = p.flags;
 		value = p.value;
 		index = p.index;
 	}
@@ -79,7 +77,7 @@ public class Piece implements Comparable<Piece>
 		actingRankChase = Rank.NIL;
 		actingRankFleeLow = Rank.NIL;
 		actingRankFleeHigh = Rank.NIL;
-		flags = EnumSet.noneOf(Flags.class);
+		flags = 0;
 		value = 0;
 		index = 0;
 	}
@@ -91,7 +89,7 @@ public class Piece implements Comparable<Piece>
 
 	public void makeKnown()
 	{
-		flags.add(Flags.IS_KNOWN);
+		flags |= IS_KNOWN;
 	}
 
 	public int getColor() 
@@ -119,28 +117,28 @@ public class Piece implements Comparable<Piece>
 	
 	public boolean isShown()
 	{
-		return flags.contains(Flags.IS_SHOWN);
+		return (flags & IS_SHOWN) != 0;
 	}
 	
 	public void setShown(boolean b)
 	{
 		if (b)
-			flags.add(Flags.IS_SHOWN);
+			flags |= IS_SHOWN;
 		else
-			flags.remove(Flags.IS_SHOWN);
+			flags &= ~IS_SHOWN;
 	}	
 	
 	public boolean isKnown()
 	{
-		return flags.contains(Flags.IS_KNOWN);
+		return (flags & IS_KNOWN) != 0;
 	}
 	
 	public void setKnown(boolean b)
 	{
 		if (b)
-			flags.add(Flags.IS_KNOWN);
+			flags |= IS_KNOWN;
 		else
-			flags.remove(Flags.IS_KNOWN);
+			flags &= ~IS_KNOWN;
 	}
 
 	public boolean hasMoved()
@@ -173,18 +171,18 @@ public class Piece implements Comparable<Piece>
 	public void setActingRankChaseEqual(Rank r)
 	{
 		actingRankChase = r;
-		flags.remove(Flags.IS_LESS);
+		flags &= ~IS_LESS;
 	}
 
 	public void setActingRankChaseLess(Rank r)
 	{
 		actingRankChase = r;
-		flags.add(Flags.IS_LESS);
+		flags |= IS_LESS;
 	}
 
 	public boolean isRankLess()
 	{
-		return flags.contains(Flags.IS_LESS);
+		return (flags & IS_LESS) != 0;
 	}
 
 	public Rank getActingRankFleeLow()
@@ -220,39 +218,39 @@ public class Piece implements Comparable<Piece>
 
 	public boolean isSuspectedRank()
 	{
-		return flags.contains(Flags.IS_SUSPECTED);
+		return (flags & IS_SUSPECTED) != 0;
 	}
 
 	public void setSuspectedRank(Rank r)
 	{
 		setRank(r);
-		flags.add(Flags.IS_SUSPECTED);
+		flags |= IS_SUSPECTED;
 	}
 
 	public void setBlocker(boolean b)
 	{
 		if (b)
-			flags.add(Flags.IS_BLOCKER);
+			flags |= IS_BLOCKER;
 		else
-			flags.remove(Flags.IS_BLOCKER);
+			flags &= ~IS_BLOCKER;
 	}
 
 	public boolean isBlocker()
 	{
-		return flags.contains(Flags.IS_BLOCKER);
+		return (flags & IS_BLOCKER) != 0;
 	}
 
 	public void setMaybeEight(boolean b)
 	{
 		if (b)
-			flags.add(Flags.MAYBE_EIGHT);
+			flags |= MAYBE_EIGHT;
 		else
-			flags.remove(Flags.MAYBE_EIGHT);
+			flags &= MAYBE_EIGHT;
 	}
 
 	public boolean getMaybeEight()
 	{
-		return flags.contains(Flags.MAYBE_EIGHT);
+		return (flags & MAYBE_EIGHT) != 0;
 	}
 
 	public int getIndex()
@@ -268,6 +266,12 @@ public class Piece implements Comparable<Piece>
 	public int compareTo(Piece p)
 	{
 		return uniqueID - p.uniqueID;
+	}
+
+	// returns all flags that affect the board position
+	public int getStateFlags()
+	{
+		return flags & ~IS_SHOWN;
 	}
 	
 	public boolean equals(Object p)

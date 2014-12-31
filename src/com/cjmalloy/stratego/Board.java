@@ -35,6 +35,7 @@ public class Board
         public ArrayList<UndoMove> undoList = new ArrayList<UndoMove>();
 	public static final int RED  = 0;
 	public static final int BLUE = 1;
+	public static int bturn = RED;
 	public static final Spot IN_TRAY = new Spot(-1, -1);
 	
 	public Grid grid = new Grid();
@@ -48,11 +49,17 @@ public class Board
 	// correllating against all setups in the database
 	protected Rank[] setup = new Rank[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
-	protected static long[][][][][] boardHash = new long[2][2][2][15][121];
-	protected static long[] turnHash = new long[2];
-	protected long hash = 0;
+	protected static long[][][][][] boardHash = new long[2][32][2][15][121];
 
-	protected static HashMap<Long, UndoMove>  boardHistory = new HashMap<Long, UndoMove>();
+	protected class BoardHistory {
+		public long hash;
+		protected HashMap<Long, UndoMove>  hashmap = new HashMap<Long, UndoMove>();
+		public void clear() { hashmap.clear(); hash = 0; }
+		public void put(UndoMove um) { hashmap.put(hash, um); }
+		public UndoMove get() { return hashmap.get(hash); }
+		public void remove() { hashmap.remove(hash); }
+	}
+	protected static BoardHistory[] boardHistory = new BoardHistory[2];
 
         protected int[][] knownRank = new int[2][15];   // discovered ranks
         protected int[][] trayRank = new int[2][15];    // ranks in trays
@@ -60,22 +67,6 @@ public class Board
 
 	static {
 		Random rnd = new Random();
-		for ( int k = 0; k < 2; k++)
-		for ( int m = 0; m < 2; m++)
-		for ( int c = RED; c <= BLUE; c++)
-		for ( int r = 0; r < 15; r++)
-		for ( int i = 12; i <= 120; i++) {
-			long n = rnd.nextLong();
-
-		// It is really silly that java does not have unsigned
-		// so we lose a bit of precision.  hash has to
-		// be positive because we use it to index ttable.
-
-			if (n < 0)
-				boardHash[k][m][c][r][i] = -n;
-			else
-				boardHash[k][m][c][r][i] = n;
-		}
 
 	// An identical position differs depending on whose turn it is.
 	// For example,
@@ -88,66 +79,78 @@ public class Board
 	//
 	// (B) can also be reached if Red plays R8 down, Blue plays B5xR9.
 	// Red now has the move.
+	//
 
-		for ( int t = 0; t < 2; t++) {
+		for ( int c = RED; c <= BLUE; c++)
+		for ( int k = 0; k < 32; k++)
+		for ( int m = 0; m < 2; m++)
+		for ( int r = 0; r < 15; r++)
+		for ( int i = 12; i <= 120; i++) {
 			long n = rnd.nextLong();
+
+		// It is really silly that java does not have unsigned
+		// so we lose a bit of precision.  hash has to
+		// be positive because we use it to index ttable.
+
 			if (n < 0)
-				turnHash[t] = -n;
+				boardHash[c][k][m][r][i] = -n;
 			else
-				turnHash[t] = n;
+				boardHash[c][k][m][r][i] = n;
 		}
 	}
 	
 	public Board()
 	{
 		//create pieces
-		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FLAG));
-		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SPY));
-		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.ONE));
-		red.add(new Piece(Grid.UniqueID.get(), RED, Rank.TWO));
+		red.add(new Piece(RED, Rank.FLAG));
+		red.add(new Piece(RED, Rank.SPY));
+		red.add(new Piece(RED, Rank.ONE));
+		red.add(new Piece(RED, Rank.TWO));
 		for (int j=0;j<2;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.THREE));
+			red.add(new Piece(RED, Rank.THREE));
 		for (int j=0;j<3;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FOUR));
+			red.add(new Piece(RED, Rank.FOUR));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.FIVE));
+			red.add(new Piece(RED, Rank.FIVE));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SIX));
+			red.add(new Piece(RED, Rank.SIX));
 		for (int j=0;j<4;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.SEVEN));
+			red.add(new Piece(RED, Rank.SEVEN));
 		for (int j=0;j<5;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.EIGHT));
+			red.add(new Piece(RED, Rank.EIGHT));
 		for (int j=0;j<8;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.NINE));
+			red.add(new Piece(RED, Rank.NINE));
 		for (int j=0;j<6;j++)
-			red.add(new Piece(Grid.UniqueID.get(), RED, Rank.BOMB));
+			red.add(new Piece(RED, Rank.BOMB));
 
 		//create pieces
-		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FLAG));
-		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SPY));
-		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.ONE));
-		blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.TWO));
+		blue.add(new Piece(BLUE, Rank.FLAG));
+		blue.add(new Piece(BLUE, Rank.SPY));
+		blue.add(new Piece(BLUE, Rank.ONE));
+		blue.add(new Piece(BLUE, Rank.TWO));
 		for (int j=0;j<2;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.THREE));
+			blue.add(new Piece(BLUE, Rank.THREE));
 		for (int j=0;j<3;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FOUR));
+			blue.add(new Piece(BLUE, Rank.FOUR));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.FIVE));
+			blue.add(new Piece(BLUE, Rank.FIVE));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SIX));
+			blue.add(new Piece(BLUE, Rank.SIX));
 		for (int j=0;j<4;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.SEVEN));
+			blue.add(new Piece(BLUE, Rank.SEVEN));
 		for (int j=0;j<5;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.EIGHT));
+			blue.add(new Piece(BLUE, Rank.EIGHT));
 		for (int j=0;j<8;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.NINE));
+			blue.add(new Piece(BLUE, Rank.NINE));
 		for (int j=0;j<6;j++)
-			blue.add(new Piece(Grid.UniqueID.get(), BLUE, Rank.BOMB));
+			blue.add(new Piece(BLUE, Rank.BOMB));
 
 		tray.addAll(red);
 		tray.addAll(blue);
 
 		Collections.sort(tray);
+		boardHistory[0] = new BoardHistory();
+		boardHistory[1] = new BoardHistory();
 	}
 
 	public Board(Board b)
@@ -157,7 +160,6 @@ public class Board
 		tray.addAll(b.tray);
 		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
-		hash = b.hash;
 		trayRank = b.trayRank.clone();
 		knownRank = b.knownRank.clone();
 		piecesInTray = b.piecesInTray.clone();
@@ -303,9 +305,9 @@ public class Board
 		for (int i = 12; i <=120; i++)
 			setup[i] = Rank.UNKNOWN;
 
-		hash = 0;
-
-		boardHistory.clear();
+		bturn = 0;
+		boardHistory[0].clear();
+		boardHistory[1].clear();
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -369,13 +371,13 @@ public class Board
 	// Zobrist hashing.
 	// Used to determine redundant board positions.
 	//
-	// TBD: Unknown opponent pieces have UNKNOWN rank.  Hence, if two
-	// UNKNOWN pieces swap positions, the board is considered
-	// to be the same.  However, the AI does not consider all
-	// UNKNOWN pieces to be the same, because the AI bases rank
-	// rank predictions based on setup and the movement of the piece.
-	// So for UNKNOWN pieces, the rank should instead be the
-	// predicted rank.
+	// Unknown pieces (ai or opponent) are not all identical.
+	// Hence, if two unknown pieces swap positions, the board is different,
+	// because the AI bases rank predictions based on setup
+	// and the history of the piece interactions.
+	// Presently the AI does not consolidate all its information
+	// (i.e. actingranks) into a single predicted rank, so the
+	// hash cannot be relied on for unknown ranks.
 	//
 	// Should "known" be included in the hash?  At first glance,
 	// a known piece creates a different board position from
@@ -387,41 +389,58 @@ public class Board
 	// square, its apparent rank would also change.  The only case
 	// worth distinguishing is an unknown AI Nine moving more than one
 	// square.
-	//
-
+/*
 	public void rehash(long v)
 	{
 		if (v < 0)
 			v = -v;
 		hash ^= v;
 	}
+*/
 
-	static public long hashPiece(Piece p, int i)
+	// A board position (and hash) reflects all that each player
+	// knows.  The AI knows its piece ranks and has information
+	// it keeps about the opponent ranks.  The opponent sees
+	// only what is known and what information can be gathered.
+	//
+	// Note that the hash is unreliable for unknown pieces
+	// (see above).
+
+	static public long hashPiece(int turn, Piece p, int i)
 	{
-		Rank rank;
-		if (p.getColor() == Settings.topColor)
-			rank = p.getRank();
-		else
-			rank = p.getApparentRank();
-
-		return boardHash
-			[p.isKnown() ? 1 : 0]
-			[p.hasMoved() ? 1 : 0]
-			[p.getColor()]
-			[rank.toInt()-1]
-			[i];
+		if (turn == Settings.topColor) {
+			return boardHash
+				[p.getColor()]
+				[p.getStateFlags()]
+				[p.hasMoved() ? 1 : 0]
+				[p.getRank().toInt()-1]
+				[i];
+		} else {
+			Rank rank = p.getRank();
+			if (p.getColor() == Settings.topColor
+				&& !p.isKnown())
+				rank = Rank.UNKNOWN;
+			return boardHash
+				[p.getColor()]
+				[p.getStateFlags()]
+				[p.hasMoved() ? 1 : 0]
+				[rank.toInt()-1]
+				[i];
+		}
 	}
 
 	public void rehash(Piece p, int i)
 	{
-		hash ^= hashPiece(p, i);
+		boardHistory[Settings.topColor].hash ^= hashPiece(Settings.topColor, p, i);
+		boardHistory[Settings.bottomColor].hash ^= hashPiece(Settings.bottomColor, p, i);
 	}
 	
 	public void setPiece(Piece p, int i)
 	{
 		Piece bp = getPiece(i);
-		if (bp != null)
+		if (bp != null) {
 			rehash(bp, i);
+		}
 
 		if (p != null) {
 			grid.setPiece(i, p);
@@ -465,10 +484,11 @@ public class Board
 	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int m)
 	{
-		UndoMove um = new UndoMove(fp, tp, m, hash, 0);
+		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash, 0);
 		undoList.add(um);
 
-		boardHistory.put(hash^turnHash[undoList.size()%2], um);
+		boardHistory[bturn].put(um);
+		bturn = 1 - bturn;
 
 		// Acting rank is a historical property of the known
 		// opponent piece ranks that a moved piece was adjacent to.
@@ -1363,7 +1383,7 @@ public class Board
 		// rather than at position C)
 		// -- then this is a repetitive move
 		if (m == m4.getMove()
-			&& hash == m4.hash
+			&& boardHistory[bturn].hash == m4.hash
 			&& Move.unpackFrom(m) != m6.getTo())
 			return false;
 
@@ -1394,7 +1414,7 @@ public class Board
 		// has seen the position that the
 		// current player has just created.
 		// 
-		UndoMove entry = boardHistory.get(hash^turnHash[1-undoList.size()%2]);
+		UndoMove entry = boardHistory[bturn].get();
 		if (entry == null)
 			return false;
 
@@ -1408,6 +1428,10 @@ public class Board
 		int size = undoList.size();
 		if (size < 2)
 			return;
+
+		boardHistory[0].remove();
+		boardHistory[1].remove();
+
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
 			Piece fp = undo.getPiece();
@@ -1428,8 +1452,6 @@ public class Board
 			undoList.remove(size - 1);
 		}
 		Collections.sort(tray);
-
-		boardHistory.remove(hash);
 	}
 
 
@@ -1565,7 +1587,7 @@ public class Board
 
 	public long getHash()
 	{
-		return hash^turnHash[undoList.size()%2];
+		return boardHistory[bturn].hash;
 	}
 }
 

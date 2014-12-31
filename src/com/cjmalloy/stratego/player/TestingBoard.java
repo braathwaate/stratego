@@ -72,7 +72,7 @@ public class TestingBoard extends Board
 	protected int[][] valueStealth = new int[2][15];
 	protected int expendableRank[] = { 6, 7, 9 };
 	protected int importantRank[] = { 1, 2, 3, 8 };
-	protected long hashTest;
+	protected long[] hashTest = new long [2];
 	protected int lowestUnknownNotSuspectedRank;
 	protected int lowestUnknownExpendableRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
@@ -192,7 +192,8 @@ public class TestingBoard extends Board
 		super(t);
 
 		value = 0;
-		hashTest = hash;	// for debugging (see move)
+		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
+		hashTest[1] = boardHistory[1].hash;	// for debugging (see move)
 
 		for (int c = RED; c <= BLUE; c++) {
 			flag[c]=null;
@@ -2824,8 +2825,14 @@ public class TestingBoard extends Board
 		}
 
 		// If the piece hasn't moved, then maybe its a bomb
-		if (p.moves == 0)
-			return Rank.BOMB;
+		// COMMENTED OUT: Version 9.3
+		// The AI just cannot willy nilly suspect any unmoved
+		// piece to be a bomb!  Suspected bombs must be chosen
+		// very carefully because the AI pieces generally do
+		// not fear suspected bombs.  Not sure what this code
+		// was trying to accomplish.
+		// if (p.moves == 0)
+		//	return Rank.BOMB;
 
 		return newRank;
 	}
@@ -3187,8 +3194,10 @@ public class TestingBoard extends Board
 		Piece tp = getPiece(Move.unpackTo(m));
 		moveHistory(fp, tp, m);
 
-		if (depth == 0)
-			assert hash == hashTest : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
+		if (depth == 0) {
+			assert boardHistory[0].hash == hashTest[0] : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
+			assert boardHistory[1].hash == hashTest[1] : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
+		}
 
 		setPiece(null, Move.unpackFrom(m));
 		int vm = 0;
@@ -3642,6 +3651,7 @@ public class TestingBoard extends Board
 		//			setPiece(fp, m.getTo());
 		//			fp.setIndex(m.getTo());
 		//		}
+				//vm = 0; // fubar
 				break;
 
 			case Rank.LOSES :
@@ -3712,6 +3722,7 @@ public class TestingBoard extends Board
 					setPiece(tp, Move.unpackTo(m));
 				}
 
+				// vm = 0; // fubar
 				break;
 
 			case Rank.WINS:
@@ -3886,6 +3897,7 @@ public class TestingBoard extends Board
 				fp.moves++;
 				setPiece(fp, Move.unpackTo(m)); // won
 				fp.setIndex(Move.unpackTo(m));
+				//vm = 0; // fubar
 				break;
 
 			case Rank.UNK:
@@ -4048,225 +4060,225 @@ public class TestingBoard extends Board
 				if (p.getRank() == Rank.UNKNOWN) {
 					if (p.hasMoved() && !fp.isKnown()) {
 						count = 0;
-						break;
+							break;
+						}
+						count++;
 					}
-					count++;
+				}
+
+			// There must be at least 2 unknown neighbors,
+			// othewise the isolated piece is probably a bomb.
+
+				if (count >= 2) {
+					int div = 2;
+
+			// If the AI piece is known, a moved piece
+			// that the opponent allows to be taken is
+			// probably a lower rank, so it is better to
+			// attack unmoved pieces.
+
+			// TBD: Should the AI piece head for the rear rank or
+			// the front rank?  The front rank will likely have
+			// Fours but the rear rank will likely have Eights
+			// and possibly the Spy, One or Two, but much more
+			// bombs.
+
+					if (fp.isKnown() && tp.moves == 0)
+						div++;
+
+			// If the AI piece approached and the opponent
+			// neglected to attack, it is more likely that
+			// the opponent piece is weak (or a bomb).
+			// (This is always true throughout the duration of
+			// the game, but as the game progresses, the
+			// bomb density grows which cancels the advantage
+			// of attack).
+
+					if (isFleeing(fp, tp))
+						div++;
+
+					fpvalue = fpvalue / div;
 				}
 			}
 
-		// There must be at least 2 unknown neighbors,
-		// othewise the isolated piece is probably a bomb.
+			int tpvalue;
+			if (fprank.toInt() > lowestUnknownNotSuspectedRank)
+				tpvalue = unknownValue(fp, tp);
+			else {
 
-			if (count >= 2) {
-				int div = 2;
+			// In an unknown attack, the AI loses its piece but gains
+			// the stealth value of the opposing piece.
+			// But if there are not any opposing pieces of lower rank,
+			// it gains only the stealth value of an Unknown.
 
-		// If the AI piece is known, a moved piece
-		// that the opponent allows to be taken is
-		// probably a lower rank, so it is better to
-		// attack unmoved pieces.
-
-		// TBD: Should the AI piece head for the rear rank or
-		// the front rank?  The front rank will likely have
-		// Fours but the rear rank will likely have Eights
-		// and possibly the Spy, One or Two, but much more
-		// bombs.
-
-				if (fp.isKnown() && tp.moves == 0)
-					div++;
-
-		// If the AI piece approached and the opponent
-		// neglected to attack, it is more likely that
-		// the opponent piece is weak (or a bomb).
-		// (This is always true throughout the duration of
-		// the game, but as the game progresses, the
-		// bomb density grows which cancels the advantage
-		// of attack).
-
-				if (isFleeing(fp, tp))
-					div++;
-
-				fpvalue = fpvalue / div;
-			}
-		}
-
-		int tpvalue;
-		if (fprank.toInt() > lowestUnknownNotSuspectedRank)
-			tpvalue = unknownValue(fp, tp);
-		else {
-
-		// In an unknown attack, the AI loses its piece but gains
-		// the stealth value of the opposing piece.
-		// But if there are not any opposing pieces of lower rank,
-		// it gains only the stealth value of an Unknown.
-
-			assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
-			tpvalue = valueStealth[1-fpcolor][Rank.UNKNOWN.toInt()-1];
-		}
-
-		// If the AI attacks an unknown unmoved piece, reduce
-		// the value by the number of pieces remaining, because
-		// the likelyhood that the piece is a bomb increases
-		// as the pieces become fewer.  This fixes the bug
-		// where lowestUnknownExpendableRank is the Spy (the
-		// last unknown piece on the board), so the value of
-		// a moved Unknown would be the Spy.  This caused the AI
-		// to slam into unknown pieces thinking that they were
-		// the spy, but were just bombs.
-
-		if (tp.moves == 0)
-			tpvalue = tpvalue * npieces[Settings.bottomColor]/40;
-		vm += tpvalue - fpvalue;
-
-		// What should happen to the ai piece
-		// after an attack on an unknown piece?
-
-		// In a field of unknowns, if an ai piece survives
-		// and retains its value, it would never enter
-		// the field, because each successive ply
-		// would become more negative.  In the position below,
-		// it would allow itself to be captured by Blue One
-		// because attacking an unknown leads to another
-		// position with more unknowns, and it would lose
-		// twice its value.
-
-		//       B1 
-		// ?? ?? R4 ?? ??
-		// ?? ?? ?? ?? ??
-
-		// But often attacking one unknown is better
-		// than attacking another, and this evaluation
-		// depends on the ai piece survival.
-
-		// In the position below, it is better for Red Four
-		// to attack the unknown on the right because
-		// the left unknown is a certain to recapture
-		// by Blue One.  An addition bonus on the right
-		// is that there is only one more possible unknown 
-		// attack before freedom is assured.
-
-		//    B1
-		// ?? ?? R4 ?? ??
-		// ?? ?? B2    ??
-
-		// One solution is to allow the ai piece
-		// to survive, but greatly reduce its value.
-
-		// Another idea is to allow the ai piece
-		// to survive if the value of the move is positive.
-		// (this needs to be checked)
-
-		// If the ai piece does not survive, it is prone
-		// to the following blunder.  In the position below,
-		// Red Four may attack the unknown piece because
-		// if Red Four does not survive, then the ai
-		// cannot see the easy recapture.
-
-		// R4
-		// ??
-		// B3
-
-		// Note: tpvalue and fpvalue contains stealth
-
-			if (vm < 0) {
-
-		// Note that an attack on an unknown
-		// creates a known Unknown.
-					if (isPossibleBomb(tp))
-						tp.setSuspectedRank(Rank.BOMB);
-					else 
-						makeWinner(tp, fprank);
-					makeKnown(tp);
-					setPiece(tp, Move.unpackTo(m));
-
-			} else {
-				makeKnown(fp);
-				fp.moves++;
-				setPiece(fp, Move.unpackTo(m)); // won
-				fp.setIndex(Move.unpackTo(m));
+				assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
+				tpvalue = valueStealth[1-fpcolor][Rank.UNKNOWN.toInt()-1];
 			}
 
+			// If the AI attacks an unknown unmoved piece, reduce
+			// the value by the number of pieces remaining, because
+			// the likelyhood that the piece is a bomb increases
+			// as the pieces become fewer.  This fixes the bug
+			// where lowestUnknownExpendableRank is the Spy (the
+			// last unknown piece on the board), so the value of
+			// a moved Unknown would be the Spy.  This caused the AI
+			// to slam into unknown pieces thinking that they were
+			// the spy, but were just bombs.
+
+			if (tp.moves == 0)
+				tpvalue = tpvalue * npieces[Settings.bottomColor]/40;
+			vm += tpvalue - fpvalue;
+
+			// What should happen to the ai piece
+			// after an attack on an unknown piece?
+
+			// In a field of unknowns, if an ai piece survives
+			// and retains its value, it would never enter
+			// the field, because each successive ply
+			// would become more negative.  In the position below,
+			// it would allow itself to be captured by Blue One
+			// because attacking an unknown leads to another
+			// position with more unknowns, and it would lose
+			// twice its value.
+
+			//       B1 
+			// ?? ?? R4 ?? ??
+			// ?? ?? ?? ?? ??
+
+			// But often attacking one unknown is better
+			// than attacking another, and this evaluation
+			// depends on the ai piece survival.
+
+			// In the position below, it is better for Red Four
+			// to attack the unknown on the right because
+			// the left unknown is a certain to recapture
+			// by Blue One.  An addition bonus on the right
+			// is that there is only one more possible unknown 
+			// attack before freedom is assured.
+
+			//    B1
+			// ?? ?? R4 ?? ??
+			// ?? ?? B2    ??
+
+			// One solution is to allow the ai piece
+			// to survive, but greatly reduce its value.
+
+			// Another idea is to allow the ai piece
+			// to survive if the value of the move is positive.
+			// (this needs to be checked)
+
+			// If the ai piece does not survive, it is prone
+			// to the following blunder.  In the position below,
+			// Red Four may attack the unknown piece because
+			// if Red Four does not survive, then the ai
+			// cannot see the easy recapture.
+
+			// R4
+			// ??
+			// B3
+
+			// Note: tpvalue and fpvalue contains stealth
+
+				if (vm < 0) {
+
+			// Note that an attack on an unknown
+			// creates a known Unknown.
+						if (isPossibleBomb(tp))
+							tp.setSuspectedRank(Rank.BOMB);
+						else 
+							makeWinner(tp, fprank);
+						makeKnown(tp);
+						setPiece(tp, Move.unpackTo(m));
 
 				} else {
+					makeKnown(fp);
+					fp.moves++;
+					setPiece(fp, Move.unpackTo(m)); // won
+					fp.setIndex(Move.unpackTo(m));
+				}
 
-		// AI IS DEFENDER (tp)
 
-		// What is the likely outcome if a known AI piece
-		// is defending an unknown attacker?
-		//
-		// If the attacker approaches the AI piece, it
-		// acquires an ActingRankChase of the AI piece.
-		// This causes winFight() to return WINS/LOSES.
-		// (This case needs to be symmetric in
-		// unknownValue() when the AI is the attacker.)
-		//
-		// Here is the example:
-		//
-		// -- R5
-		// -- R3
-		// B? --
-		// -- B?
-		//
-		// Upper unknown Blue moves up to attack Red 3, acquiring
-		// an ActingRankChase of Three.  Known Red
-		// has a choice between Blue WINS by staying
-		// put or take its chances with by approaching
-		// the lower unknown Blue.  This is preferable result,
-		// although one could argue the outcome could
-		// be identical if Blue is bluffing. 
-		//
-		// But certainly, approaching the lower unknown
-		// should not be worse.  The problem is that
-		// WINS/LOSES makes the unknown Blue attacker a Two
-		// after the attack, and so WINS/LOSES returns a
-		// not so negative result because of the stealth
-		// value of a Two.  unknownValue() currently
-		// does not make that prediction because the
-		// outcome is unknown, and certainly a Three should
-		// have a high probability of winning when it
-		// approaches a random unknown piece.
-		//
-		// Here is a more complex example:
-		// B4 R3 -- -- --
-		// -- -- -- B? --
-		// -- -- -- R2 --
-		// -- -- B? -- B?
-		//
-		// It is Red's move.  Unknown Blue has just approached
-		// Red Two, acquiring a chase rank of Two.  This makes its
-		// suspected Rank a One.  So Red Two should move away
-		// from that unknown and take its chances with the other
-		// unknowns.  But it could also stay pat and instead
-		// take Blue Four, assuming that the approaching unknown
-		// is bluffing and perhaps one of the other two unknowns
-		// is the actual One. What would you do?
-		//
-		// Note: If a piece approaches a known AI piece, then
-		// it usually has a suspected rank, and is not handled here.
-		// But if a known AI piece approaches an opponent unknown,
-		// then the opponent attack is handled by the formula
-		// below because tp.moves != 0.
-		//
-		// If an unknown opponent piece approaches an unknown AI
-		// piece, what is the probability that it will attack the
-		// AI piece?  The opponent piece only sees the apparent value
-		// of the AI piece.
-					assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
+					} else {
 
-					int tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
+			// AI IS DEFENDER (tp)
 
-		// Outcome is the negation as if ai
-		// were the attacker.
-		//
-		// But note that the resulting value
-		// of AI PIECE X OPP PIECE !=
-		// OPP PIECE X AI PIECE,
-		// because the former uses the
-		// actual AI piece value and the
-		// latter uses the apparent piece value.
+			// What is the likely outcome if a known AI piece
+			// is defending an unknown attacker?
+			//
+			// If the attacker approaches the AI piece, it
+			// acquires an ActingRankChase of the AI piece.
+			// This causes winFight() to return WINS/LOSES.
+			// (This case needs to be symmetric in
+			// unknownValue() when the AI is the attacker.)
+			//
+			// Here is the example:
+			//
+			// -- R5
+			// -- R3
+			// B? --
+			// -- B?
+			//
+			// Upper unknown Blue moves up to attack Red 3, acquiring
+			// an ActingRankChase of Three.  Known Red
+			// has a choice between Blue WINS by staying
+			// put or take its chances with by approaching
+			// the lower unknown Blue.  This is preferable result,
+			// although one could argue the outcome could
+			// be identical if Blue is bluffing. 
+			//
+			// But certainly, approaching the lower unknown
+			// should not be worse.  The problem is that
+			// WINS/LOSES makes the unknown Blue attacker a Two
+			// after the attack, and so WINS/LOSES returns a
+			// not so negative result because of the stealth
+			// value of a Two.  unknownValue() currently
+			// does not make that prediction because the
+			// outcome is unknown, and certainly a Three should
+			// have a high probability of winning when it
+			// approaches a random unknown piece.
+			//
+			// Here is a more complex example:
+			// B4 R3 -- -- --
+			// -- -- -- B? --
+			// -- -- -- R2 --
+			// -- -- B? -- B?
+			//
+			// It is Red's move.  Unknown Blue has just approached
+			// Red Two, acquiring a chase rank of Two.  This makes its
+			// suspected Rank a One.  So Red Two should move away
+			// from that unknown and take its chances with the other
+			// unknowns.  But it could also stay pat and instead
+			// take Blue Four, assuming that the approaching unknown
+			// is bluffing and perhaps one of the other two unknowns
+			// is the actual One. What would you do?
+			//
+			// Note: If a piece approaches a known AI piece, then
+			// it usually has a suspected rank, and is not handled here.
+			// But if a known AI piece approaches an opponent unknown,
+			// then the opponent attack is handled by the formula
+			// below because tp.moves != 0.
+			//
+			// If an unknown opponent piece approaches an unknown AI
+			// piece, what is the probability that it will attack the
+			// AI piece?  The opponent piece only sees the apparent value
+			// of the AI piece.
+						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 
-		// TBD
-		// if !fp.hasMoved()
-		// adjust fpvalue based on the
+						int tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
+
+			// Outcome is the negation as if ai
+			// were the attacker.
+			//
+			// But note that the resulting value
+			// of AI PIECE X OPP PIECE !=
+			// OPP PIECE X AI PIECE,
+			// because the former uses the
+			// actual AI piece value and the
+			// latter uses the apparent piece value.
+
+			// TBD
+			// if !fp.hasMoved()
+			// adjust fpvalue based on the
 		// probability that fp is a bomb
 		// and cannot move
 
@@ -4318,6 +4330,7 @@ public class TestingBoard extends Board
 					} else
 						setPiece(tp, Move.unpackTo(m));
 				}
+				//vm = 0; // fubar
 				break;
 			} // switch
 
@@ -4374,6 +4387,7 @@ public class TestingBoard extends Board
 			value += vm;
 		else
 			value -= vm;
+
 	}
 
 	// The AI always assumes that it loses in an unknown encounter.
@@ -4480,15 +4494,20 @@ public class TestingBoard extends Board
 		// Sixes, Sevens and Nines probably don't last very
 		// long, so this creates a bonus for attacking more
 		// valuable pieces.
-		if (isWinning(Settings.topColor) > 0)
-			tpvalue += Math.min(tp.moves / 2, 20);
+
+		// Version 9.3 commented out because it
+		// breaks qs caching due to tp.moves being
+		// factored in rather than just the ranks.
+		//if (isWinning(Settings.topColor) > 0)
+		//	tpvalue += Math.min(tp.moves / 2, 20);
 
 		return tpvalue;
 	}
 
         protected void moveHistory(Piece fp, Piece tp, int m)
         {
-                undoList.add(new UndoMove(fp, tp, m, hash, value));
+                undoList.add(new UndoMove(fp, tp, m, boardHistory[bturn].hash, value));
+		bturn = 1 - bturn;
 	}
 
 	public void undo()
@@ -4513,10 +4532,12 @@ public class TestingBoard extends Board
 		}
 
 		undoList.remove(undoList.size()-1);
+		bturn = 1 - bturn;
 	}
 
 	public void pushNullMove()
 	{
+		bturn = 1 - bturn;
 		undoList.add(null);
 	}
 
@@ -4784,11 +4805,6 @@ public class TestingBoard extends Board
 	public int getValue()
 	{
 		return value;
-	}
-
-	public void addValue(int v)
-	{
-		value += v;
 	}
 
 	public void setValue(int v)
@@ -5348,6 +5364,11 @@ public class TestingBoard extends Board
 		// And unknown Fives chase unknown pieces with impunity
 
 			else if (tprank == Rank.FIVE
+
+		// Version 9.3: any unknown expendable piece is not
+		// afraid of unmoved pieces.
+
+				|| (isExpendable(tp) && !fp.hasMoved())
 				&& !tp.isKnown()
 				&& isWinning(Settings.topColor) >= VALUE_FIVE)
 				return Rank.LOSES;	// maybe not
