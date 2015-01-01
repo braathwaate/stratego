@@ -340,8 +340,6 @@ public class AI implements Runnable
 
 		for (int d : dir ) {
 			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
 			Piece p = b.getPiece(t);
 			if (p != null)
 				continue;
@@ -374,6 +372,13 @@ public class AI implements Runnable
 		} // dir
 	}
 
+	// TBD: this should probably be sped up
+	// - It may only be important to search two directions (up and down)
+	// rather than across the board.  Almost all attacks
+	// on valuable unknown AI pieces occur during the opening blitzkreig.
+	// - Search from the valuable AI piece rather than from the
+	// unknown opponent piece, since they are much fewer.
+	// - Use a rotated bitgrid to bitscan for an attack.
 	void getPossibleScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
 		int i = fp.getIndex();
@@ -381,8 +386,6 @@ public class AI implements Runnable
 
 		for (int d : dir ) {
 			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
 			Piece p = b.getPiece(t);
 			if (p != null)
 				continue;
@@ -407,13 +410,11 @@ public class AI implements Runnable
 
 		for (int d : dir ) {
 			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
 			Piece tp = b.getPiece(t);
 
 			if (tp == null) {
 				addMove(moveList.get(FLEE), i, t);
-			} else if (tp.getColor() != fpcolor) {
+			} else if (tp != Grid.water && tp.getColor() != fpcolor) {
 				int result = b.winFight(fp, tp);
 				int mo = LOSES;
 				if (result == Rank.WINS ||
@@ -439,11 +440,9 @@ public class AI implements Runnable
 
 		for (int d : dir ) {
 			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
 			Piece tp = b.getPiece(t);
 
-			if (tp == null)
+			if (tp == null || tp == Grid.water)
 				continue;
 
 			if (tp.getColor() != fpcolor) {
@@ -472,8 +471,6 @@ public class AI implements Runnable
 
 		for (int d : dir ) {
 			int t = i + d ;
-			if (!Grid.isValid(t))
-				continue;
 			Piece tp = b.getPiece(t);
 			if (tp != null)
 				continue;
@@ -868,7 +865,7 @@ public class AI implements Runnable
 			return;		// ai trapped
 		}
 
-		Move killerMove = new Move(null, 0);
+		Move killerMove = new Move(null, -1);
 		int vm = negamax(n, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
 		completedDepth = n;
 
@@ -1023,12 +1020,10 @@ public class AI implements Runnable
 			return false;
 		for (int d: dir) {
 			int j = i + d;
-			if (!Grid.isValid(j))
-				continue;
 			Piece tp = b.getPiece(j);
 			if (tp == null)
 				return true;
-			if (tp.getColor() == fp.getColor())
+			if (tp == Grid.water || tp.getColor() == fp.getColor())
 				continue;
 			int result = b.winFight(fp, tp);
 			if (result == Rank.WINS
@@ -1188,11 +1183,11 @@ public class AI implements Runnable
 			for (int d : dir ) {
 				boolean canFlee = false;
 				int t = i + d;	
-				if (!Grid.isValid(t))
-					continue;
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null || b.bturn == tp.getColor())
+				if (tp == null
+					|| tp == Grid.water
+					|| b.bturn == tp.getColor())
 					continue;
 
 				if (flee && isMovable(t))
@@ -1360,7 +1355,7 @@ public class AI implements Runnable
 		long hashOrig = getHash(n);
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
-		TTEntry ttBestMove = null;
+		int ttmove = -1;
 
 		if (entry != null
 			&& entry.hash == hashOrig
@@ -1390,7 +1385,7 @@ public class AI implements Runnable
 					return entry.bestValue;
 				}
 			}
-			ttBestMove = entry;
+			ttmove = entry.bestMove;
 
 		} else if (n > 0) {
 			long ttMoveHash = getHash(n-1);
@@ -1398,7 +1393,7 @@ public class AI implements Runnable
 			if (ttMoveEntry != null
 				&& ttMoveEntry.hash == ttMoveHash
 				&& ttMoveEntry.turn == b.bturn)
-				ttBestMove = ttMoveEntry;
+				ttmove = ttMoveEntry.bestMove;
 		}
 
 
@@ -1438,7 +1433,13 @@ public class AI implements Runnable
 				return negQS(qscache(depth));
 		}
 
-		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttBestMove);
+		// prevent null move on root level
+		// (not sure how this happened, but it did)
+		if (depth == 0
+			&& (n == 1 || chasePiece != null))
+			ttmove = -1;
+
+		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
 
 		assert hashOrig == getHash(n) : "hash changed";
 
@@ -1518,20 +1519,18 @@ public class AI implements Runnable
 		return true;
 	}
 
-private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, TTEntry ttBestMove) throws InterruptedException
+private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
-		Move kmove = new Move(null, 0);
+		Move kmove = new Move(null, -1);
 		int bestmove = 0;
 
-		if (ttBestMove != null
-			&& ttBestMove.bestMove != killerMove.getMove()) {
+		if (ttMove != -1 && ttMove != killerMove.getMove()) {
 
 		// use best move from transposition table for move ordering
 		// best move entries in the table are not tried
 		// if a duplicate of the killer move
 
-			int ttMove = ttBestMove.bestMove;
 			if (!isValidMove(ttMove))
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			else {
@@ -1567,32 +1566,28 @@ private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Pi
 		// to save time if the killer move causes ab pruning.
 		// TBD: killer move can be multi-hop, but then
 		// checking for a legal move requires checking all squares
-		int kfrom = killerMove.getFrom();
-		int kto = killerMove.getTo();
-		Piece fp = b.getPiece(kfrom);
-		Piece tp = b.getPiece(kto);
-		if (fp != null
-			&& fp.getColor() == b.bturn
-			&& Grid.isAdjacent(kfrom, kto)
-			&& (tp == null || tp.getColor() != b.bturn)) {
-			MoveType mt = makeMove(n, depth, killerMove.getMove());
+		int km = killerMove.getMove();
+		if (km != -1
+			&& isValidMove(km) 
+			&& (km == 0 || Grid.isAdjacent(km))) {
+			MoveType mt = makeMove(n, depth, km);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 				long h = b.getHash();
 				b.undo();
-				logMove(n, killerMove.getMove(), b.getValue(), negQS(vm), h, MoveType.KM);
+				logMove(n, km, b.getValue(), negQS(vm), h, MoveType.KM);
 				
 				if (vm > bestValue) {
 					bestValue = vm;
-					bestmove = killerMove.getMove();
+					bestmove = km;
 				}
 
 				alpha = Math.max(alpha, vm);
 
 				if (alpha >= beta) {
-					hh[killerMove.getMove()]+=n;
+					hh[km]+=n;
 					return bestValue;
 				}
 			}
@@ -1644,11 +1639,7 @@ private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Pi
 
 		// skip ttMove and killerMove
 
-				if (max != 0
-					&& ((killerMove != null
-						&& max == killerMove.getMove())
-						|| (ttBestMove != null
-						&& max == ttBestMove.bestMove)))
+				if (max == km || max == ttMove)
 					continue;
 
 				MoveType mt = makeMove(n, depth, max);
@@ -1827,7 +1818,7 @@ private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Pi
 	{
 
 	if (move == 0)
-		return "(null move)";
+		return "(null move) " + mt;
 
 	int color = b.getPiece(Move.unpackFrom(move)).getColor();
 	String s = "";

@@ -26,7 +26,7 @@ public class Grid
 	// so that illegal moves are easily discarded
 
 	private Piece[] grid = new Piece[133];
-	private static Piece water = new Piece(-1, Rank.WATER);
+	public static Piece water = new Piece(-1, Rank.WATER);
 
 	// It is useful to answer the following grid questions quickly:
 	// 1. Does a piece have any legal moves (is it trapped)?

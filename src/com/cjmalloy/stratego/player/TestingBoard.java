@@ -5363,12 +5363,12 @@ public class TestingBoard extends Board
 
 		// And unknown Fives chase unknown pieces with impunity
 
-			else if (tprank == Rank.FIVE
+			else if ((tprank == Rank.FIVE
 
 		// Version 9.3: any unknown expendable piece is not
 		// afraid of unmoved pieces.
 
-				|| (isExpendable(tp) && !fp.hasMoved())
+				|| (isExpendable(tp) && !fp.hasMoved()))
 				&& !tp.isKnown()
 				&& isWinning(Settings.topColor) >= VALUE_FIVE)
 				return Rank.LOSES;	// maybe not
