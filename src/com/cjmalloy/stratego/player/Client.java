@@ -59,13 +59,15 @@ public class Client implements MessageHandler
 				y = in.readInt();
 				color = in.readInt();
 				rank = in.readInt();
-				view.update(new Spot(x, y), new Piece(0, color, Rank.values()[rank]));
+				// view.update(new Spot(x, y), new Piece(0, color, Rank.values()[rank]));
+				view.update(new Spot(x, y), new Piece(color, Rank.values()[rank]));
 				return true;
 			case TRAY:
 				x = in.readInt();
 				color = in.readInt();
 				rank = in.readInt();
-				view.update(Board.IN_TRAY, new Piece(x, color, Rank.values()[rank]));
+				// view.update(Board.IN_TRAY, new Piece(x, color, Rank.values()[rank]));
+				view.update(Board.IN_TRAY, new Piece(color, Rank.values()[rank]));
 				return true;
 			case GAMEOVER:
 				x = in.readInt();

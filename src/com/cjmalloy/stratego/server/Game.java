@@ -79,7 +79,8 @@ public class Game
 					if (x1 < 0)
 					{
 						from = Board.IN_TRAY;
-						p = new Piece(0, 0, Rank.values()[rank]);
+						// p = new Piece(0, 0, Rank.values()[rank]);
+						p = new Piece(0, Rank.values()[rank]);
 					}
 					else
 					{
