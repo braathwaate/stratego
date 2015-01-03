@@ -2963,7 +2963,7 @@ public class TestingBoard extends Board
 						&& tp.getRank().toInt() < r) 
 						r = tp.getRank().toInt();
 				}
-				if (r != 10 && r < p.getRank().toInt())
+				if (r != 10 && r <= p.getRank().toInt())
 					setSuspectedRank(p, getChaseRank(p, r, false));
 
 		// set actingRankFlee temporarily on any AI pieces approached
@@ -3270,6 +3270,12 @@ public class TestingBoard extends Board
 
 			Rank tprank = tp.getRank();
 
+		// note: use actual value for ai attacker
+		// because unknown ai attacker knows its own value
+		// but opponent attacker is just guessing
+
+			int fpvalue = actualValue(fp);
+
 		// Suspected bombs can move, but if they do, they become
 		// unknowns.  The AI guesses that certain unknowns are
 		// bombs.  This deters pieces other than Eights from
@@ -3297,19 +3303,27 @@ public class TestingBoard extends Board
 		// A player cannot waste pieces on trying to identify
 		// worthless bombs.
 
-		if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
-			&& fpcolor == Settings.bottomColor
-			// && (fp.aiValue() == 0 || tprank != Rank.EIGHT)) {
-			&& tprank != Rank.EIGHT) {
-			fp.setRank(Rank.UNKNOWN);
-			fprank = Rank.UNKNOWN;
-		}
+			if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
+				if (fpcolor == Settings.bottomColor
+					&& tprank != Rank.EIGHT) {
 
-		// note: use actual value for ai attacker
-		// because unknown ai attacker knows its own value
-		// but opponent attacker is just guessing
+		// This usually makes "result" UNK unless tp is invincible
 
-			int fpvalue = actualValue(fp);
+					fp.setRank(Rank.UNKNOWN);
+					fprank = Rank.UNKNOWN;
+				} else
+
+		// "result" is always LOSES (because BOMB x piece loses)
+		// Set fpvalue, because the opponent expects that the
+		// unknown piece is a movable piece like any other piece.
+		// Thus LOSES returns an expected value.  This is
+		// important in the case where tp is invincible,
+		// because all attacks on the invincible piece are equal,
+		// and so the opponent always gains fpvalue, and therefore
+		// may not be deterred in passing, even if it has stealth.
+
+					fpvalue = values[fpcolor][Rank.UNKNOWN.toInt()];
+			}
 
 		// An attack on an unmoved (unknown) piece
 		// gains its unmoved value to help avoid draws.
@@ -3716,8 +3730,10 @@ public class TestingBoard extends Board
 					// makeKnown(fp);
 					// setPiece(fp, m.getTo());
 				} else {
-					makeWinner(tp, fprank);
-					makeKnown(tp);
+					if (fprank != Rank.BOMB && fprank != Rank.FLAG) {
+						makeWinner(tp, fprank);
+						makeKnown(tp);
+					}
 					vm -= fpvalue;
 					setPiece(tp, Move.unpackTo(m));
 				}
