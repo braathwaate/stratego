@@ -68,7 +68,7 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
 	private TTEntry[] ttable = new TTEntry[2<<22]; // 4194304
-	private final int QSMAX = 2;	// maximum qs search depth
+	private final int QSMAX = 3;	// maximum qs search depth
 	int bestMove = 0;
 	long stopTime = 0;
 	int moveRoot = 0;
@@ -1098,6 +1098,32 @@ public class AI implements Runnable
 	// that waste more material in a position where
 	// the opponent has a sure favorable attack in the future,
 	// and the ai depth does not reach the position of exchange.
+	//
+	// Test Example.
+	// RB
+	// R4 R2
+	// B3
+	// Blue has the move:
+	// 2a. Red flee, best = b.value
+	// 2b. R4xB3 is negative, so best is not changed
+	// return b.value
+	// 1a. Blue flee
+	// 2a. Red flee, best = b.value(-100)
+	// 2b. R2xB3, best = b.value(+100)
+	// return best(+100)
+	// 1b. B3xR4
+	//
+	// If Red has the move:
+	// 2a. Blue flee, best = b.value
+	// 2b. B3xR4, best = -100
+	// return -100 (because Red Four cannot flee)
+	// 1a. Red flee
+	// 2a. Blue flee, best = b.value(-100) (*)
+	// 2b. No attacks remaining
+	// return best (-100)
+	// 1b. R4xB3
+	//
+	// (*) this is why QSMAX must be at least 3.
 	
 	private int qs(int depth, int n, boolean flee)
 	{

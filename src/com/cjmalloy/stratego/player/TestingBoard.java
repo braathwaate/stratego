@@ -2050,14 +2050,9 @@ public class TestingBoard extends Board
 		Piece flagp = getPiece(b[0]);
 		int color = flagp.getColor();
 		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
-
-		// The ai only uses its eights to attack flag structures
-		// if it has enough remaining.
-
-		if (maybe_count - open_count > eightsAtLarge)
+		if (eightsAtLarge == 0)
 			return;
 
-		// Set any remaining pieces in the pattern to Rank.BOMB.
 		// It doesn't matter if the piece really is a bomb or not.
 		boolean found = true;
 		int layer = 1;
@@ -2085,8 +2080,9 @@ public class TestingBoard extends Board
 		// bluff against lower ranked pieces.  This code
 		// works for both AI and opponent bomb patterns.
 		//
-			if (flagp.getColor() == Settings.bottomColor) {
-				p.setSuspectedRank(Rank.BOMB);
+			if (color == Settings.bottomColor) {
+				if (maybe_count <= 3)
+					p.setSuspectedRank(Rank.BOMB);
 				if (maybe_count == 1)
 					makeKnown(p);
 			} else if (p.getRank() == Rank.BOMB
@@ -2099,13 +2095,24 @@ public class TestingBoard extends Board
 			makeFlagKnown(flagp);
 		}
 
+		// The ai only uses its eights to attack flag structures
+		// if it has enough remaining.  However, it still approaches
+		// flag structures with unknown expendable pieces.
+		// This subterfuge often can cause the opponent into
+		// making a mistake, attacking an unknown piece that
+		// approaches the flag, perhaps resulting in material
+		// gain for the AI.
+
+		// Set any remaining pieces in the pattern to Rank.BOMB.
 		// Remove bombs that surround a possible flag
 		// this code is only for opponent bombs
-		if (flagp.getColor() == Settings.bottomColor
-			&& rankAtLarge(1-flagp.getColor(), Rank.EIGHT) != 0
-			&& found)
+		if (color == Settings.bottomColor
+			&& found
+			&& (maybe_count <= 3
+				|| maybe_count - open_count <= eightsAtLarge))
 			for (int j = layer; b[j] != 0; j++)
-				destBomb(b[j], found);
+				destBomb(b[j],
+					maybe_count - open_count <= eightsAtLarge);
 	}
 
 	public int yside(int color, int y)
@@ -2198,11 +2205,18 @@ public class TestingBoard extends Board
 		// (Note: maybe_count == 0 calls setExpendableEights even
 		// if there are not any left.  This is necessary because
 		// Flag value > aiBombValue > Eight value.)
-		if (maybe_count == 0 || maybe_count + 1 < rankAtLarge(1-c, Rank.EIGHT))
+		int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
+		if (maybe_count == 0 || maybe_count + 1 < eightsAtLarge)
 			// at least 1 opponent color eight is expendable
 			// (The AI keeps one more Eight around than
 			// necessary to insure for an unforeseen mortality).
 			setExpendableEights(1-c);
+		else if (maybe_count <= 3) 
+
+		// eights become more valuable now
+
+			values[1-c][Rank.EIGHT.toInt()]
+				+= (maybe_count - eightsAtLarge) * 30;
 
 		if (maybe_count >= 1) {
 
@@ -2235,13 +2249,6 @@ public class TestingBoard extends Board
 					}
 				}
 			}
-
-		// eights become more valuable now
-
-			int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
-			if (maybe_count <= 3 && maybe_count > eightsAtLarge)
-				values[1-c][Rank.EIGHT.toInt()]
-					+= (maybe_count - eightsAtLarge) * 30;
 
 		} else if (c == Settings.bottomColor) {
 
@@ -2435,13 +2442,12 @@ public class TestingBoard extends Board
 	// The idea is once the low ranked piece reaches the bomb area
 	// with the eight trailing behind, the search tree will
 	// discover a way for the eight to win the bomb.
-	private void destBomb(int j, boolean intact)
+	private void destBomb(int j, boolean sendEight)
 	{
 		Piece p = getPiece(j);
-		if (p == null
+		assert !(p == null
 			|| (p.isKnown() && p.getRank() != Rank.BOMB)
-			|| p.hasMoved())
-			return;
+			|| p.hasMoved()) : "destBomb() called on non-bomb";
 
 		// If the structure is intact, encourage the Eight
 		// to sacrifice itself to open the flag to attack
@@ -2449,10 +2455,9 @@ public class TestingBoard extends Board
 		// to the Eight unless it can get at the flag.  By
 		// continuing to remove more bombs around the structure,
 		// it opens it up to combined attack by other pieces.
-		if (intact)
+		if (sendEight)
 			p.setAiValue(aiBombValue(p.getColor()));
 		
-
 		// stay near but don't get in the way
 		int near;
 		if (p.getColor() == Settings.bottomColor) {
@@ -2485,8 +2490,10 @@ public class TestingBoard extends Board
 		// Send the miner(s)
 		// multiple structures can be investigated in parallel
 		int destTmp[] = genDestTmpGuarded(p.getColor(), j, Rank.EIGHT);
-		genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
-		genPlanB(destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
+		if (sendEight) {
+			genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
+			genPlanB(destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
+		}
 
 		// Send along expendable pieces as a subterfuge measure
 		// If the protectors of the bomb structure are outnumbered,
