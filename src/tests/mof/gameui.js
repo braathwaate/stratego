@@ -697,11 +697,21 @@ rl.on('line', function(line){
 
 function onSetWebMoveResponse()
 {
+	require('util').debug('onSetWebMoveResponse ' + Service.readyState + ' ' + Service.status);
 	if (Service.readyState == 4)
 	{
 		UIState.ServiceCallInProgress = false;
-		
-		if (Service.status == 200)
+	
+		if (Service.status == 0) {	
+			require('util').debug('ERROR');
+			//submit SetWebMove request to web service
+			Service.open("POST", Constants.ServiceURL, true);
+			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
+			Service.onreadystatechange = onSetWebMoveResponse;
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
+			
+			UIState.ServiceCallInProgress = true;
+		} else if (Service.status == 200)
 		{
 			//setup own figures from web service call
 			// var setWebMoveResponseXML = Service.responseXML;
@@ -739,6 +749,7 @@ function onSetWebMoveResponse()
 					lastMove += type2rank(attackerType) + " " + type2rank(defenderType);
 				} else
 					lastMove += " OK";
+				require('util').debug(lastMove);	// mof move
 				console.log(lastMove);
 				//set move on board
 				applyMove(UIState.SelectedMove.StartRow,
@@ -782,8 +793,7 @@ function onSetWebMoveResponse()
 					Service.open("POST", Constants.ServiceURL, true);
 					Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
 					Service.onreadystatechange = onSetComputerMoveResponse;
-			    	Service.send(createSetComputerMoveRequest());
-					
+					Service.send(createSetComputerMoveRequest());
 					UIState.ServiceCallInProgress = true;
 				}
 				else
@@ -802,11 +812,21 @@ function onSetWebMoveResponse()
 
 function onSetComputerMoveResponse()
 {
+	require('util').debug('onSetComputerMoveResponse ' + Service.readyState + ' ' + Service.status);
 	if (Service.readyState == 4)
 	{
 		UIState.ServiceCallInProgress = false;
 		
-		if (Service.status == 200)
+		if (Service.status == 0) {
+			require('util').debug('ERROR');
+			// retry on error
+			//submit SetWebMove request to web service
+			Service.open("POST", Constants.ServiceURL, true);
+			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
+			Service.onreadystatechange = onSetComputerMoveResponse;
+			Service.send(createSetComputerMoveRequest());
+			UIState.ServiceCallInProgress = true;
+		} else if (Service.status == 200)
 		{
 			//setup own figures from web service call
 			// var setComputerMoveResponseXML = Service.responseXML;
@@ -858,6 +878,7 @@ function onSetComputerMoveResponse()
 					line += type2rank(attackerType) + " " + type2rank(defenderType);
 				} else
 					line += " OK";
+require('util').debug(line);
 console.log(line);
 				
 				//apply move to figure matrix
@@ -1238,7 +1259,7 @@ function makeMove(line)
 }
 function setMove(startRow, startCol, endRow, endCol)
 {
-// console.log("setMove " + startRow + " " + startCol + " " + endRow + " " + endCol + " " + GameInfo.FigureMatrix[startRow][startCol].Type);
+require('util').debug("setMove " + startRow + " " + startCol + " " + endRow + " " + endCol + " " + type2rank(GameInfo.FigureMatrix[startRow][startCol].Type));
 	if (endRow != startRow || endCol != startCol)
 	{
 		//validate move selection
@@ -1283,7 +1304,7 @@ function setMove(startRow, startCol, endRow, endCol)
 			Service.open("POST", Constants.ServiceURL, true);
 			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
 			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[startRow][startCol].Type));
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
 			
 			UIState.ServiceCallInProgress = true;
 		}

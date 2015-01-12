@@ -294,6 +294,9 @@ public class AI implements Runnable
 		}
 		finally
 		{
+			long t = System.currentTimeMillis() - startTime;
+			t = System.currentTimeMillis() - startTime;
+			log("getBestMove() returned at " + t + "ms");
 			System.runFinalization();
 
 		// note: no assertions here, because they overwrite
@@ -308,18 +311,15 @@ public class AI implements Runnable
 			else {
 				logFlush("----");
 				log(PV, "\n" + logMove(b, 0, bestMove, MoveType.OK));
-				long t = System.currentTimeMillis() - startTime;
-				t = System.currentTimeMillis() - startTime;
-				log("aiReturnMove() at " + t + "ms");
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(Move.unpackFrom(bestMove)), Move.unpackFrom(bestMove), Move.unpackTo(bestMove)));
 			}
 
 			logFlush("----");
 
-			long t = System.currentTimeMillis() - startTime;
-			t = System.currentTimeMillis() - startTime;
-			log("exit getBestMove() at " + t + "ms");
+			long t2 = System.currentTimeMillis() - startTime;
+			t2 = System.currentTimeMillis() - startTime;
+			log("exit getBestMove() at " + t2 + "ms");
 			aiLock.unlock();
 		}
 	}
@@ -918,10 +918,22 @@ public class AI implements Runnable
 		if (killerMove.getMove() == 0) {
 			assert n != 1 : "null move on iteration 1";
 			log("Best move is null");
-			ArrayList<ArrayList<Integer>> saveRootMoveList = rootMoveList;
-			rootMoveList = getMoves(-n+1, Settings.topColor, null, null);
-			vm = negamax(1, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
-			rootMoveList = saveRootMoveList;
+			ArrayList<ArrayList<Integer>> moveList = getMoves(-n+1, Settings.topColor, null, null);
+			bestMoveValue = -9999;
+			for (int mo = 0; mo <= LOSES; mo++)
+			for (int move : moveList.get(mo)) {
+				log(DETAIL, "   " + logMove(b, n, move, MoveType.OK));
+				b.move(move, 0);
+				vm = -negamax(0, 9999, -9999, 1, null, null, killerMove); 
+				if (vm > bestMoveValue) {
+					bestMoveValue = vm;
+					bestMove = move;
+				}
+				b.undo();
+			}
+			log(PV, "   " + logMove(b, n, bestMove, MoveType.OK));
+			log("-+++-");
+			continue;
 		}
 
 		// To negate the horizon effect where the ai
@@ -1357,6 +1369,44 @@ public class AI implements Runnable
 			return -qs;
 	}
 
+	void saveTTEntry(int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int bestmove)
+	{
+		long hashOrig = getHash(n);
+		int index = (int)(hashOrig % ttable.length);
+		TTEntry entry = ttable[index];
+		if (entry == null) {
+			entry = new TTEntry();
+			ttable[index] = entry;
+
+		// Replacement scheme.
+		// Because the hash includes depth, shallower entries
+		// are automatically retained.  This is because a identical
+		// board position is evaluated differently at different
+		// depths, so the score is valid only at exactly the
+		// same depth.  So these entries can be helpful even
+		// at deeper searches.  They are also needed for PV
+		// because of repetitive moves.
+		//
+		// As such, replacement rarely
+		// happens until the table is mostly full.
+		// In the event of a collision,
+		// retain the entry if deeper and current
+		// (deeper entries have more time invested in them)
+		} else if ((entry.depth > n || bestmove == -1)
+			&& moveRoot == entry.moveRoot
+			&& entry.bestMove != -1)
+			return;
+
+		entry.type = searchType;
+		entry.flags = entryType;
+		entry.moveRoot = moveRoot;
+		entry.hash = hashOrig;
+		entry.bestValue = vm;
+		entry.bestMove = bestmove;
+		entry.depth = n;
+		entry.turn = b.bturn;	//debug
+	}
+
 	// Note: negamax is split into two parts
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
@@ -1382,6 +1432,12 @@ public class AI implements Runnable
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
 		int ttmove = -1;
+		TTEntry.SearchType searchType;
+		int bestmove = -1;
+		if (chasePiece != null)
+			searchType = TTEntry.SearchType.DEEP;
+		else
+			searchType = TTEntry.SearchType.BROAD;
 
 		if (entry != null
 			&& entry.hash == hashOrig
@@ -1395,7 +1451,8 @@ public class AI implements Runnable
 		// is still useful and often will generate the best score.
 
 			if (moveRoot == entry.moveRoot
-				&& (chasePiece != null || entry.type == TTEntry.SearchType.BROAD )) {
+				&& (searchType == entry.type
+					|| entry.type == TTEntry.SearchType.BROAD)) {
 				if (entry.flags == TTEntry.Flags.EXACT) {
 					killerMove.setMove(entry.bestMove);
 					log("exact " + moveRoot + " " + entry.moveRoot );
@@ -1422,13 +1479,15 @@ public class AI implements Runnable
 				ttmove = ttMoveEntry.bestMove;
 		}
 
-
+		int vm;
 		if (n < 1
 			|| (depth != 0
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
-			return negQS(qscache(depth));
+			vm = negQS(qscache(depth));
+			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
+			return vm;
 		}
 
 
@@ -1454,60 +1513,36 @@ public class AI implements Runnable
 		// flees, Blue Two moves right again, forking Red Five
 		// and Red Four.
 
-		if (chasePiece != null && b.bturn == Settings.bottomColor) {
-			if (Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4)
-				return negQS(qscache(depth));
+		else if (chasePiece != null
+			&& b.bturn == Settings.bottomColor
+			&& Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4) {
+			vm =  negQS(qscache(depth));
+			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
 		}
 
-		// prevent null move on root level
+		else {
+
+		// Prevent null move on root level
+		// because a null move is unplayable in this game.
 		// (not sure how this happened, but it did)
-		if (depth == 0
-			&& (n == 1 || chasePiece != null))
-			ttmove = -1;
+			if (depth == 0 && ttmove == 0)
+				ttmove = -1;
 
-		int vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
+			vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
 
-		assert hashOrig == getHash(n) : "hash changed";
+			assert hashOrig == getHash(n) : "hash changed";
 
-		if (entry == null) {
-			entry = new TTEntry();
-			ttable[index] = entry;
+			// reuse existing entry and avoid garbage collection
+			TTEntry.Flags entryType;
+			if (vm <= alphaOrig)
+				entryType = TTEntry.Flags.UPPERBOUND;
+			else if (vm >= beta)
+				entryType = TTEntry.Flags.LOWERBOUND;
+			else
+				entryType = TTEntry.Flags.EXACT;
 
-		// Replacement scheme.
-		// Because the hash includes depth, shallower entries
-		// are automatically retained.  This is because a identical
-		// board position is evaluated differently at different
-		// depths, so the score is valid only at exactly the
-		// same depth.  So these entries can be helpful even
-		// at deeper searches.  They are also needed for PV
-		// because of repetitive moves.
-		//
-		// As such, replacement rarely
-		// happens until the table is mostly full.
-		// In the event of a collision,
-		// retain the entry if deeper and current
-		// (deeper entries have more time invested in them)
-		} else if (entry.depth > n && moveRoot == entry.moveRoot)
-			return vm;
-
-		// reuse existing entry and avoid garbage collection
-		if (vm <= alphaOrig)
-			entry.flags = TTEntry.Flags.UPPERBOUND;
-		else if (vm >= beta)
-			entry.flags = TTEntry.Flags.LOWERBOUND;
-		else
-			entry.flags = TTEntry.Flags.EXACT;
-
-		if (chasePiece != null)
-			entry.type = TTEntry.SearchType.DEEP;
-		else
-			entry.type = TTEntry.SearchType.BROAD;
-		entry.moveRoot = moveRoot;
-		entry.hash = hashOrig;
-		entry.bestValue = vm;
-		entry.bestMove = killerMove.getMove();
-		entry.depth = n;
-		entry.turn = b.bturn;	//debug
+			saveTTEntry(n, searchType, entryType, vm, killerMove.getMove());
+		}
 
 		return vm;
 	}
@@ -1918,6 +1953,9 @@ private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Pi
 		if (entry.bestMove == 0) {
 			log(PV,  "   (null move)");
 			b.pushNullMove();
+		} else if (entry.bestMove == -1) {
+			log(PV,  "   (end of game)");
+			return;
 		} else {
 			log(PV, "   " + logMove(b, n, entry.bestMove, MoveType.OK));
 			b.move(entry.bestMove, depth);
