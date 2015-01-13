@@ -2850,15 +2850,11 @@ public class TestingBoard extends Board
 		return newRank;
 	}
 
-	void setSuspectedRank(Piece p, Rank rank)
+	void setSuspectedRank(Piece p, Rank rank, boolean maybeBluffing)
 	{
 		p.setSuspectedRank(rank);
 
-		// The AI needs time to confirm whether a suspected
-		// rank is bluffing.  The more the suspected rank moves
-		// without being discovered, the more the AI believes it.
-
-		if (p.moves > 15)
+		if (!maybeBluffing)
 			suspectedRank[p.getColor()][rank.toInt()-1]++;
 	}
 
@@ -2925,12 +2921,16 @@ public class TestingBoard extends Board
 				|| rank == p.getActingRankFleeHigh())
 				continue;
 
+		// The AI needs time to confirm whether a suspected
+		// rank is bluffing.  The more the suspected rank moves
+		// without being discovered, the more the AI believes it.
+
 			if (rank == Rank.SPY) {
 				if (hasSpy(p.getColor()))
-					setSuspectedRank(p, Rank.SPY);
+					setSuspectedRank(p, Rank.SPY, p.moves < 15);
 
 			} else
-				setSuspectedRank(p, getChaseRank(p, rank.toInt(), p.isRankLess()));
+				setSuspectedRank(p, getChaseRank(p, rank.toInt(), p.isRankLess()), p.moves < 15);
 
 		} // for
 
@@ -2976,8 +2976,13 @@ public class TestingBoard extends Board
 						&& tp.getRank().toInt() < r) 
 						r = tp.getRank().toInt();
 				}
+		// Note that the AI considers the chase piece not bluffing
+		// when it calls setSuspectedRank().  This gives it more
+		// latitude to flee past unknown enemy rank, IF the
+		// chase piece happpens to become invincible.
+		
 				if (r != 10 && r <= p.getRank().toInt())
-					setSuspectedRank(p, getChaseRank(p, r, false));
+					setSuspectedRank(p, getChaseRank(p, r, false), false);
 
 		// set actingRankFlee temporarily on any AI pieces approached
 		// by an opponent piece.  When the AI evaluates any
@@ -4160,8 +4165,6 @@ public class TestingBoard extends Board
 			if (tp.moves == 0)
 				tpvalue = tpvalue * npieces[Settings.bottomColor]/40;
 			vm += tpvalue - fpvalue;
-			//if (vm < 0)
-			//	vm = vm * unknownLowerRankCount[fprank.toInt()-1] / unknownPiecesRemaining[Settings.bottomColor];
 
 
 		// What should happen to the ai piece
@@ -4274,17 +4277,41 @@ public class TestingBoard extends Board
 		// This still is not very much advantage (<20 points).
 		// TBD: if there is only one unknown lower rank this
 		// would be zero points, but this is not coded.
-		//
-		// But if unknownValue() returned a much higher value,
-		// it would entice the AI to attack protected pieces
-		// where the protector is unknown.  For example, R3xR4
-		// followed by B?xR3 is 100 + 60 - 200.  Thus the
-		// result may be improved by less than 40 points.
-		//
-		// Thus unknownValue() also reduces a negative
-		// result by unknownLowerRankCount[] / unknownPiecesRemaining[].
 
-		//
+		// Note that an opponent piece cannot be protected by
+		// a single unknown piece because the protector always gains
+		// a chase rank and therefore has a suspected rank.
+
+		// But if the piece is protected by two unknowns, neither
+		// unknown gains a suspected rank.  So unknownValue() must
+		// never return a result that would cause the AI to take
+		// a piece protected by two unknowns.
+
+		// TBD:  To correctly calculate the unknown value,
+		// the AI would have to predict
+		// all the ranks of the remaining unknown pieces.
+		// All remaining pieces should not be considered equal.
+		// Indeed, many of the remaining pieces are bombs and
+		// the AI has little to fear from them.
+
+		// So this is often where the AI errs.
+		// xx R5 -- xx xx -- --
+		// xx -- R4 xx xx -- --
+		// -- B? -- R3 -- -- B?
+		// -- -- -- -- -- B? --
+		// -- -- B? B? B? B? B?
+		// Left-most unknown Blue moves towards Red Three.
+		// Red sees that even if it moves the Three to the right, an
+		// unknown Blue piece can force it to be attacked.
+		// Thus, Red allows its Three to be captured.
+		// Even worse, Red may leave both its Three and Four unmoved,
+		// because it assumes that unknown Blue will take
+		// Red Three.
+
+		// If Red Three becomes invincible when unknown
+		// Blue approaches (Two is gone or known), then Red Three
+		// can freely flee.
+
 		// Here is a more complex example:
 		// B4 R3 -- -- --
 		// -- -- -- B? --
@@ -4349,8 +4376,6 @@ public class TestingBoard extends Board
 					fpvalue = fpvalue * 3 / (3 + count);
 
 					vm += tpvalue - fpvalue;
-					//if (vm < 0)
-					//	vm = vm * unknownLowerRankCount[tprank.toInt()-1] / unknownPiecesRemaining[Settings.bottomColor];
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -4456,6 +4481,10 @@ public class TestingBoard extends Board
 	// The stealth value of the unknown is (35), assuming
 	// that the Five loses to a Three.
 	// The Five loses its value (50), so the result is -15.
+
+	// Note that an opponent piece cannot be protected by
+	// an unknown piece because the protector always gains
+	// a chase rank and therefore has a suspected rank.
 
 	// So you can see that the AI always loses something
 	// but not everthing in an unknown encounter.

@@ -720,6 +720,7 @@ function onSetWebMoveResponse()
 			var gameOver = parseBool(getElementText(setWebMoveResponseXML.getElementsByTagName("gameOver")[0]));
 			var winner = getElementText(setWebMoveResponseXML.getElementsByTagName("winner")[0]);
 		
+			require('util').debug("Success:" + success);
 			if (success)
 			{
 				//clear captured figures

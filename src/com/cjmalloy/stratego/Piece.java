@@ -245,7 +245,7 @@ public class Piece implements Comparable<Piece>
 		if (b)
 			flags |= MAYBE_EIGHT;
 		else
-			flags &= MAYBE_EIGHT;
+			flags &= ~MAYBE_EIGHT;
 	}
 
 	public boolean getMaybeEight()
