@@ -806,6 +806,14 @@ function onSetWebMoveResponse()
 			else
 			{
 				displayMessage("Invalid move.");				
+			require('util').debug('ERROR');
+			//submit SetWebMove request to web service
+			Service.open("POST", Constants.ServiceURL, true);
+			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
+			Service.onreadystatechange = onSetWebMoveResponse;
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
+			
+			UIState.ServiceCallInProgress = true;
 			}
 		}
 	}
@@ -1844,8 +1852,7 @@ function getElementText(xmlElement)
 
 function displayMessage(messageText)
 {
-// console.log("displayMessage");
-// console.log(messageText);
+	require('util').debug("displayMessage:" + messageText);
 /*
 	document.getElementById("messageTextCell").innerHTML = messageText;
 	document.getElementById("messageImageCell").innerHTML = "";

@@ -131,7 +131,17 @@ public class TestingBoard extends Board
 	// • Unmatched invincible pieces are all valued the same.
 	// • Bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
-	// • The value of the Spy becomes equal to a Seven once the
+	// • The Nine is the lowest valued piece on the board.  However,
+	//	its stealth value is highest for ranks Six through Nine
+	//	(stealth value increases by 3 points for each of
+	//	these ranks).  High stealth value encourages the Nine
+	//	to maintain its stealth by moving only square at a time.
+	//	An unmoved Nine should attack a suspected One, Two or
+	//	or Three, so its combined value (value + unmoved state
+	//	+ stealth) must be less than the stealth of the attacked
+	//	low ranked piece.  A known Nine should attack a suspected
+	//	Four.
+	// • The value of the Spy becomes equal to a Nine once the
 	//	opponent Marshal is removed.
 	// • The value of the Miner depends on the number of structures
 	//	left than could surround a flag.
@@ -152,6 +162,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_FOUR = 100;
 	private static final int VALUE_FIVE = 50;
 	private static final int VALUE_SIX = 30;
+	private static final int VALUE_NINE = 15;
 	private static final int [] startValues = {
 		0,
 		800,	// 1 Marshal
@@ -162,7 +173,7 @@ public class TestingBoard extends Board
 		VALUE_SIX,	// 6 Lieutenant
 		20,	// 7 Sergeant
 		35,	// 8 Miner
-		20,	// 9 Scout
+		VALUE_NINE,	// 9 Scout
 		300,	// Spy
 		0,	// Bomb (valued by code)
 		1000,	// Flag (valued by code)
@@ -437,7 +448,7 @@ public class TestingBoard extends Board
 
 			if (rankAtLarge(1-c, Rank.ONE) == 0)
 				values[c][Rank.SPY.toInt()]
-					= values[c][Rank.SEVEN.toInt()] - 10;
+					= values[c][Rank.NINE.toInt()] - 10;
 
 
 		// Pieces become more valuable as they become fewer
@@ -833,12 +844,14 @@ public class TestingBoard extends Board
 		} else {
 			int n = 0;
 			int unknownDefenders = 0;
-			for (int rs = r+1; rs<8; rs++) {
-				n = rankAtLarge(1-c, rs);
-				if (n != 0) {
-					n = Math.min(n, 2);
-					v += values[1-c][rs] * n;
-					break;
+			for (int rs = 1; rs<8; rs++) {
+				if (rs > r) {
+					n = rankAtLarge(1-c, rs);
+					if (n != 0) {
+						n = Math.min(n, 2);
+						v += values[1-c][rs] * n;
+						break;
+					}
 				}
 
 				unknownDefenders += unknownRankAtLarge(c, rs);
@@ -847,9 +860,9 @@ public class TestingBoard extends Board
 			if (n == 0)
 				v = values[c][r]/6;
 			else {
-				if (unknownDefenders == 0)
+				if (unknownDefenders <= 1)
 					v += v/3;
-				else
+				else if (unknownDefenders > 2)
 					v -= v/3;
 				v = v * 4 / 10;
 			}
@@ -2222,7 +2235,7 @@ public class TestingBoard extends Board
 		// eights become more valuable now
 
 			values[1-c][Rank.EIGHT.toInt()]
-				+= (maybe_count - eightsAtLarge) * 30;
+				+= (maybe_count + 1 - eightsAtLarge) * 30;
 
 		if (maybe_count >= 1) {
 
@@ -3203,7 +3216,7 @@ public class TestingBoard extends Board
 		// If the One is killed (by a Spy), demote SPY value
 		if (p.getRank() == Rank.SPY) {
 			assert rankWon == Rank.ONE : "Spy can only win One but won " + rankWon; 
-			p.setAiValue(values[p.getColor()][Rank.SEVEN.toInt()] - 10);
+			p.setAiValue(values[p.getColor()][Rank.NINE.toInt()] - 10);
 		}
 	}
 
@@ -3594,7 +3607,7 @@ public class TestingBoard extends Board
 
 		// Unknown AI pieces also have bluffing value
 				if (depth != 0
-					&& tp.getColor() == Settings.topColor
+					&& fpcolor == Settings.bottomColor
 					&& !tp.isKnown()
 					&& !isInvincible(fp)
 					&& fprank.toInt() <= 4
@@ -3602,7 +3615,7 @@ public class TestingBoard extends Board
 					&& isEffectiveBluff(m))
 					vm = Math.min(vm, valueBluff(fp, tprank, Move.unpackTo(m)));
 
-				if (depth != 0
+				else if (depth != 0
 					&& fpcolor == Settings.topColor
 					&& !fp.isKnown()
 					&& (!isInvincible(tp)
@@ -3612,7 +3625,7 @@ public class TestingBoard extends Board
 					&& fp.getActingRankFleeLow() != tprank 
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m)) {
-					vm = Math.min(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
+					vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
 				}
 
 		// Consider the following example.
@@ -3707,10 +3720,6 @@ public class TestingBoard extends Board
 		// The upside is maybe 10% of its value.  Larger than this,
 		// the more likely the AI is to make bad exchanges.
 		//
-		// TBD: If the attacker has a suspected rank, then
-		// the ai is just guessing that the attacker loses, and
-		// there is some chance that it could win.
-		//
 		// To be consistent, an attack
 		// on a suspected rank that takes an AI piece
 		// needs to be more value.  For example,
@@ -3729,7 +3738,7 @@ public class TestingBoard extends Board
 		// of an unknown protector piece is irrelevant.
 		//
 				if (depth != 0
-					&& fp.getColor() == Settings.topColor
+					&& fpcolor == Settings.topColor
 					&& !fp.isKnown()
 					&& (!isInvincible(tp)
 						|| (tprank == Rank.ONE
@@ -3738,7 +3747,7 @@ public class TestingBoard extends Board
 					&& fp.getActingRankFleeLow() != tprank
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(m)) {
-					vm = Math.min(vm, valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
+					vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fprank, Move.unpackTo(m)));
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -5601,9 +5610,9 @@ public class TestingBoard extends Board
 		values[color][Rank.NINE.toInt()] = values[color][Rank.EIGHT.toInt()] - 5;
 	}
 
-	boolean isValuable(Piece p)
+	boolean isNineTarget(Piece p)
 	{
-		return values[p.getColor()][p.getRank().toInt()] > VALUE_FIVE;
+		return !p.isKnown() && valueStealth[p.getColor()][p.getRank().toInt()-1] > VALUE_NINE;
 	}
 
 	// If all bombs have been accounted for,

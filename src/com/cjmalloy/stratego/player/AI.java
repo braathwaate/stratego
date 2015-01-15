@@ -394,9 +394,8 @@ public class AI implements Runnable
 				t += d;
 				p = b.getPiece(t);
 			} while (p == null);
-			if (!p.isKnown()
-				&& p.getColor() == 1 - fpcolor
-				&& b.isValuable(p)) {
+			if (p.getColor() == 1 - fpcolor
+				&& b.isNineTarget(p)) {
 				addMove(moveList.get(WINS), i, t);
 			} // attack
 		}
@@ -570,11 +569,17 @@ public class AI implements Runnable
 
 		// If a piece is too far to reach the enemy,
 		// there is no point in generating moves for it,
-		// because the value is determined only by pre-processing.
+		// because the value is determined only by pre-processing,
+		// (unless an unknown valuable piece can be attacked
+		// from far away by a Nine).
 		if (n > 0) {
 			int fpcolor = fp.getColor();
 			int m = n / 2 + 1;
-			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m))
+			if (!(fpcolor == Settings.topColor
+					&& unknownNinesAtLarge > 0
+					&& b.isNineTarget(fp))
+				&& m < Grid.NEIGHBORS
+				&& !b.grid.isCloseToEnemy(fpcolor, i, m))
 				return true;
 
 			if (b.grid.hasAttack(fp)) {
@@ -588,6 +593,7 @@ public class AI implements Runnable
 		// always return false to avoid null move
 
 			int fpcolor = fp.getColor();
+			assert fpcolor == Settings.topColor : "n<0 code only for AI";
 			int m = -n / 2 + 1;
 			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m)) {
 				getAllMoves(moveList, fp);
@@ -922,14 +928,18 @@ public class AI implements Runnable
 			bestMoveValue = -9999;
 			for (int mo = 0; mo <= LOSES; mo++)
 			for (int move : moveList.get(mo)) {
-				log(DETAIL, "   " + logMove(b, n, move, MoveType.OK));
-				b.move(move, 0);
-				vm = -negamax(0, 9999, -9999, 1, null, null, killerMove); 
-				if (vm > bestMoveValue) {
-					bestMoveValue = vm;
-					bestMove = move;
+				MoveType mt = makeMove(n, 0, move);
+				if (mt == MoveType.OK
+					|| mt == MoveType.CHASER
+					|| mt == MoveType.CHASED) {
+					vm = -negamax(0, 9999, -9999, 1, null, null, killerMove); 
+					if (vm > bestMoveValue) {
+						bestMoveValue = vm;
+						bestMove = move;
+					}
+					b.undo();
+					log(DETAIL, "   " + logMove(b, n, move, mt));
 				}
-				b.undo();
 			}
 			log(PV, "   " + logMove(b, n, bestMove, MoveType.OK));
 			log("-+++-");
@@ -1580,7 +1590,21 @@ public class AI implements Runnable
 		return true;
 	}
 
-private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
+	boolean isValidScoutMove(int move)
+	{
+		int from = Move.unpackFrom(move);
+		int to = Move.unpackTo(move);
+		int dir = Grid.dir(to, from);
+		from += dir;
+		Piece p = b.getPiece(from);
+		while (p == null && to != from) {
+			from += dir;
+			p = b.getPiece(from);
+		}
+		return (to == from);
+	}
+
+	private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
@@ -1630,7 +1654,9 @@ private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Pi
 		int km = killerMove.getMove();
 		if (km != -1
 			&& isValidMove(km) 
-			&& (km == 0 || Grid.isAdjacent(km))) {
+			&& (km == 0
+				|| Grid.isAdjacent(km)
+				|| isValidScoutMove(km))) {
 			MoveType mt = makeMove(n, depth, km);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
