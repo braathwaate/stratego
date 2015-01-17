@@ -631,13 +631,31 @@ public class Board
 				unknownProtector= p;
 		}
 
-		// if the chased piece is trapped, nothing can be
+		if (unknownProtector != null) {
+
+		// if the chased piece is cornered, nothing can be
 		// determined about the protection
 
-		if (open == 0)
-			return;
+			if (open == 0)
+				return;
 
-		if (unknownProtector != null) {
+		// If a chased piece is trapped, it may try to use
+		// an unknown piece as a protector, even if the protector
+		// is not a lower ranked piece (i.e. bluffing).
+		// For example,
+		// -- -- xx xx
+		// -- -- B4 R3
+		// -- R2 -- B?
+		// -- -- -- --
+		// Blue Four is chased by Red Three, which then moves down
+		// next to Red Two.  Red Two is invincible only because
+		// Blue One is unknown but has a suspected chase rank elsewhere
+		// on the board.  So unknown Blue (which happens to be
+		// an isolated bomb) should not gain a chase rank of One!
+
+			Move m = getLastMove();
+			if (m.getPiece() == chased)
+				return;
 
 		// If both the chased piece and the protector are unknown,
 		// and the chased piece approached the chaser

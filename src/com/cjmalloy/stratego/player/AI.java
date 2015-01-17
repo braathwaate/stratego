@@ -1576,9 +1576,6 @@ public class AI implements Runnable
 
 	boolean isValidMove(int move)
 	{
-		if (move == 0)
-			return true;
-
 		int from = Move.unpackFrom(move);
 		int to = Move.unpackTo(move);
 		Piece fp = b.getPiece(from);
@@ -1610,13 +1607,13 @@ public class AI implements Runnable
 		Move kmove = new Move(null, -1);
 		int bestmove = 0;
 
-		if (ttMove != -1 && ttMove != killerMove.getMove()) {
+		if (ttMove != -1) {
 
 		// use best move from transposition table for move ordering
 		// best move entries in the table are not tried
 		// if a duplicate of the killer move
 
-			if (!isValidMove(ttMove))
+			if (ttMove != 0 && !isValidMove(ttMove))
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			else {
 
@@ -1653,9 +1650,10 @@ public class AI implements Runnable
 		// checking for a legal move requires checking all squares
 		int km = killerMove.getMove();
 		if (km != -1
+			&& km != 0 // null move legal only if pruned
+			&& km != ttMove
 			&& isValidMove(km) 
-			&& (km == 0
-				|| Grid.isAdjacent(km)
+			&& (Grid.isAdjacent(km)
 				|| isValidScoutMove(km))) {
 			MoveType mt = makeMove(n, depth, km);
 			if (mt == MoveType.OK
@@ -1726,7 +1724,8 @@ public class AI implements Runnable
 
 		// skip ttMove and killerMove
 
-				if (max == km || max == ttMove)
+				if (max == ttMove
+					|| (max != 0 && max == km))
 					continue;
 
 				MoveType mt = makeMove(n, depth, max);

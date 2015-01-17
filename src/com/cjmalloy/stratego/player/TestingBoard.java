@@ -682,11 +682,11 @@ public class TestingBoard extends Board
 	// would be tempting.
 	//
 	// Stealth value for pieces (1-4) is slightly less than
-	// the sum of next two higher opponent ranked pieces still on the board
+	// the sum of next two higher ranked pieces still on the board
 	// times a risk factor if stealth is maintained.
 	//
-	// The risk factor is 0.4, which is a 40% probability
-	// of capture of opponent piece.
+	// The risk factor is 0.2, which is a 20% probability
+	// of capture of each of these pieces.
 	//
 	// If the piece is the only player piece that prevents an opponent
 	// piece from becoming a dangerous rank, the value is increased
@@ -704,20 +704,20 @@ public class TestingBoard extends Board
 	// stealth of a lower ranked piece decreases the less chance
 	// it has for capture a valuable piece.
 	// For example, if the Ones are still on the board, the
-	// Twos have been removed, the stealth of the One retains
-	// its high value until only one Three is remaining.
+	// Twos have been removed, the stealth of the One
+	// drops in half.
 	//
-	// A One stealth value is equal to 400 *.4 (160 +- 53 points)
-	// if the opponent's Two is still on the board.
+	// A One stealth value is equal to 800 *.2 (160 +- 53  points)
+	// if the both Twos are still on the board.
 	//
-	// A Two stealth value is equal to 200 *.4 (80 +- 27 points)
-	// if both opponent Threes are still on the board.
+	// A Two stealth value is equal to 400 *.2 (80 +- 27 points)
+	// if two Threes are still on the board.
 	//
-	// A Three stealth value is equal to 100 *.4 (40 +- 13 points)
-	// if two opponent Fours or are still on the board.
+	// A Three stealth value is equal to 200 *.2 (40 +- 13 points)
+	// if two Fours are still on the board.
 	//
-	// A Four stealth value is equal to 50 * .4 (20 +- 6 points)
-	// if two opponent Fives are still on the board.
+	// A Four stealth value is equal to 100 * .2 (20 +- 6 points)
+	// if two Fives are still on the board.
 	//
 	// Stealth value for pieces (6-9) derives not from opponent piece value,
 	// but from opponent stealth value and bluffing.
@@ -844,13 +844,25 @@ public class TestingBoard extends Board
 		} else {
 			int n = 0;
 			int unknownDefenders = 0;
+			int count=2;
 			for (int rs = 1; rs<8; rs++) {
 				if (rs > r) {
 					n = rankAtLarge(1-c, rs);
 					if (n != 0) {
-						n = Math.min(n, 2);
+						n = Math.min(n, count);
 						v += values[1-c][rs] * n;
-						break;
+						count -= n;
+						if (count == 0)
+							break;
+					}
+
+					n = rankAtLarge(c, rs);
+					if (n != 0) {
+						n = Math.min(n, count);
+						v += values[c][rs] * n;
+						count -= n;
+						if (count == 0)
+							break;
 					}
 				}
 
@@ -862,9 +874,9 @@ public class TestingBoard extends Board
 			else {
 				if (unknownDefenders <= 1)
 					v += v/3;
-				else if (unknownDefenders > 2)
+				else if (unknownDefenders > 3)
 					v -= v/3;
-				v = v * 4 / 10;
+				v = v * 2 / 10;
 			}
 		}
 
