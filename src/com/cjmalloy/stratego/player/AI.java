@@ -1153,12 +1153,13 @@ public class AI implements Runnable
 			return b.getValue();
 
 		boolean bestFlee = false;
-		int nextBest = -9999;	// default value not significant
+		Piece bestTp = null;
 
 		// try fleeing
 		b.pushNullMove();
 		int best = qs(depth+1, n-1, true);
 		b.undo();
+		int nextBest = best;
 
 		// "best" is b.getValue() after
 		// opponent's best attack if player can flee.
@@ -1252,19 +1253,27 @@ public class AI implements Runnable
 		// (if vm < best, the player will play
 		// some other move)
 
+		// bestTp: do not give extra credit for two attacks
+		// on the same piece, because if it flees,
+		// it nullifies both attacks.
+
 				if (b.bturn == Settings.topColor) {
 					if (vm > best) {
-						nextBest = best;
+						if (tp != bestTp)
+							nextBest = best;
 						best = vm;
+						bestTp = tp;
 						bestFlee = canFlee;
-					} else if (vm > nextBest)
+					} else if (vm > nextBest && tp != bestTp)
 						nextBest = vm;
 				} else {
 					if (vm < best) {
-						nextBest = best;
+						if (tp != bestTp)
+							nextBest = best;
 						best = vm;
+						bestTp = tp;
 						bestFlee = canFlee;
-					} else if (vm < nextBest)
+					} else if (vm < nextBest && tp != bestTp)
 						nextBest = vm;
 				}
 			} // dir
