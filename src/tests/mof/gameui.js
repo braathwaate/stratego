@@ -537,7 +537,7 @@ function onGenerateSetupResponse()
 	{
 		UIState.ServiceCallInProgress = false;
 		
-  		if (Service.status == 200)
+		if (Service.status == 200)
 		{
 			//clear enemy and middle fields
 			for (var row = 0; row < 10; row++)
@@ -586,6 +586,7 @@ function onGenerateSetupResponse()
 		}
 		else
 		{
+		require('util').debug('ERROR ' + Service.status);
     		displayMessage("Error accessing game server");
 		}
 	}
@@ -926,7 +927,7 @@ function initializeConstants()
 {
 	Constants = new Object();
 	
-	Constants.ServiceURL = "http://www.jayoogee.com/strategywebgame/service.asmx";
+	Constants.ServiceURL = ServiceUrl;
 	
 	Constants.FieldSizeX = 38;
 	Constants.FieldSizeY = 38;

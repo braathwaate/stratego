@@ -1065,7 +1065,7 @@ public class TestingBoard extends Board
 		int retreat[][] = {
 			{1, 1, 2, 1, 1},
 			{1, 2, 3, 2, 1},
-			{3, 3, 4, 3, 3},
+			{2, 3, 4, 3, 2},
 			{3, 4, 5, 4, 3},
 			{4, 5, 6, 5, 4}
 		};
@@ -1096,8 +1096,8 @@ public class TestingBoard extends Board
 		if (p.isKnown() || p.isSuspectedRank()) {
 			for (int j = 5; j > p.getRank().toInt(); j--) {
 				if (lowerRankCount[p.getColor()][j-1] >= 2) {
-					setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-					setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+					setFleePlan(1-p.getColor(), planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+					setFleePlan(1-p.getColor(), planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 				}
 			}
 
@@ -1109,7 +1109,7 @@ public class TestingBoard extends Board
 				&& p.getColor() == Settings.bottomColor
 				&& !hasFewExpendables(p.getColor())
 				&& p.getIndex() >= 56)
-				setFleePlan(planA[1-p.getColor()][0], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(1-p.getColor(), planA[1-p.getColor()][0], tmp, DEST_PRIORITY_FLEE);
 
 		} else
 
@@ -1160,8 +1160,8 @@ public class TestingBoard extends Board
 				} else if (hasFewExpendables(p.getColor()))
 					continue;
 
-				setFleePlan(planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-				setFleePlan(planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(1-p.getColor(), planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(1-p.getColor(), planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 			}
 	}
 
@@ -2794,10 +2794,12 @@ public class TestingBoard extends Board
 			setPlan(plan, desttmp, priority);
 	}
 
-	private void setFleePlan(int[][] plan, int[] tmp, int priority)
+	private void setFleePlan(int color, int[][] plan, int[] tmp, int priority)
 	{
 		assert tmp[0] == DEST_VALUE_NIL : "call genDestTmp before setPlan";
-		for (int j = 12; j <= 120; j++)
+		for (int y = 3; y < 10; y++)
+		for (int x = 0; x < 10; x++) {
+			int j = Grid.getIndex(x, yside(color, y));
 			if (plan[1][j] > priority) {
 				if (plan[0][j] == DEST_VALUE_NIL) {
 					plan[0][j] = tmp[j];
@@ -2820,6 +2822,7 @@ public class TestingBoard extends Board
 			} else if (plan[0][j] < tmp[j]
 				&& tmp[j] != DEST_VALUE_NIL)
 					plan[0][j]= tmp[j];
+		}
 	}
 
 	private void genPlanB(int [] desttmp, int color, int rank, int priority)
@@ -2842,6 +2845,7 @@ public class TestingBoard extends Board
 	Rank getChaseRank(Piece p, int r, boolean rankLess)
 	{
 		int color = p.getColor();
+		assert color == Settings.bottomColor : "getChaseRank() only for opponent pieces";
 		int j = r;
 		Rank newRank = Rank.UNKNOWN;
 
@@ -2860,10 +2864,20 @@ public class TestingBoard extends Board
 				if (unknownRankAtLarge(color, r) != 0)
 					newRank = Rank.toRank(r);
 		} else {
-			if (r == 6)
-				j = 5; 	// chaser is probably a Five
+			if (r == 6) {
 
-			else {
+		// Sixes are usually chased by Fives, but because 4?x6
+		// is also positive, the chaser could be a Four.
+		// Fours are usually reserved to chase Fives, but if there
+		// are more opponent Fours than AI Fives,
+		// then chasing Sixes becomes worthwhile.
+
+				if (rankAtLarge(1-color, r-1) >= rankAtLarge(color, r-2))
+
+					j = 5; 	// chaser is probably a Five
+				else
+					j = 4; 	// chaser is probably a Four
+			} else {
 
 		// Sevens, Eights and Nines are chased
 		// by Fives and higher ranks, as long as the chaser rank
@@ -3170,7 +3184,7 @@ public class TestingBoard extends Board
 			&& vfrom != DEST_VALUE_NIL
 			&& plan[1][to] == priority) {
 
-		// The difference in plan values for adjacent squares
+		// The difference in chase plan values for adjacent squares
 		// is always 1, except if the plan was modified by
 		// neededNear, which makes the squares
 		// adjacent to the target (value 2) to be value 5.
@@ -3191,8 +3205,13 @@ public class TestingBoard extends Board
 		// Note: Scout far moves are always penalized, because
 		// the difference in value between the from and to squares is
 		// not 1.
+		//
+		// Note: adjacent squares in flee plans are not restricted
+		// to a difference of 1 (could be 0).
 
-				if (vfrom == vto + 1)
+				if (priority == DEST_PRIORITY_FLEE)
+					return (vfrom - vto) * priority;
+				else if (vfrom == vto + 1)
 					return priority;
 				else
 					return -priority;
@@ -3446,7 +3465,7 @@ public class TestingBoard extends Board
 		//	if (tp.moves == 0 && isExpendable(fp))
 		//		vm += unmovedValue[Move.unpackTo(m)];
 
-		// The ai assumes that any unknown piece
+		// The AI assumes that any unknown piece
 		// will take a known or flag bomb
 		// because of flag safety.  All other attacks
 		// on bombs are considered lost.
@@ -3455,19 +3474,18 @@ public class TestingBoard extends Board
 		// winFight() would return LOSES.
 		// But the opponent piece could be a bluffing eight,
 		// so the threat needs to be taken seriously.
-		// If the piece is a known Unknown, it is a piece
-		// that was attacked in the search tree, so its rank
-		// *must* be less than the attacker.
 		//
+		// MaybeEight determines whether a known Unknown
+		// can take a bomb.  For example,
 		// RF RB B? -- -- R9
 		// RB -- R7 -- -- --
 		// -- -- -- -- -- --
 		//
 		// Red has the move. If R9xB? or R7xB?,
-		// the result is a known Unknown.  But R9xB? results
-		// in a piece (known Unknown Nine) which still can take the bomb
-		// and R7xB? results in a known Unknown Six
-		// that cannot take the bomb.
+		// the result is a known Unknown.  But R9xB? does not
+		// clear MaybeEight, so the piece can still take the bomb.
+		// R7xB? clears MaybeEight, so the piece
+		// cannot take the bomb.
 		//
 		// Another example:
 		// RF RB
@@ -3480,10 +3498,17 @@ public class TestingBoard extends Board
 		// Eight because it approached Red 8.  Red has no choice
 		// but to attack Unknown Blue or risk losing the game.
 		//
+		// The flag must be known OR the attacker does not
+		// have a suspected rank to allow the attack on the
+		// bomb to succeed.  The AI assumes that an attacker
+		// can succeed in attacking the flag position even
+		// if the opponent makes a lucky guess.
+
 			int result;
 			if (tprank == Rank.BOMB
 				&& fp.getMaybeEight()
-				&& flag[Settings.topColor].isKnown()) {
+				&& (flag[Settings.topColor].isKnown()
+					|| fprank == Rank.UNKNOWN)) {
 				if (tp.isKnown() || tp.aiValue() != 0) {
 					fprank = Rank.EIGHT;
 					fp.setRank(fprank);
@@ -5489,21 +5514,6 @@ public class TestingBoard extends Board
 				return Rank.LOSES; // could be EVEN
 			}
 
-		// If the attacker has chased an unknown piece,
-		// it usually indicates that the piece is weak (5-9)
-		// However, be wary of this rule in the opponent flag area,
-		// because unknown pieces are often approached
-		// in the opponent flag area to fend off attack.
-		// Unknown eights trying to get at the bombs are
-		// especially vulnerable.
-			else if (fp.getActingRankChase() == Rank.UNKNOWN
-				&& (flag[Settings.bottomColor] == null
-					|| Grid.steps(fp.getIndex(), flag[Settings.bottomColor].getIndex()) > 2)) {
-					if (tprank.toInt() < lowestUnknownExpendableRank)
-						return Rank.LOSES;	// maybe not
-					else if (tprank.toInt() == lowestUnknownExpendableRank)
-						return Rank.EVEN;	// maybe not
-			}
 
 			else if (isFleeing(tp, fp))
 				return Rank.LOSES;	// maybe not
@@ -5555,18 +5565,34 @@ public class TestingBoard extends Board
 		// usually means that the opponent rank is weak, since
 		// most players move expendables to gain information
 		// before the lower ranks.
-		// So if the AI is winning, assume that the exchange
-		// is even.  This is a further step to keep the game going.
+		// So if the AI is winning, assume that the piece weak.
+		// This is a further step to keep the game going.
 
-			else if (isExpendable(tp)
+			boolean riskExpendable =
+				(isExpendable(tp)
 				&& !tp.isKnown()
-				&& isWinning(Settings.topColor) >= VALUE_FIVE) {
-					if (!fp.hasMoved())
-						return Rank.LOSES;	// maybe not
-					else
-						return Rank.EVEN;
-			}
+				&& isWinning(Settings.topColor) >= VALUE_FIVE);
 
+			if (riskExpendable && !fp.hasMoved())
+				return Rank.LOSES;	// maybe not
+
+		// If the attacker has chased an unknown piece,
+		// it usually indicates that the piece is weak (5-9)
+		// However, be wary of this rule in the opponent flag area,
+		// because unknown pieces are often approached
+		// in the opponent flag area to fend off attack.
+		// Unknown eights trying to get at the bombs are
+		// especially vulnerable.
+
+			else if ((fp.getActingRankChase() == Rank.UNKNOWN
+					|| riskExpendable)
+				&& (flag[Settings.bottomColor] == null
+					|| Grid.steps(fp.getIndex(), flag[Settings.bottomColor].getIndex()) > 2)) {
+					if (tprank.toInt() < lowestUnknownExpendableRank)
+						return Rank.LOSES;	// maybe not
+					else if (tprank.toInt() == lowestUnknownExpendableRank)
+						return Rank.EVEN;	// maybe not
+			}
 		// Any piece will take a SPY.
 
 			else if (tprank == Rank.SPY)

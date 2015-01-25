@@ -1059,11 +1059,6 @@ public class AI implements Runnable
 	// Quiescence Search (qs)
 	// Deepening the tree to evaluate captures for qs.
 	// 
-	// This prevents a single level horizon effect
-	// where the ai places another
-	// (lesser) piece subject to attack when the loss of an existing piece
-	// is inevitable.
-	// 
 	// This version gives no credit for the "best attack" on a movable
 	// piece on the board because it is likely the opponent will move
 	// the defender the very next move.  This prevents the ai
@@ -1146,7 +1141,26 @@ public class AI implements Runnable
 	// 1b. R4xB3
 	//
 	// (*) this is why QSMAX must be at least 3.
-	
+	// This also prevents a single level horizon effect
+	// where the ai places another (lesser) piece subject
+	// to attack when the loss of an existing piece is inevitable.
+	// QSMAX 3 is deep enough to see both captures.
+	// 
+	// qs does not (and should not) prevent a horizon effect
+	// caused by repetitive chase moves.  Thus, if a lesser
+	// piece is subject to loss, the AI can try to delay the loss
+	// by chasing a more valuable piece.  However, the Two Squares
+	// rule should eventually kick in and the AI should see the
+	// loss is inevitable.
+	//
+	// Chase moves can be erroneously associated with the
+	// horizon effect if a chasing AI piece is also drawn towards
+	// protecting its flag.  In this case, the AI is rewarded
+	// greatly for keeping its chase piece near the flag and
+	// thwarting movement of opponent pieces towards the flag.
+	// Thus it may leave material at risk to keep its chase piece
+	// near the flag.  
+
 	private int qs(int depth, int n, boolean flee)
 	{
 		if (n < 1)

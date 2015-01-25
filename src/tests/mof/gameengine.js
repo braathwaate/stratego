@@ -46,6 +46,10 @@ function initializeGameInfo()
 
 function initializeService()
 {
+	Service = createHttpClient();
+	// ServiceUrl = "http://" + window.location.hostname + "/masteroftheflag/webengine/service.asmx";
+	ServiceUrl = "http://" + "www.jayoogee.com" + "/masteroftheflag/webengine/service.asmx";
+/*
 	if (navigator.appName == "Netscape")
 	{
 		Service = new XMLHttpRequest();
@@ -65,6 +69,7 @@ function initializeService()
 	{
 		alert("No web service suport!");
 	}	
+*/
 }
 
 function createGenerateSetupRequest()
@@ -339,3 +344,4 @@ function updateFigureStatus(figure, status)
 var GameInfo;
 var Service;
 var GameEngineConstants;
+var ServiceURL;
