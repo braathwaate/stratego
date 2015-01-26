@@ -197,6 +197,24 @@ public class TestingBoard extends Board
 
 	private static final int VALUE_MOVED = 5;
 
+	// generate bomb patterns
+	static int[][] bombPattern = new int[30][6];
+	static {
+	for (int y = 0; y <= 2; y++)
+	for (int x = 0; x <= 9; x++) {
+		int flag = Grid.getIndex(x,y);
+		int bpi = 0;
+		bombPattern[y*10+x][bpi++] = flag;
+		for (int d : dir) {
+			int bi = flag + d;
+			if (!Grid.isValid(bi))
+				continue;
+			bombPattern[y*10+x][bpi++] = bi;
+		}
+		bombPattern[y*10+x][bpi] = 0;	// end of pattern
+	}
+	}
+
 	public TestingBoard() {}
 	
 	public TestingBoard(Board t)
@@ -1646,7 +1664,7 @@ public class TestingBoard extends Board
 	// to accomplish a better result, albeit with much more
 	// computation.)
 
-	private void flagTarget(Piece flagp)
+	private void defendFlag(Piece flagp)
 	{
 		int color = flagp.getColor();
 		int flagi = flagp.getIndex();
@@ -2030,7 +2048,7 @@ public class TestingBoard extends Board
 		// the maximum search ply, it prevents the horizon effect.
 			makeFlagKnown(pflag);
 
-			flagTarget(flag[Settings.topColor]);
+			defendFlag(flag[Settings.topColor]);
 		}
 
 		// Always protect the flag bomb structure, even if the flag
@@ -2182,22 +2200,6 @@ public class TestingBoard extends Board
 		int maybe_count = 0;
 		int open_count = 0;
 
-		// generate bomb patterns
-		int[][] bombPattern = new int[30][6];
-		for (int y = 0; y <= 2; y++)
-		for (int x = 0; x <= 9; x++) {
-			int flag = Grid.getIndex(x,y);
-			int bpi = 0;
-			bombPattern[y*10+x][bpi++] = flag;
-			for (int d : dir) {
-				int bi = flag + d;
-				if (!Grid.isValid(bi))
-					continue;
-				bombPattern[y*10+x][bpi++] = bi;
-			}
-			bombPattern[y*10+x][bpi] = 0;	// end of pattern
-		}
-
 		int lastbp = 0;
                 for ( int[] bp : bombPattern ) {
 			int[] b = new int[6];
@@ -2235,6 +2237,7 @@ public class TestingBoard extends Board
 					// if a structure had a bomb removed,
 					// guess that it holds the flag
 						genDestFlag(b[0]);
+						defendFlag(flagp);
 						open_count++;
 					}
 
@@ -2457,7 +2460,8 @@ public class TestingBoard extends Board
 			assert flagp != null : "Well, where IS the flag?";
 
 			setFlagValue(flagp);
-			flagTarget(flagp);
+			defendFlag(flagp);
+			genDestFlag(flagp.getIndex());
 
 		} // maybe == 0 (opponent flag only)
 
@@ -3649,9 +3653,6 @@ public class TestingBoard extends Board
 
 				} else {	// AI is attacker
 
-		// The One risks stealth.
-		// All other pieces are at risk of total loss.
-
 					assert !tp.isKnown() : "defender is known?"; 
 		// Often an unmoved piece acquires a chase rank
 		// because it protected a piece.  However, the piece
@@ -3664,29 +3665,30 @@ public class TestingBoard extends Board
 						&& fprank != Rank.EIGHT)
 						vm -= fpvalue;
 
-		// The AI one only risks its stealth value in
+		// The AI One risks only its stealth value in
 		// an even exchange, if the opponent piece turns out
-		// not be a one.  If the One is known, the exchange
+		// not be a one. If the One is known, the exchange
 		// is a wash.
-
 					else if (fprank == Rank.ONE) {
 						if (!fp.isKnown())
 							vm -= stealthValue(fp);
+					}
 
-		// Because the AI is just guessing the defender rank,
-		// the defender rank may actually win.
+		// But other pieces risk total loss, if the AI has
+		// has incorrectly guessed the defender rank.
 		// While probability favors the AI, it does not
 		// want to risk its lower ranked pieces on its guesses.
 
-					} else if (fprank.toInt() <= 4)
+					else if (fprank.toInt() <= 4)
 						vm -= riskOfLoss(fp, tp);
 
-		// But the AI usually is conservative,
+		// Yet the AI usually is conservative,
 		// so even exchanges usually turn out to be positive,
 		// depending on the difference in values[]
 		// (e.g. an even exchange of Eights could vary
 		// wildly depending on the value of the Eights)
-					vm += values[1-fpcolor][tprank.toInt()] - values[fpcolor][fprank.toInt()];
+
+					vm += values[1-fpcolor][fprank.toInt()] - values[fpcolor][fprank.toInt()];
 
 					vm += (9 - fprank.toInt());
 				}
@@ -3741,11 +3743,11 @@ public class TestingBoard extends Board
 		// R8
 		// B? BB
 		// BB BF BB
-		// unknown Blue is suspected to be an Eight.  8x8 would
+		// unknown Blue is suspected to be an Eight.  R8xB? would
 		// leave the Red Eight on the board in position to attack
-		// the flag.
+		// the flag.  So an AI Eight does not stay on the board.
 
-				if (tp.getColor() == Settings.bottomColor
+				if (fpcolor == Settings.topColor
 					&& !tp.isKnown()
 					&& fprank != Rank.EIGHT) {
 					fp.moves++;
@@ -5335,16 +5337,18 @@ public class TestingBoard extends Board
 		// The determination of the target is more computationally
 		// expensive than just basing the risk on the attacker
 		// rank.  To simplify, the AI reduces the risk
-		// if the depth is greater than two moves away.
+		// by depth/2.
 		// This makes the assumption that if the attacker is
 		// far away, there is likely some other target it
-		// is aiming for.  Once the attacker is only two moves
-		// away, the AI assumes that attacker is aiming for
-		// this piece, and it needs to assess the risk.
+		// is aiming for.  Once the attacker is adjacent,
+		// the AI assumes that attacker is aiming for
+		// this piece, and it is impacted by the full risk.
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
-		if (depth > 3)
-			risk /= depth;
+		if (depth/2 >= risk)
+			risk = 1;
+		else
+			risk -= depth/2;
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
