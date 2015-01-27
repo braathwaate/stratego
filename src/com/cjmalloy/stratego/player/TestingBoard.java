@@ -5337,7 +5337,7 @@ public class TestingBoard extends Board
 		// The determination of the target is more computationally
 		// expensive than just basing the risk on the attacker
 		// rank.  To simplify, the AI reduces the risk
-		// by depth/2.
+		// based on depth.
 		// This makes the assumption that if the attacker is
 		// far away, there is likely some other target it
 		// is aiming for.  Once the attacker is adjacent,
@@ -5345,10 +5345,10 @@ public class TestingBoard extends Board
 		// this piece, and it is impacted by the full risk.
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
-		if (depth/2 >= risk)
+		if (depth * 2 / 3 >= risk)
 			risk = 1;
 		else
-			risk -= depth/2;
+			risk -= depth * 2 / 3;
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}

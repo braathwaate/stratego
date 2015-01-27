@@ -1329,10 +1329,17 @@ public class Board
 		return Grid.isAdjacent(oppmove.getTo(),  Move.unpackFrom(m));
 	}
 
-	// chasing moves back to the square where the chasing piece
-	// came from in the directly preceding turn are always allowed
-	// as long as this does not violate the
-	// Two-Squares Rule / Five-Moves-on-Two-Squares Rule.
+	// A chasing move back to the square where the chasing piece
+	// came from in the directly preceding turn is allowed
+	// if this can force the opponent piece to hit the
+	// Two-Squares Rule / Five-Moves-on-Two-Squares Rule first.
+	// If not, then the chase move should be discarded if it
+	// results in a repetitive position, because there is no point
+	// in chasing further.  (When this function returns false,
+	// the calling code can reduce the number of
+	// pointless back-and-forth moves from three to two, because
+	// the third move results in the same position.)
+	// 
 	public boolean isTwoSquaresChase(int m)
 	{
 		UndoMove m2 = getLastMove(2);
@@ -1343,13 +1350,35 @@ public class Board
 		if (m2.getFrom() != Move.unpackTo(m))
 			return false;
 
-		// not a chasing move?
-		UndoMove oppmove = getLastMove(1);
-		if (oppmove == null)
+		// If opponent piece does not move between same two squares,
+		// then this move cannot result in a two squares victory.
+		UndoMove m1 = getLastMove(1);
+		if (m1 == null)
+		 	return false;
+
+		UndoMove m3 = getLastMove(3);
+		if (m3 == null)
+		 	return false;
+
+		if (m1.getTo() != m3.getFrom()
+			|| m1.getFrom() != m3.getTo())
 			return false;
 
-		if (!Grid.isAdjacent(oppmove.getTo(),  Move.unpackTo(m)))
-			return false;
+		// Commented out in 9.3 because
+		// piece does not need to be adjacent for a chase.
+		// For example,
+		// -- -- R9
+		// -- -- xx
+		// BS -- xx
+		// -- -- --
+		// Red Nine moves left two squares, Blue Spy moves right,
+		// Red Nine moves right, Blue Spy moves left.
+		// Red Nine should be allowed to move right again,
+		// even though this is a repeated position, because
+		// it does not violate the two squares rule and
+		// Red Nine will capture Blue Spy.
+		// if (!Grid.isAdjacent(oppmove.getTo(),  Move.unpackTo(m)))
+		// 	return false;
 
 		// Will the AI eventually be blocked by Two Squares?
 		//
