@@ -47,7 +47,7 @@ public class Board
 	// this is used to guess flags and other bombs
 	// TBD: try to guess the opponents entire setup by
 	// correllating against all setups in the database
-	protected Rank[] setup = new Rank[121];
+	protected Piece[] setup = new Piece[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
 	protected static long[][][][][] boardHash = new long[2][32][2][15][121];
 
@@ -182,6 +182,7 @@ public class Board
 		{
 			setPiece(p, s);
 			tray.remove(p);
+			setup[Grid.getIndex(s.getX(), s.getY())] = p;
 			return true;
 		}
 		return false;
@@ -204,11 +205,6 @@ public class Board
 				tp.setShown(true);
 			}
 
-			// TBD: store original setup location
-			// after each discovery
-			if (tp.getRank() == Rank.BOMB)
-				setup[m.getTo()] = Rank.BOMB;
-			
 			int result = fp.getRank().winFight(tp.getRank());
 			if (result == 1)
 			{
@@ -303,7 +299,7 @@ public class Board
 		undoList.clear();
 
 		for (int i = 12; i <=120; i++)
-			setup[i] = Rank.UNKNOWN;
+			setup[i] = null;
 
 		bturn = 0;
 		boardHistory[0].clear();
@@ -1154,11 +1150,7 @@ public class Board
 	{
 		assert getPiece(i) != null : "getPiece(i) null?";
 
-		getPiece(i).setShown(true);
-		getPiece(i).setKnown(false);
-
-		for (Piece p : tray) 
-			p.setKnown(true);
+		getPiece(i).kill();
 
 		remove(i);
 	}
@@ -1249,8 +1241,8 @@ public class Board
 	// Because of limited search depth, the completion of
 	// a two squares ending may well be beyond the horizon of the search.
 	// However, a two squares ending can be predicted earlier if the
-	// opponent piece chased the defender from a non-adjacent
-	// square.  For example,
+	// player begins a possible two squares ending before the defender.
+	// For example,
 	// xx xx xx	xx xx xx	xx xx xx
 	// -- R3 R?	-- R3 R?	-- R3 R?
 	// -- -- --	-- -- B2	B2 -- --
@@ -1259,9 +1251,8 @@ public class Board
 	// Blue Two has the move and approaches Red Three
 	// Positions 1 & 2 can lead to the two squares rule but
 	// position 3 does not.  Thus, move generation can eliminate
-	// the move for R3 back to its original spot if the
-	// from-square of its chaser did not begin adjacent to the
-	// current from-square of the chased piece.
+	// the move for R3 back to its original spot if the player
+	// was the first to move its piece between two adjacent squares.
 	//
 	// Hence, the effect of the two squares rule can be felt
 	// at ply 3 rather than played out to its entirety at ply 7.
@@ -1284,6 +1275,33 @@ public class Board
 	//
 	// Blue Two has the move and approaches Red Three.
 	// Position 1 could be seen as a false Two Squares ending.
+	//
+	// Note that this rule works even if chaser and chased pieces
+	// are far away.  For example,
+	// xx xx xx
+	// -- R3 R?
+	// -- -- --
+	// B2 -- --
+	// Blue has the move. This is not a possible two squares ending
+	// because if Blue Two moves right, Red Three moves left,
+	// Blue Two moves left, Red Three can still move right,
+	// because Blue began the two squares first.
+	// ...    2a3-b3	// m3
+	// 3b1-a1		// m2
+	// ...    2b3-a3	// m1
+	// 3a1-b1	// allowed because m1 and m3 are swapped
+
+	// ...    2a3-b3	// m5
+	// 3b1-a1		// m4
+	// ...    2b3-a3	// m3
+	// 3a1-b1		// m2
+	// ...    2a3-b3	// m1
+	// 3b1-a1	// allowed because m1 and m3 are swapped
+
+	// ...    <some other move>	// m3
+	// 3b1-a1		// m2
+	// ...    2b3-a3	// m1
+	// 3a1-b1	// disallowed because m1 and m3 are not swapped
 
 	public boolean isPossibleTwoSquares(int m)
 	{
@@ -1300,7 +1318,7 @@ public class Board
 			return false;
 
 		// not the same piece?
-		if (m2.getPiece() != getPiece(Move.unpackFrom(m)))
+		if (!m2.getPiece().equals(getPiece(Move.unpackFrom(m))))
 			return false;
 
 		// not an adjacent move (i.e., nine far move)
@@ -1309,16 +1327,36 @@ public class Board
 
 		// test for three squares (which is legal)
 		Piece p = getPiece(Move.unpackTo(m) + (Move.unpackTo(m) - Move.unpackFrom(m)));
-		if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
+		if (p == null)
+			return false;
+
+		// Commented out in 9.4.
+		// If the third square is occupied by an opponent piece,
+		// assume a possible two squares result.  This forces the AI
+		// to attack the third square piece or allow the
+		// chaser to attack.  For example,
+		// -- R? --
+		// R1 B3 R?
+		// -- -- R?
+		// Blue Three has the move.  If it moves down, and the
+		// Red One moves down, it will not be allowed to return
+		// (ends in possible two squares).  So it must choose
+		// an unknown piece to attack or face certain loss against
+		// Red One.
+		//if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
+		//	return false;
+
+		UndoMove oppmove1 = getLastMove(1);
+		if (oppmove1 == null)
 			return false;
 
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)
 			return false;
 
-		// Did chase piece start non-adjacent to chaser?
-		// If so, this is a possible two squares ending.
-		return !Grid.isAdjacent(oppmove3.getFrom(), Move.unpackFrom(m));
+		// player began two moves before opponent?
+		return !(oppmove3.getFrom() == oppmove1.getTo()
+			&& oppmove3.getTo() == oppmove1.getFrom());
 	}
 
 	public boolean isChased(int m)
@@ -1635,6 +1673,20 @@ public class Board
 	public long getHash()
 	{
 		return boardHistory[bturn].hash;
+	}
+
+	protected Piece getSetupPiece(int i)
+	{
+		return setup[i];
+	}
+
+	protected Rank getSetupRank(int i)
+	{
+		Piece p = setup[i];
+		if (!p.isKnown())
+			return Rank.UNKNOWN;
+		else
+			return p.getRank();
 	}
 }
 

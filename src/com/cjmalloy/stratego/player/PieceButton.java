@@ -125,14 +125,14 @@ public class PieceButton extends JButton implements MouseListener,
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isKnown())
+					if (piece.isHighLight())
 						setIcon(skin.redASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.redSkins[piece.getRank().ordinal()]);
 				}
 				else
 				{
-					if (piece.isKnown())
+					if (piece.isHighLight())
 						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
 					else
 						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
@@ -170,7 +170,7 @@ public class PieceButton extends JButton implements MouseListener,
 			{
 				if (piece.getColor()%2 == 0)
 				{
-					if (piece.isKnown())
+					if (piece.isHighLight())
 						pc = skin.redASkins[piece.getRank().ordinal()].getImage();
 					else if (piece.hasMoved())
 						pc = skin.redAASkins[piece.getRank().ordinal()].getImage();
@@ -179,7 +179,7 @@ public class PieceButton extends JButton implements MouseListener,
 				}
 				else
 				{
-					if (piece.isKnown())
+					if (piece.isHighLight())
 						pc = skin.blueASkins[piece.getRank().ordinal()].getImage();
 					else if (piece.hasMoved())
 						pc = skin.blueAASkins[piece.getRank().ordinal()].getImage();

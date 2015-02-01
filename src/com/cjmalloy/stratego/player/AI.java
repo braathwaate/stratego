@@ -504,13 +504,6 @@ public class AI implements Runnable
 		boolean hasMove = false;
 		int i = fp.getIndex();
 
-		// if the piece is no longer on the board, ignore it
-		if (b.getPiece(i) != fp)
-			return false;
-
-		if (!b.grid.hasMove(fp))
-			return false;
-
 		Rank fprank = fp.getRank();
 
 		if (fprank == Rank.BOMB) {
@@ -556,16 +549,6 @@ public class AI implements Runnable
 			getAttackMoves(moveList, fp);
 			return false;
 		}
-
-		if (fprank == Rank.NINE)
- 			getScoutFarMoves(moveList, fp);
-
-		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks on unknown
-		// valuable pieces.
-		// if there are no nines left, then skip this code
-		else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
- 			getPossibleScoutFarMoves(moveList, fp);
 
 		// If a piece is too far to reach the enemy,
 		// there is no point in generating moves for it,
@@ -618,35 +601,73 @@ public class AI implements Runnable
 		for (int i = 0; i <= LOSES; i++)
 			moveList.add(new ArrayList<Integer>());
 
-		// FORWARD PRUNING
-		// chase deep search
-		// only examine moves adjacent to chase and chased pieces
-		// as they chase around the board
-		if (chasePiece != null) {
-			getMoves(n, moveList, chasedPiece);
-			for (int d : dir ) {
-				int i = chasePiece.getIndex() + d;
-				if (i != chasedPiece.getIndex() && Grid.isValid(i)) {
-					Piece p = b.getPiece(i);
-					if (p != null && p.getColor() == turn)
-						getMoves(n, moveList, p );
-				}
-			}
-
-			// AI can end the chase by moving some other piece,
-			// allowing its chased piece to be attacked.  If it
-			// has found protection, this could be a good
-			// way to end the chase.
-			// Add null move
-			addMove(moveList.get(NULLMOVE), 0);
-
-		} else {
 		boolean hasMove = false;
-		for (Piece np : b.pieces[turn]) {
-			if (np == null)	// end of list
+		for (Piece fp : b.pieces[turn]) {
+			if (fp == null)	// end of list
 				break;
-			if (getMoves(n, moveList, np))
-				hasMove = true;
+
+			// if the piece is no longer on the board, ignore it
+			if (b.getPiece(fp.getIndex()) != fp)
+				continue;
+
+			if (!b.grid.hasMove(fp))
+				continue;
+
+			// FORWARD PRUNING
+			// deep chase search
+			// Only examine moves where player and opponent
+			// are separated by up to 1 open square.
+
+			// What often happens in a extended chase,
+			// is that the chased piece approaches one of its other
+			// pieces, allowing the chaser to fork the two pieces.
+			// For example,
+			// -- -- R3 -- -- --
+			// -- -- B2 -- -- R5
+			// -- -- -- -- -- R4
+			// Red Three has been fleeing Blue Two.
+			// If Red Three moves right, Blue Two will be
+			// able to fork Red Five and Red Four.
+			// But as the search continues, the AI will evaluate
+			// Blue Two moving even further right, because only
+			// one open square separates Blue Two from Red Five.
+			// Thus, Red will move left.
+
+			// If the Red pieces were more than one open square
+			// away, Blue two could still try to approach them,
+			// but Red has an extra move to respond, and usually
+			// it is able to separate the pieces eliminating
+			// the fork.
+
+			// By pruning off all other moves on the board
+			// that are more than one open square away from
+			// an opponent piece, the AI search depth doubles,
+			// making it far less likely for the AI to lose
+			// material in a random chase.
+			// (More often what happens is that the opponent
+			// piece ends the chase, and then
+			// the AI makes a bad move using the broad search,
+			// such as heading into a trap beyond the search
+			// horizon, and then the chase resumes.)
+
+			if (chasePiece != null) {
+				if (getMoves(1, moveList, fp))
+					hasMove = true;
+			} else {
+				Rank fprank = fp.getRank();
+				if (fprank == Rank.NINE)
+					getScoutFarMoves(moveList, fp);
+
+				// NOTE: FORWARD PRUNING
+				// generate scout far moves only for attacks on unknown
+				// valuable pieces.
+				// if there are no nines left, then skip this code
+				else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
+					getPossibleScoutFarMoves(moveList, fp);
+
+				if (getMoves(n, moveList, fp))
+					hasMove = true;
+			}
 		}
 
 		// FORWARD PRUNING
@@ -658,7 +679,6 @@ public class AI implements Runnable
 		// as the best move.
 		if (hasMove)
 			addMove(moveList.get(NULLMOVE), 0);
-		}
 
 		return moveList;
 	}
@@ -780,6 +800,20 @@ public class AI implements Runnable
 		// flag bomb.
 			&& b.getPiece(Move.unpackFrom(bestMove)).getRank().toInt() <= 4 ) {
 
+		// If Two Squares is in effect,
+		// deep search only if the best move is not adjacent
+		// to the chase piece from-square.
+		// Otherwise, the chased piece is in no danger,
+		// because the chase piece can move back and forth
+		// until Two Squares prevents the chaser from moving.
+		//
+		// (Note that bestMove cannot lead to a possible two squares
+		// result for the AI, because makeMove() prevents it).
+
+			if (Settings.twoSquares
+				&& Grid.isAdjacent(Move.unpackTo(bestMove), lastMove.getFrom()))
+				continue;
+
 		// check for possible chase
 			for (int d : dir) {
 				int from = lastMoveTo + d;
@@ -788,17 +822,6 @@ public class AI implements Runnable
 
 		// chase confirmed:
 		// bestMove is to move chased piece 
-
-		// If Two Squares is in effect,
-		// deep search only if the best move is not adjacent
-		// to the chase piece from-square.
-		// Otherwise, the chased piece is in no danger,
-		// because the chase piece can move back and forth
-		// until Two Squares prevents the chaser from moving.
-
-				if (Settings.twoSquares
-					&& Grid.isAdjacent(Move.unpackTo(bestMove), lastMove.getFrom()))
-					continue;
 
 				int count = 0;
 				for (int mo = 0; mo <= LOSES; mo++)
@@ -1523,59 +1546,26 @@ public class AI implements Runnable
 			return vm;
 		}
 
-
-		// If the chaser is N or more squares away, then
-		// the chase is considered over.
-		// What often happens in a extended random chase,
-		// is that the chased piece approaches one of its other
-		// pieces, allowing the chaser to fork the two pieces.
-		// N = 3 means chaser has 1 move to become adjacent
-		// to the chased piece, so the forked piece must be
-		// adjacent to the the chaser. 
-		// N = 4 gives the chaser a broader area to attack
-		// after a chase.  For example,
-		// -- -- --
-		// B2 -- R5
-		// -- R7 R4
-		// R3
-		// Red Three has been fleeing Blue Two.  If Blue Two
-		// moves right, Red Five will move and
-		// the chase will be over (N=3), but
-		// QS will award Blue with Red Seven.
-		// But if N=4, Blue has one more move, so after Red Five
-		// flees, Blue Two moves right again, forking Red Five
-		// and Red Four.
-
-		else if (chasePiece != null
-			&& b.bturn == Settings.bottomColor
-			&& Grid.steps(chasePiece.getIndex(), chasedPiece.getIndex()) >= 4) {
-			vm =  negQS(qscache(depth));
-			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
-		}
-
-		else {
-
 		// Prevent null move on root level
 		// because a null move is unplayable in this game.
 		// (not sure how this happened, but it did)
-			if (depth == 0 && ttmove == 0)
-				ttmove = -1;
+		if (depth == 0 && ttmove == 0)
+			ttmove = -1;
 
-			vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
+		vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
 
-			assert hashOrig == getHash(n) : "hash changed";
+		assert hashOrig == getHash(n) : "hash changed";
 
-			// reuse existing entry and avoid garbage collection
-			TTEntry.Flags entryType;
-			if (vm <= alphaOrig)
-				entryType = TTEntry.Flags.UPPERBOUND;
-			else if (vm >= beta)
-				entryType = TTEntry.Flags.LOWERBOUND;
-			else
-				entryType = TTEntry.Flags.EXACT;
+		// reuse existing entry and avoid garbage collection
+		TTEntry.Flags entryType;
+		if (vm <= alphaOrig)
+			entryType = TTEntry.Flags.UPPERBOUND;
+		else if (vm >= beta)
+			entryType = TTEntry.Flags.LOWERBOUND;
+		else
+			entryType = TTEntry.Flags.EXACT;
 
-			saveTTEntry(n, searchType, entryType, vm, killerMove.getMove());
-		}
+		saveTTEntry(n, searchType, entryType, vm, killerMove.getMove());
 
 		return vm;
 	}

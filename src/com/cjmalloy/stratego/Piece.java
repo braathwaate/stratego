@@ -42,6 +42,7 @@ public class Piece implements Comparable<Piece>
 	static private final int IS_BLOCKER = 1 << 3;
 	static private final int IS_KNOWN = 1 << 4;	// known to players
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
+	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
 
@@ -119,7 +120,14 @@ public class Piece implements Comparable<Piece>
 	{
 		return (flags & IS_SHOWN) != 0;
 	}
-	
+
+	public void kill()
+	{
+		setShown(true);
+		if (color >= 0)
+			lastKill[color] = this;
+	}
+
 	public void setShown(boolean b)
 	{
 		if (b)
@@ -132,7 +140,12 @@ public class Piece implements Comparable<Piece>
 	{
 		return (flags & IS_KNOWN) != 0;
 	}
-	
+
+	public boolean isHighLight()
+	{
+		return isKnown() && !(color >= 0 && lastKill[color] == this);
+	}
+
 	public void setKnown(boolean b)
 	{
 		if (b)
