@@ -116,10 +116,10 @@ This has been tuned with countless runs against other bots.  Yet there still muc
 This the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but this gives it significant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.  Yet against a skilled human opponent, the AI is a patsy. Why?  Because humans much more easily guess the rank of the opponent unknown pieces.  This human ability needs to be distilled into algorithms that gives the AI the same advantage.
 ##  Plans.
 There are very few plans.
-### Chase opponent pieces that that could result in a favorable exchange.
-### Attack flag structures.
-### Protect its flag.
-### Determine opponent piece ranks through bluffing or baiting.
+1. Chase opponent pieces that that could result in a favorable exchange.
+2. Attack flag structures.
+3. Protect its flag.
+4. Determine opponent piece ranks through bluffing or baiting.
 ##  Static position analysis
 Unlike chess, stratego probably requires more pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.
 ## Performance Tuning

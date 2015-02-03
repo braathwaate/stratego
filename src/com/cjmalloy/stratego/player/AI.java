@@ -310,7 +310,7 @@ public class AI implements Runnable
  				log("bestMove from " + Move.unpackFrom(bestMove) + " to " + Move.unpackTo(bestMove) + " but from piece is null?");
 			else {
 				logFlush("----");
-				log(PV, "\n" + logMove(b, 0, bestMove, MoveType.OK));
+				log(PV, "\n" + logMove(board, 0, bestMove, MoveType.OK));
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(Move.unpackFrom(bestMove)), Move.unpackFrom(bestMove), Move.unpackTo(bestMove)));
 			}
@@ -334,7 +334,7 @@ public class AI implements Runnable
 		addMove(moveList, Move.packMove(f, t));
 	}
 
-	void getScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp) {
+	void getScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, Piece fp) {
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
@@ -357,12 +357,14 @@ public class AI implements Runnable
 				&& p.getColor() != 1 - fpcolor)
 				continue;
 			while (p == null) {
+				if (depth <= 1)
+				 	addMove(moveList.get(FLEE), i, t);
 				t += d;
 				p = b.getPiece(t);
 			};
 			if (p.getColor() != 1 - fpcolor) {
-				t -= d;
-				addMove(moveList.get(FLEE), i, t);
+				if (depth <= 1)
+					addMove(moveList.get(FLEE), i, t-d);
 			} else {
 				int mo = LOSES;
 				if (!p.isKnown())
@@ -379,8 +381,11 @@ public class AI implements Runnable
 	// - Search from the valuable AI piece rather than from the
 	// unknown opponent piece, since they are much fewer.
 	// - Use a rotated bitgrid to bitscan for an attack.
-	void getPossibleScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	void getPossibleScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
+		if (depth > 1)
+			return;
+
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
@@ -393,6 +398,7 @@ public class AI implements Runnable
 			do {
 				t += d;
 				p = b.getPiece(t);
+				// addMove(moveList.get(FLEE), i, t);
 			} while (p == null);
 			if (p.getColor() == 1 - fpcolor
 				&& b.isNineTarget(p)) {
@@ -595,7 +601,7 @@ public class AI implements Runnable
 	}
 
 
-	private ArrayList<ArrayList<Integer>> getMoves(int n, int turn, Piece chasePiece, Piece chasedPiece)
+	private ArrayList<ArrayList<Integer>> getMoves(int n, int depth, int turn, Piece chasePiece, Piece chasedPiece)
 	{
 		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
 		for (int i = 0; i <= LOSES; i++)
@@ -656,14 +662,14 @@ public class AI implements Runnable
 			} else {
 				Rank fprank = fp.getRank();
 				if (fprank == Rank.NINE)
-					getScoutFarMoves(moveList, fp);
+					getScoutFarMoves(depth, moveList, fp);
 
 				// NOTE: FORWARD PRUNING
 				// generate scout far moves only for attacks on unknown
 				// valuable pieces.
 				// if there are no nines left, then skip this code
 				else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
-					getPossibleScoutFarMoves(moveList, fp);
+					getPossibleScoutFarMoves(depth, moveList, fp);
 
 				if (getMoves(n, moveList, fp))
 					hasMove = true;
@@ -721,7 +727,7 @@ public class AI implements Runnable
 
 		unknownNinesAtLarge = b.unknownRankAtLarge(Settings.bottomColor, Rank.NINE);
 
-		rootMoveList = getMoves(0, Settings.topColor, null, null);
+		rootMoveList = getMoves(0, 0, Settings.topColor, null, null);
 
 		boolean discardPly = false;	// horizon effect
 		completedDepth = 0;
@@ -947,7 +953,7 @@ public class AI implements Runnable
 		if (killerMove.getMove() == 0) {
 			assert n != 1 : "null move on iteration 1";
 			log("Best move is null");
-			ArrayList<ArrayList<Integer>> moveList = getMoves(-n+1, Settings.topColor, null, null);
+			ArrayList<ArrayList<Integer>> moveList = getMoves(-n+1, 0, Settings.topColor, null, null);
 			bestMoveValue = -9999;
 			for (int mo = 0; mo <= LOSES; mo++)
 			for (int move : moveList.get(mo)) {
@@ -1709,7 +1715,7 @@ public class AI implements Runnable
 			&& (n == 1 || chasePiece != null))
 			moveList = rootMoveList;
 		else
-			moveList = getMoves(n, b.bturn, chasePiece, chasedPiece);
+			moveList = getMoves(n, depth, b.bturn, chasePiece, chasedPiece);
 
 		for (int mo = 0; mo <= LOSES; mo++) {
 
