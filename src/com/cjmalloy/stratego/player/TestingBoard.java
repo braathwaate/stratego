@@ -1898,7 +1898,7 @@ public class TestingBoard extends Board
 		// stepsDefender == stepsTarget.
 
 		if (pDefender == null  	// attacker not stopable
-			|| stepsDefender != stepsTarget) // no imminent danger
+			|| stepsDefender != stepsTarget - 1) // no imminent danger
 			return null;
 
 		return pDefender;
@@ -1964,7 +1964,13 @@ public class TestingBoard extends Board
 				int destTmp[] = genDestTmp(GUARDED_OPEN, color, bd);
 				for (int i = 12; i < 120; i++) {
 					Piece p = getPiece(i);
-					if (p == null || p.getColor() != 1 - color)
+
+		// If the closest enemy piece has not moved,
+		// it probably is a bomb.
+
+					if (p == null
+						|| p.getColor() != 1 - color
+						|| !p.hasMoved())
 						continue;
 					if (p.isKnown() && p.getRank() != Rank.EIGHT) {
 						if (destTmp[i] < stepsProtector) {
@@ -1992,7 +1998,7 @@ public class TestingBoard extends Board
 				if (defender != null) {
 					int r = defender.getRank().toInt();
 					activeRank[color][r-1] = defender;
-					genPlanA(destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+					genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 				}
 
 				// Try to push the protector, if any, out of the way
@@ -3993,7 +3999,7 @@ public class TestingBoard extends Board
 						if (risk == 1)
 							vm = VALUE_MOVED;
 						else {
-							vm -= fpvalue * (10 - apparentRisk(fp, fprank, unknownScoutFarMove, tp)) / 10;
+							vm -= fpvalue * (10 - risk) / 10;
 
 							vm += apparentWinValue(depth,
 								fp,
@@ -5202,6 +5208,24 @@ public class TestingBoard extends Board
 	// risk of attack (0 is none,  10 is certain)
 	int apparentRisk(Piece fp, Rank rank, boolean unknownScoutFarMove, Piece tp)
 	{
+		// Risk of an unknown scout attack decreases with
+		// with the number of scouts remaining.
+		//
+		// An important case is an attack on the Spy, because
+		// 9xS wins the Spy and its 300 point value.  For example,
+		// R? RS R?
+		// -- -- --
+		// R3 -- --
+		// -- B? --
+		// Red has the move.  Red moves R3 to the left which is
+		// highly negative because it subjects its known Three
+		// to an approaching unknown Blue piece (which happens to
+		// be Red One).  But if risk is high (say 50%), B?xRS is
+		// -150 points, greater than B?xR3.
+
+		if (unknownScoutFarMove)
+			return 3 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
+		// If a high ranked opponent piece approaches
 		int r = rank.toInt();
 		if (!isPossibleBomb(tp)) {
 
@@ -5249,24 +5273,6 @@ public class TestingBoard extends Board
 			return 1;
 		}
 
-		// Risk of an unknown scout attack decreases with
-		// with the number of scouts remaining.
-		//
-		// An important case is an attack on the Spy, because
-		// 9xS wins the Spy and its 300 point value.  For example,
-		// R? RS R?
-		// -- -- --
-		// R3 -- --
-		// -- B? --
-		// Red has the move.  Red moves R3 to the left which is
-		// highly negative because it subjects its known Three
-		// to an approaching unknown Blue piece (which happens to
-		// be Red One).  But if risk is high (say 50%), B?xRS is
-		// -150 points, greater than B?xR3.
-
-		if (unknownScoutFarMove)
-			return 3 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
-		// If a high ranked opponent piece approaches
 		// an AI piece that does not attack, attack is almost certain.
 		if (tp.getActingRankFleeHigh() != Rank.NIL
 			&& r <= tp.getActingRankFleeHigh().toInt())
