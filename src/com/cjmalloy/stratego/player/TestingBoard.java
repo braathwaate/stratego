@@ -1736,26 +1736,6 @@ public class TestingBoard extends Board
 			&& flagp != flag[color])
 			return;
 
-		{
-		int[] destTmp = genDestTmp(GUARDED_UNKNOWN, color, flagi);
-
-		if (flagp.isKnown()) {
-
-		// Keep an unknown expendable piece handy
-		// to ward off any approaching unknowns
-
-			for (int r : expendableRank) {
-				Piece a = activeRank[color][r-1];
-				if (a != null
-					&& a.isKnown())
-					continue;
-				genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
-				break;
-			}
-
-		}
-		}
-
 		// Even when the flag is not completely bombed,
 		// the approach could be guarded by an invincible rank
 		// thwarting access.  So Eights are still needed
@@ -1835,17 +1815,8 @@ public class TestingBoard extends Board
 
 		// targetIndex is the closest point adjacent to flag
 
-		// TBD: Note that if the attacker is unknown
-		// the AI relies on a Eight or less to defend.
-		// Obviously, that would be no deterrent
-		// to a lower-ranked unknown attacker.
-
-		int attackerRank = pAttacker.getRank().toInt();
-		if (pAttacker.getRank() == Rank.UNKNOWN)
-			attackerRank = 8;
-
 		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, targetIndex);
-		Piece defender = getDefender(color, destTmp3, attackerRank, stepsTarget);
+		Piece defender = getDefender(color, destTmp3, pAttacker, stepsTarget);
 		if (defender == null)
 			return;	// no imminent danger
 
@@ -1867,15 +1838,27 @@ public class TestingBoard extends Board
 	// pieces optimally.  This code is a pale effort to improve defensive
 	// measures past the search horizon.
 
-	private Piece getDefender(int color, int destTmp[], int attackerRank, int stepsTarget)
+	private Piece getDefender(int color, int destTmp[], Piece pAttacker, int stepsTarget)
 	{
+		// TBD: Note that if the attacker is unknown
+		// the AI relies on a Eight or less to defend.
+		// Obviously, that would be no deterrent
+		// to a lower-ranked unknown attacker.
+
+		int attackerRank = pAttacker.getRank().toInt();
+		if (pAttacker.getRank() == Rank.UNKNOWN)
+			attackerRank = 8;
+
 		int stepsDefender = 99;
 		Piece pDefender = null;
 		for (int i = 12; i < 120; i++) {
 			Piece p = getPiece(i);
 			if (p == null
-				|| p.getColor() != color
-				|| p.getRank().toInt() > attackerRank)
+				|| p.getColor() != color)
+				continue;
+
+				if (p.getRank().toInt() > attackerRank
+					|| stealthValue(p) > values[1-color][attackerRank - 1])
 				continue;
 
 			if (destTmp[i] < stepsDefender) {
@@ -2004,7 +1987,7 @@ public class TestingBoard extends Board
 
 				genPlanA(destTmp, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
-				Piece defender = getDefender(color, destTmp, 8, stepsAttacker);
+				Piece defender = getDefender(color, destTmp, pAttacker, stepsAttacker);
 
 				if (defender != null) {
 					int r = defender.getRank().toInt();
@@ -2015,7 +1998,7 @@ public class TestingBoard extends Board
 				// Try to push the protector, if any, out of the way
 
 				if (stepsProtector < stepsAttacker) {
-					defender = getDefender(color, destTmp, pProtector.getRank().toInt(), stepsProtector);
+					defender = getDefender(color, destTmp, pProtector, stepsProtector);
 					if (defender != null) {
 						int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
 						int r = defender.getRank().toInt();
@@ -2023,6 +2006,21 @@ public class TestingBoard extends Board
 						genPlanA(destTmp4, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
 					}
 				}
+
+				if (flagp.isKnown()) {
+
+				// Keep an eight guard around just in case
+				// (This blows the cover for the flag
+				// structure, so do this only if known).
+
+					for (int r = 7; r >= 1; r++)
+						if (rankAtLarge(color, r) != 0) {
+							genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+							break;
+						}
+
+				}
+
 			} // dbomb
 		} // d
 	}
@@ -3331,6 +3329,24 @@ public class TestingBoard extends Board
 		return 0;
 	}
 
+	// Give Plan A value to one piece of a rank
+	// and Plan B value to the rest of the pieces
+	// if the piece has moved or is known
+	public int planValue(Piece fp, int from, int to)
+	{
+		int fpcolor = fp.getColor();
+		int r = fp.getRank().toInt() - 1;
+
+		if (activeRank[fpcolor][r] == fp
+			|| activeRank[fpcolor][r] == null && neededRank[fpcolor][r])
+			return planv(planA[fpcolor][r], from, to);
+		else if (fp.hasMoved()
+				|| fp.isKnown()
+				|| neededRank[fpcolor][r])
+			return planv(planB[fpcolor][r], from, to);
+		return 0;
+	}
+
 	// To be consistent, the remaining opponent piece after an attack is
 	// assigned a suspected rank less than the attacker rank.
 	//
@@ -3405,7 +3421,7 @@ public class TestingBoard extends Board
 
 		// If the One is killed (by a Spy), demote SPY value
 		if (p.getRank() == Rank.SPY) {
-			assert rankWon == Rank.ONE : "Spy can only win One but won " + rankWon; 
+			assert rankWon == Rank.ONE || rankWon == Rank.FLAG : "Spy can only win One or Flag but won " + rankWon; 
 			p.setAiValue(values[p.getColor()][Rank.NINE.toInt()] - 10);
 		}
 	}
@@ -3465,17 +3481,7 @@ public class TestingBoard extends Board
 
 		if (tp == null) { // move to open square
 
-		// Give Plan A value to one piece of a rank
-		// and Plan B value to the rest of the pieces
-		// if the piece has moved or is known
-
-			if (activeRank[fpcolor][r] == fp
-				|| activeRank[fpcolor][r] == null && neededRank[fpcolor][r])
-				vm += planv(planA[fpcolor][r], Move.unpackFrom(m), Move.unpackTo(m));
-			else if (fp.hasMoved()
-					|| fp.isKnown()
-					|| neededRank[fpcolor][r])
-				vm += planv(planB[fpcolor][r], Move.unpackFrom(m), Move.unpackTo(m));
+			vm += planValue(fp, Move.unpackFrom(m), Move.unpackTo(m));
 			if (unknownScoutFarMove) {
 				vm -= stealthValue(fp);
 				makeKnown(fp);

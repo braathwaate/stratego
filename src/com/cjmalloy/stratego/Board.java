@@ -854,7 +854,7 @@ public class Board
 		// This led the AI to approach the now unknown opponent
 		// piece and thus lose its piece.
 		//
-		// In version 9.3, if a piece has a suspected rank
+		// In version 9.3, if a piece has a chase rank
 		// of 4 or lower, the low rank is retained if the piece
 		// chases an unknown.  The side-effect is that the AI is duped
 		// by an opponent piece that chases a low ranked AI piece
@@ -865,6 +865,18 @@ public class Board
 		// AI miscalculation of other suspected ranks on the board,
 		// leading to a loss elsewhere.
 		//
+		// Note that if a piece has a chase rank of Five
+		// (suspected rank of Four) and it then approaches an
+		// unknown, the chase rank changes to UNKNOWN, which
+		// usually results in a suspected rank of Five.
+		// Thus, if the piece is actually a trapped Four,
+		// the AI could approach it with a Five and lose
+		// (but it probably won't approach, because 5x5 is even).
+		// But much more often the piece is a Five, so that
+		// chasing an Unknown is a sure sign that the piece
+		// is not a Four but a Five, so the chance of a small loss
+		// (4x5) is a necessary evil.
+		//
 		// There is no way around this.  Bluffing makes assignment
 		// of suspected ranks a challenge.
 
@@ -873,7 +885,7 @@ public class Board
 
 		if (arank == Rank.NIL 
 			|| (chaser.getApparentRank() == Rank.UNKNOWN
-				&& arank.toInt() > 5)
+				&& arank.toInt() >= 5)
 			|| arank.toInt() > chaser.getApparentRank().toInt())
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
 	}

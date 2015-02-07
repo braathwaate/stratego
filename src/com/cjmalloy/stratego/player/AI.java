@@ -474,23 +474,64 @@ public class AI implements Runnable
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
+		boolean nineTarget = (fpcolor == Settings.topColor
+				&& unknownNinesAtLarge > 0
+				&& b.isNineTarget(fp));
+
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
 			if (tp != null)
 				continue;
 
-			// NOTE: FORWARD TREE PRUNING
-			// If a piece moves too far from the enemy,
-			// there is no point in generating moves for it,
-			// because the value is determined only by pre-processing.
+		// NOTE: FORWARD TREE PRUNING
+		// If a piece is too far to reach the enemy,
+		// there is no point in generating moves for it,
+		// because the value is determined only by pre-processing,
+		// (unless an unknown valuable piece can be attacked
+		// from far away by a Nine or the player piece is absolutely
+		// necessary for defense of an immobile piece or a clump
+		// of high ranked pieces. Otherwise the enemy is too far
+		// away to result in material change for a one-on-one
+		// attack.  (It almost always takes more than one attacker
+		// or a clump of defenders to affect material balance).
+		// For example,
+		// RF RB -- RB
+		// RB -- -- R7
+		// -- -- -- --
+		// -- -- -- --
+		// -- -- xx xx
+		// B8 -- xx xx
+		//
+		// Red has the move.  But no moves will be generated
+		// for it because it is too far from Blue Eight
+		// to result in a material change, i.e. R7xR8 is
+		// avoidable, so the AI will look to its other pieces on
+		// board or resort to a null move and examine the
+		// pre-processing values.
+		//
+		// But Blue Eight is threatening to attack the bomb
+		// structure. And obviously the bombs and flags cannot
+		// simply run away.
+		//
+		// So the AI must consider defensive moves outside of
+		// the pruning area as well.  Rather than doubling the
+		// pruning area, defensive moves are determined
+		// by pre-processing, and so the search examines
+		// moves towards these goals,
+		// even if the moves are outside of the pruning area.
+
 			if (n > 0) {
-				if (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2))
+				if (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)
+					&& !(nineTarget
+						|| b.planValue(fp, i, t) > 1))
 					hasMove = true;
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
-				 if (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2))
+				 if (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
+					&& !(nineTarget
+						|| b.planValue(fp, i, t) > 1))
 					addMove(moveList.get(APPROACH), i, t);
 				else
 					hasMove = true;
@@ -556,20 +597,8 @@ public class AI implements Runnable
 			return false;
 		}
 
-		// If a piece is too far to reach the enemy,
-		// there is no point in generating moves for it,
-		// because the value is determined only by pre-processing,
-		// (unless an unknown valuable piece can be attacked
-		// from far away by a Nine).
 		if (n > 0) {
 			int fpcolor = fp.getColor();
-			int m = n / 2 + 1;
-			if (!(fpcolor == Settings.topColor
-					&& unknownNinesAtLarge > 0
-					&& b.isNineTarget(fp))
-				&& m < Grid.NEIGHBORS
-				&& !b.grid.isCloseToEnemy(fpcolor, i, m))
-				return true;
 
 			if (b.grid.hasAttack(fp)) {
 				getAllMoves(moveList, fp);
@@ -583,11 +612,7 @@ public class AI implements Runnable
 
 			int fpcolor = fp.getColor();
 			assert fpcolor == Settings.topColor : "n<0 code only for AI";
-			int m = -n / 2 + 1;
-			if (m < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, m)) {
-				getAllMoves(moveList, fp);
-				return false;
-			} else if (b.grid.hasAttack(fp)) {
+			if (b.grid.hasAttack(fp)) {
 				return false;
 			} else {
 				getApproachMoves(n, moveList, fp);
@@ -729,7 +754,6 @@ public class AI implements Runnable
 
 		rootMoveList = getMoves(0, 0, Settings.topColor, null, null);
 
-		boolean discardPly = false;	// horizon effect
 		completedDepth = 0;
 
 		for (int n = 1; n < MAX_PLY; n++) {
@@ -961,7 +985,17 @@ public class AI implements Runnable
 				if (mt == MoveType.OK
 					|| mt == MoveType.CHASER
 					|| mt == MoveType.CHASED) {
-					vm = -negamax(0, 9999, -9999, 1, null, null, killerMove); 
+
+		// Note: negamax(0) isn't deep enough because scout far moves
+		// can cause a move outside the active area to be very bad.
+		// For example, a Spy might be far away from the opponent
+		// pieces and could be selected as a null move.  But moving
+		// it could lose the Spy to a far scout move.
+		// So negamax(1) is called to allow the opponent scout
+		// moves to be considered (because QS does not currently
+		// consider scout moves).
+		// 
+					vm = -negamax(1, -9999, 9999, 1, null, null, killerMove); 
 					if (vm > bestMoveValue) {
 						bestMoveValue = vm;
 						bestMove = move;
@@ -1021,7 +1055,9 @@ public class AI implements Runnable
 		int bestMovePly = killerMove.getMove();
 		int bestMovePlyValue = vm;
 
-		if (n == 1 || chasePiece != null) {
+		if (n == 1
+			|| chasePiece != null
+			|| n == MAX_PLY - 1) {
 
 		// no horizon effect possible until ply 2
 
@@ -1030,23 +1066,22 @@ public class AI implements Runnable
 
 		} else {
 
-		// The AI accepts the best move of a deeper search only
+		// Singular Extension.
+		// The AI accepts the best move only
 		// if the value is better (or just slightly worse) than
-		// the value of the best move of a shallow search 
-		// OR
-		// if the deeper search is 2 plies deeper than
-		// the ply of the currently selected best move.
+		// the value of the best move searched 2 plies deeper.
 		
-			if (bestMove == bestMovePly
-				|| vm > bestMoveValue - 15
-				|| discardPly) {
+			MoveType mt = makeMove(n, 0, bestMovePly);
+			vm = -negamax(n+1, -9999, 9999, 1, chasedPiece, chasePiece, killerMove); 
+			b.undo();
+			logMove(n+2, bestMovePly, b.getValue(), vm, 0, mt);
+			
+			if (vm > bestMovePlyValue - 10) {
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
-				discardPly = false;
 			} else {
-				discardPly = true;
-				log(1, "\nPV:" + n + " " + vm + ": best move discarded.");
-				n += 1;
+				log(1, "\nPV:" + n + " " + bestMoveValue + " >" + vm + ": best move discarded.");
+				log("-+++-");
 				continue;
 			}
 		}
