@@ -474,9 +474,13 @@ public class AI implements Runnable
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
-		boolean nineTarget = (fpcolor == Settings.topColor
-				&& unknownNinesAtLarge > 0
-				&& b.isNineTarget(fp));
+		// if the piece is close enough, the move is allowed
+		// 
+		boolean allowAll =
+			(!(Math.abs(n/2) < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, Math.abs(n/2)))
+				|| (fpcolor == Settings.topColor
+					&& unknownNinesAtLarge > 0
+					&& b.isNineTarget(fp)));
 
 		for (int d : dir ) {
 			int t = i + d ;
@@ -522,16 +526,16 @@ public class AI implements Runnable
 		// even if the moves are outside of the pruning area.
 
 			if (n > 0) {
-				if (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)
-					&& !(nineTarget
-						|| b.planValue(fp, i, t) > 1))
+				if (!allowAll
+					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)
+					&& b.planValue(fp, i, t) <= 1))
 					hasMove = true;
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
-				 if (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
-					&& !(nineTarget
-						|| b.planValue(fp, i, t) > 1))
+				if (!allowAll
+					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
+					&& b.planValue(fp, i, t) <= 1))
 					addMove(moveList.get(APPROACH), i, t);
 				else
 					hasMove = true;

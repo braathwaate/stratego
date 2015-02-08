@@ -746,11 +746,11 @@ public class TestingBoard extends Board
 	// by 1/3.  If there are more than one player pieces, the value is
 	// decreased by 1/3.
 	//
-	// This means that an unknown One will not
-	// take a Three if the opponent Two is still on the board.
-	// A side effect is that the opponent Three
-	// can run amok if the player has also lost its Two but the
-	// opponent still has its Two.  But if the One takes the Three,
+	// This means that an unknown AI One will not
+	// take a Three if the both Twos are still on the board.
+	// But if the AI has lost its Two, the AI will attack
+	// the opponent Three, because the opponent Three
+	// can run amok.  But once the One takes the Three,
 	// then the Two will run amok.  Its a no-win situation.
 	//
 	// The sum of the higher ranked pieces is used because the
