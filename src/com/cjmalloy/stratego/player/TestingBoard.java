@@ -5909,10 +5909,9 @@ public class TestingBoard extends Board
 	// learns to bluff with its Spy, it can cause the AI
 	// to lose its One).
 	//
-	// However, if the AI is losing and there is a dangerous
-	// known opponent piece running amok (this normally results
-	// in a sure loss unless the AI can stall and draw),
-	// the AI takes the most aggressive approach.
+	// However, if the opponent has a dangerous known or unknown rank,
+	// the AI is sure to lose additional material,
+	// so the AI switches to the most aggressive approach.
 
 	boolean isPossibleSpy(Piece fp, Piece tp)
 	{
@@ -5921,10 +5920,9 @@ public class TestingBoard extends Board
 			&& fp.isKnown()
 			&& hasSpy(Settings.bottomColor)
 			&& suspectedRankAtLarge(Settings.bottomColor, Rank.SPY) == 0
-			&& (isWinning(Settings.topColor) > 0
-				|| !(dangerousKnownRank != 99
-					&& tp.getActingRankChase() != Rank.NIL
-					&& !tp.isRankLess())))
+			&& ( !( (dangerousKnownRank != 99 || dangerousUnknownRank != 99)
+				&& tp.getActingRankChase() != Rank.NIL
+				&& !tp.isRankLess())))
 			return true;
 		return false;
 	}

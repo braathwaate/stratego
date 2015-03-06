@@ -1278,15 +1278,17 @@ public class Board
 	// pieces, allowing it to see the effect of the two squares
 	// rule much earlier in the search tree.
 	//
-	// If there are three open squares, the code must allow
-	// the move.  For example,
-	// xx xx xx xx
-	// -- R3 -- R?
-	// -- -- -- --
-	// -- B2 -- --
+	// If the target square has an escape square,
+	// the code must allow the move.  For example,
+	// xx xx xx xx		R? -- -- --
+	// -- R3 -- R?		-- R3 R? --
+	// -- -- -- --		-- -- -- --
+	// -- B2 -- --		-- B2 -- --
 	//
 	// Blue Two has the move and approaches Red Three.
-	// Position 1 could be seen as a false Two Squares ending.
+	// If R3 moves to the left, it must be allowed to return
+	// back to its original position, because the target
+	// square has an escape route.
 	//
 	// Note that this rule works even if chaser and chased pieces
 	// are far away.  For example,
@@ -1321,26 +1323,41 @@ public class Board
 		if (m2 == null)
 			return false;
 
+		int from = Move.unpackFrom(m);
+		int to = Move.unpackTo(m);
+
 		// not back to the same square?
-		if (m2.getFrom() != Move.unpackTo(m))
+		if (m2.getFrom() != to)
 			return false;
 
 		// is a capture?
-		if (getPiece(Move.unpackTo(m)) != null)
+		if (getPiece(to) != null)
 			return false;
 
 		// not the same piece?
-		if (!m2.getPiece().equals(getPiece(Move.unpackFrom(m))))
+		if (!m2.getPiece().equals(getPiece(from)))
 			return false;
 
 		// not an adjacent move (i.e., nine far move)
 		if (!Grid.isAdjacent(m))
 			return false;
 
-		// test for three squares (which is legal)
-		Piece p = getPiece(Move.unpackTo(m) + (Move.unpackTo(m) - Move.unpackFrom(m)));
-		if (p == null)
+		UndoMove oppmove1 = getLastMove(1);
+		if (oppmove1 == null)
 			return false;
+		int oppFrom1 = oppmove1.getFrom();
+
+		// test for escape square (which allows move)
+		int count = 0;
+		for (int d : dir) {
+			int t = to + d;
+			if (t == oppFrom1
+				|| getPiece(t) == null) {
+				count++;
+				if (count == 3)
+					return false;
+			}
+		}
 
 		// Commented out in 9.4.
 		// If the third square is occupied by an opponent piece,
@@ -1350,6 +1367,8 @@ public class Board
 		// -- R? --
 		// R1 B3 R?
 		// -- -- R?
+		// xx xx xx
+		//
 		// Blue Three has the move.  If it moves down, and the
 		// Red One moves down, it will not be allowed to return
 		// (ends in possible two squares).  So it must choose
@@ -1357,10 +1376,6 @@ public class Board
 		// Red One.
 		//if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
 		//	return false;
-
-		UndoMove oppmove1 = getLastMove(1);
-		if (oppmove1 == null)
-			return false;
 
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)

@@ -1473,7 +1473,12 @@ public class AI implements Runnable
 
 	void saveTTEntry(int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int bestmove)
 	{
-		long hashOrig = getHash(n);
+		long hashOrig;
+		if (bestmove == -1)
+			hashOrig = b.getHash();
+		else
+			hashOrig = getHash(n);
+
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
 		if (entry == null) {
@@ -1530,7 +1535,7 @@ public class AI implements Runnable
 		}
 
 		int alphaOrig = alpha;
-		long hashOrig = getHash(n);
+		long hashOrig = b.getHash();
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
 		int ttmove = -1;
@@ -1544,10 +1549,10 @@ public class AI implements Runnable
 		if (entry != null
 			&& entry.hash == hashOrig
 			&& entry.turn == b.bturn
-			&& entry.depth == n) {
+			&& entry.depth >= n) {
 
-		// Note that the same position at different depths
-		// or from prior moves does not have the same score,
+		// Note that the same position from prior moves
+		// does not have the same score,
 		// because the AI assigns less value to attacks
 		// at greater depths.  However, the best move 
 		// is still useful and often will generate the best score.
@@ -1570,10 +1575,11 @@ public class AI implements Runnable
 					return entry.bestValue;
 				}
 			}
-			ttmove = entry.bestMove;
+		}
 
-		} else if (n > 0) {
+		if (n > 1) {
 			long ttMoveHash = getHash(n-1);
+		
 			TTEntry ttMoveEntry = ttable[(int)(ttMoveHash % ttable.length)];
 			if (ttMoveEntry != null
 				&& ttMoveEntry.hash == ttMoveHash
@@ -1588,6 +1594,7 @@ public class AI implements Runnable
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
 			vm = negQS(qscache(depth));
+			// save value of position at hash 0 (see saveTTEntry())
 			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
 			return vm;
 		}
@@ -1600,7 +1607,7 @@ public class AI implements Runnable
 
 		vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
 
-		assert hashOrig == getHash(n) : "hash changed";
+		assert hashOrig == b.getHash() : "hash changed";
 
 		// reuse existing entry and avoid garbage collection
 		TTEntry.Flags entryType;
@@ -1611,7 +1618,10 @@ public class AI implements Runnable
 		else
 			entryType = TTEntry.Flags.EXACT;
 
+		// save each move at each ply for PV
 		saveTTEntry(n, searchType, entryType, vm, killerMove.getMove());
+		// save value of position at hash 0 (see saveTTEntry())
+		saveTTEntry(n, searchType, entryType, vm, -1);
 
 		return vm;
 	}
