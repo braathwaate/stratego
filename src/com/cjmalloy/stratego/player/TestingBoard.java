@@ -2140,7 +2140,7 @@ public class TestingBoard extends Board
 		// This will hamper its effort to protect the flag if the
 		// flag is indeed known but if the distance is less than
 		// the maximum search ply, it prevents the horizon effect.
-			makeFlagKnown(pflag);
+			// makeFlagKnown(pflag);
 
 			defendFlag(flag[Settings.topColor]);
 		}

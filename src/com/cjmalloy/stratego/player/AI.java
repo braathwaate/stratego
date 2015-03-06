@@ -289,7 +289,9 @@ public class AI implements Runnable
 			log("Call getBestMove() at " + t + "ms: time remaining:" + trem + "ms");
 			getBestMove();
 		} catch (InterruptedException e) {
+			log("time aborted");
                 } catch (Exception e) {
+			log("exception aborted");
 			e.printStackTrace();
 		}
 		finally
@@ -832,7 +834,7 @@ public class AI implements Runnable
 		// objective of the chaser is not be the chased
 		// piece, but some other piece, like a flag or
 		// flag bomb.
-			&& b.getPiece(Move.unpackFrom(bestMove)).getRank().toInt() <= 4 ) {
+			&& b.getPiece(Move.unpackFrom(bestMove)).getRank().toInt() <= 4
 
 		// If Two Squares is in effect,
 		// deep search only if the best move is not adjacent
@@ -844,9 +846,8 @@ public class AI implements Runnable
 		// (Note that bestMove cannot lead to a possible two squares
 		// result for the AI, because makeMove() prevents it).
 
-			if (Settings.twoSquares
-				&& Grid.isAdjacent(Move.unpackTo(bestMove), lastMove.getFrom()))
-				continue;
+			&& !(Settings.twoSquares
+				&& Grid.isAdjacent(Move.unpackTo(bestMove), lastMove.getFrom()))) {
 
 		// check for possible chase
 			for (int d : dir) {
