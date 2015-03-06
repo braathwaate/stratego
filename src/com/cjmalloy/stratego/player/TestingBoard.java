@@ -2019,7 +2019,7 @@ public class TestingBoard extends Board
 				// (This blows the cover for the flag
 				// structure, so do this only if known).
 
-					for (int r = 7; r >= 1; r++)
+					for (int r = 7; r >= 1; r--)
 						if (rankAtLarge(color, r) != 0) {
 							genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 							break;
