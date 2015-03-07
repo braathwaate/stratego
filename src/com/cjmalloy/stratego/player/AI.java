@@ -632,9 +632,8 @@ public class AI implements Runnable
 	}
 
 
-	private ArrayList<ArrayList<Integer>> getMoves(int n, int depth, int turn, Piece chasePiece, Piece chasedPiece)
+	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn, Piece chasePiece, Piece chasedPiece)
 	{
-		ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
 		for (int i = 0; i <= LOSES; i++)
 			moveList.add(new ArrayList<Integer>());
 
@@ -707,17 +706,7 @@ public class AI implements Runnable
 			}
 		}
 
-		// FORWARD PRUNING
-		// Add null move
-		// (NULLMOVE evaluates the move before other APPROACH moves,
-		// so that if the null move is equal in value,
-		// it will be the one selected as the best move.
-		// This allows the AI to subsequently chose an inactive move
-		// as the best move.
-		if (hasMove)
-			addMove(moveList.get(NULLMOVE), 0);
-
-		return moveList;
+		return hasMove;
 	}
 
 	private void getBestMove() throws InterruptedException
@@ -758,11 +747,81 @@ public class AI implements Runnable
 
 		unknownNinesAtLarge = b.unknownRankAtLarge(Settings.bottomColor, Rank.NINE);
 
-		rootMoveList = getMoves(0, 0, Settings.topColor, null, null);
-
 		completedDepth = 0;
 
 		for (int n = 1; n < MAX_PLY; n++) {
+
+		Move killerMove = new Move(null, -1);
+
+		if (chasePiece == null) {
+			rootMoveList = new ArrayList<ArrayList<Integer>>();
+			boolean hasMove = getMoves(rootMoveList, n, 0, Settings.topColor, null, null);
+			if (hasMove) {
+
+			log("-++-");
+
+		// If any moves were pruned off, choose the best looking one
+		// and then evaluate it along with the non-pruned moves
+		// that could affect material balance.
+		//
+		// Why do this forward pruning?  If the AI
+		// were to consider all moves, then the best move
+		// would be found without all this rigmarole.
+		// The problem is that there are just too many moves
+		// to consider, resulting in shallow search depth.
+		// By pruning off inactive moves, depth is significantly
+		// increased (by 2-3 ply), making sure that the AI
+		// does not easily blunder material away.
+		//
+		// TBD: Search depth needs to be increased further.
+		// There is currently a grid bitmap for each color.
+		// This could be improved to indexed on rank, where
+		// each color rank bitmap contains the locations of
+		// all lower ranks.  This would allow fleeing moves
+		// to be generated for only pieces that should flee
+		// (when the indexed rank bitmap mask is non-zero)
+		// and attack/approach moves for pieces that can attack
+		// (when the indexed rank bitmap mask is zero).
+		//
+		// Alternatively, look at the planA/B matrices to
+		// determine direction.  Or use windowing.
+
+			ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
+			getMoves(moveList, -n+1, 0, Settings.topColor, null, null);
+			int bestPrunedMoveValue = -9999;
+			int bestPrunedMove = 0;
+			for (int mo = 0; mo <= LOSES; mo++)
+			for (int move : moveList.get(mo)) {
+				MoveType mt = makeMove(n, 0, move);
+				if (mt == MoveType.OK
+					|| mt == MoveType.CHASER
+					|| mt == MoveType.CHASED) {
+
+		// Note: negamax(0) isn't deep enough because scout far moves
+		// can cause a move outside the active area to be very bad.
+		// For example, a Spy might be far away from the opponent
+		// pieces and could be selected as a null move.  But moving
+		// it could lose the Spy to a far scout move.
+		// So negamax(1) is called to allow the opponent scout
+		// moves to be considered (because QS does not currently
+		// consider scout moves).
+		// 
+					int vm = -negamax(1, -9999, 9999, 1, null, null, killerMove); 
+					if (vm > bestPrunedMoveValue) {
+						bestPrunedMoveValue = vm;
+						bestPrunedMove = move;
+					}
+					b.undo();
+					log(DETAIL, "   " + logMove(b, n, move, mt));
+				}
+			}
+			addMove(rootMoveList.get(NULLMOVE), bestPrunedMove);
+			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
+			log(PV, logMove(b, n, bestPrunedMove, MoveType.OK));
+			log("-++-");
+
+			}
+		}
 
 		// DEEP CHASE
 		//
@@ -929,90 +988,8 @@ public class AI implements Runnable
 			return;		// ai trapped
 		}
 
-		Move killerMove = new Move(null, -1);
 		int vm = negamax(n, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
 		completedDepth = n;
-
-		log("-+-");
-
-		// A null move may be returned on iterations other
-		// than the first iteration because of forward pruning.
-		// A null move is inserted in the tree when a move
-		// (usually several moves) are pruned off.
-		// If a null move is the best move, it means that
-		// a pruned move could be the best move.
-		//
-		// The dilemma is which move is really the best move?
-		// Moves are pruned off when they cannot create a
-		// result that can affect material balance within
-		// the search depth. (They are just too far from
-		// the enemy pieces.)
-		// Thus, a null move result indicates that the AI wants to
-		// keep its active pieces in their current positions.
-		//
-		// The best move must therefore be selected from
-		// the moves that were pruned off.  While this move may
-		// not be the best move (nor perhaps even a good move)
-		// it is the only way these pieces ever get activated,
-		// unless an opponent piece happens to come visiting,
-		// causing the moves to be considered.
-		//
-		// Why do this forward pruning?  If the AI
-		// were to consider all moves, then the best move
-		// would be found without all this rigmarole.
-		// The problem is that there are just too many moves
-		// to consider, resulting in shallow search depth.
-		// By pruning off inactive moves, depth is significantly
-		// increased (by 2-3 ply), making sure that the AI
-		// does not easily blunder material away.
-		//
-		// TBD: Search depth needs to be increased further.
-		// There is currently a grid bitmap for each color.
-		// This could be improved to indexed on rank, where
-		// each color rank bitmap contains the locations of
-		// all lower ranks.  This would allow fleeing moves
-		// to be generated for only pieces that should flee
-		// (when the indexed rank bitmap mask is non-zero)
-		// and attack/approach moves for pieces that can attack
-		// (when the indexed rank bitmap mask is zero).
-		//
-		// Alternatively, look at the planA/B matrices to
-		// determine direction.  Or use windowing.
-
-		if (killerMove.getMove() == 0) {
-			assert n != 1 : "null move on iteration 1";
-			log("Best move is null");
-			ArrayList<ArrayList<Integer>> moveList = getMoves(-n+1, 0, Settings.topColor, null, null);
-			bestMoveValue = -9999;
-			for (int mo = 0; mo <= LOSES; mo++)
-			for (int move : moveList.get(mo)) {
-				MoveType mt = makeMove(n, 0, move);
-				if (mt == MoveType.OK
-					|| mt == MoveType.CHASER
-					|| mt == MoveType.CHASED) {
-
-		// Note: negamax(0) isn't deep enough because scout far moves
-		// can cause a move outside the active area to be very bad.
-		// For example, a Spy might be far away from the opponent
-		// pieces and could be selected as a null move.  But moving
-		// it could lose the Spy to a far scout move.
-		// So negamax(1) is called to allow the opponent scout
-		// moves to be considered (because QS does not currently
-		// consider scout moves).
-		// 
-					vm = -negamax(1, -9999, 9999, 1, null, null, killerMove); 
-					if (vm > bestMoveValue) {
-						bestMoveValue = vm;
-						bestMove = move;
-					}
-					b.undo();
-					log(DETAIL, "   " + logMove(b, n, move, mt));
-				}
-			}
-			log(PV, "   " + logMove(b, n, bestMove, MoveType.OK));
-			log("-+++-");
-			continue;
-		}
 
 		// To negate the horizon effect where the ai
 		// plays a losing move to delay a negative result
@@ -1085,7 +1062,7 @@ public class AI implements Runnable
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
 			} else {
-				log(1, "\nPV:" + n + " " + bestMoveValue + " >" + vm + ": best move discarded.");
+				log(PV, "\nPV:" + n + " " + bestMoveValue + " >" + vm + ": best move discarded.");
 				log("-+++-");
 				continue;
 			}
@@ -1094,7 +1071,7 @@ public class AI implements Runnable
 		hh[bestMove]+=n;
 		log("-+++-");
 
-		log(1, "\nPV:" + n + " " + vm);
+		log(PV, "\nPV:" + n + " " + vm);
 		logPV(n, 0);
 		} // iterative deepening
 	}
@@ -1761,11 +1738,22 @@ public class AI implements Runnable
 
 		// Use rootMoveList for a chase because it
 		// is heavily pruned.
-		if (depth == 0
-			&& (n == 1 || chasePiece != null))
+		if (depth == 0)
 			moveList = rootMoveList;
-		else
-			moveList = getMoves(n, depth, b.bturn, chasePiece, chasedPiece);
+		else {
+			moveList = new ArrayList<ArrayList<Integer>>();
+			boolean hasMove = getMoves(moveList, n, depth, b.bturn, chasePiece, chasedPiece);
+
+			// FORWARD PRUNING
+			// Add null move
+			// (NULLMOVE evaluates the move before other APPROACH moves,
+			// so that if the null move is equal in value,
+			// it will be the one selected as the best move.
+			// This allows the AI to subsequently chose an inactive move
+			// as the best move.
+			if (hasMove)
+				addMove(moveList.get(NULLMOVE), 0);
+		}
 
 		for (int mo = 0; mo <= LOSES; mo++) {
 

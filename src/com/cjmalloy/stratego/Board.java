@@ -1342,22 +1342,14 @@ public class Board
 		if (!Grid.isAdjacent(m))
 			return false;
 
-		UndoMove oppmove1 = getLastMove(1);
-		if (oppmove1 == null)
-			return false;
-		int oppFrom1 = oppmove1.getFrom();
-
 		// test for escape square (which allows move)
 		int count = 0;
-		for (int d : dir) {
-			int t = to + d;
-			if (t == oppFrom1
-				|| getPiece(t) == null) {
+		for (int d : dir)
+			if (getPiece(to + d) == null) {
 				count++;
-				if (count == 3)
+				if (count == 2)
 					return false;
 			}
-		}
 
 		// Commented out in 9.4.
 		// If the third square is occupied by an opponent piece,
@@ -1376,6 +1368,11 @@ public class Board
 		// Red One.
 		//if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
 		//	return false;
+
+		UndoMove oppmove1 = getLastMove(1);
+		if (oppmove1 == null)
+			return false;
+		int oppFrom1 = oppmove1.getFrom();
 
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)
