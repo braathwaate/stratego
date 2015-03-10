@@ -1350,7 +1350,7 @@ public class TestingBoard extends Board
 			for (int j = chasedRank - 1; j > invincibleRank[1-p.getColor()]; j--)
 				if (rankAtLarge(1-p.getColor(),j) != 0) {
 					Piece chaser = activeRank[1-p.getColor()][j-1];
-					if (chaser != null || rnd.nextInt(50) == 0) {
+					if (chaser != null || rnd.nextInt(30) == 0) {
 						if (chaser != null && !chaser.isKnown())
 							genPlanA(rnd.nextInt(10), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 						else
@@ -1537,20 +1537,21 @@ public class TestingBoard extends Board
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
 				|| valueStealth[1-p.getColor()][j-1] <= values[p.getColor()][Rank.UNKNOWN.toInt()]) {
 				int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
-		// The chase must use the same priority for all pieces,
-		// otherwise the chaser will only chase the pieces
-		// with the higher chase priority.
+		// Invincible pieces cannot always chase at high priority,
+		// otherwise the AI will use these pieces in an
+		// ad infinitim chase.  So half of the time it chases
+		// at lower priority.
 		//
-		// The sole exception is when the chased rank is invincible,
+		// The sole exception is when the *chased* rank is invincible,
 		// because until the opponent invincible rank is captured or
 		// cornered, it will just likely
-		// chase the players pieces around the board repetitively
-		// until they are captured.  So the players invincible
-		// rank needs to chase it alone and not be distracted by
-		// any lessor ranks.
+		// chase the players pieces around the board ad inifinitim
+		// until they are captured.  So the AI must continually chase
+		// the invincible rank with invincible pieces until it is
+		// cornered in order for the game to continue.
 		//
-		// The known invincible chase piece should corner
-		// the chased piece rather than approach it and push it
+		// The goal is to corner the chased piece
+		// rather than approach it and push it
 		// around randomly.  This is especially true if the
 		// chased piece is invincible.  The idea is to bring another
 		// chase piece towards the chased piece and get the search
@@ -1560,7 +1561,7 @@ public class TestingBoard extends Board
 		// but the goal of this programmer is to avoid them).
 
 				int priority;
-				if (isInvincible(p))
+				if (isInvincible(p) || rnd.nextInt(2) == 0)
 					priority = DEST_PRIORITY_CHASE_HIGH;
 				else
 					priority = DEST_PRIORITY_CHASE;
@@ -2013,19 +2014,6 @@ public class TestingBoard extends Board
 					}
 				}
 
-				if (flagp.isKnown()) {
-
-				// Keep an eight guard around just in case
-				// (This blows the cover for the flag
-				// structure, so do this only if known).
-
-					for (int r = 7; r >= 1; r--)
-						if (rankAtLarge(color, r) != 0) {
-							genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
-							break;
-						}
-
-				}
 
 			} // dbomb
 		} // d
@@ -2057,15 +2045,17 @@ public class TestingBoard extends Board
 	private void aiFlagSafety()
 	{
 		Piece pflag = flag[Settings.topColor];
+		int flagi = pflag.getIndex();
+		int color = pflag.getColor();
 
 		assert pflag.getRank() == Rank.FLAG : "aiFlag not ai flag?";
-		assert pflag.getColor() == Settings.topColor : "flag routines only for ai flag";
+		assert color == Settings.topColor : "flag routines only for ai flag";
 		// initially all bombs are worthless (0)
 		// value remaining bombs around ai flag
 
 		boolean bombed = true;
 		for (int d : dir) {
-			int j = pflag.getIndex() + d;
+			int j = flagi + d;
 				
 			if (!Grid.isValid(j))
 				continue;
@@ -2084,7 +2074,7 @@ public class TestingBoard extends Board
 		// or flag has a known bomb
 		// then the ai guesses that the flag is known
 
-			if (p.getColor() != pflag.getColor()
+			if (p.getColor() != color 
 				|| (p.getRank() == Rank.BOMB && p.isKnown())) {
 				makeFlagKnown(pflag);
 			}
@@ -2152,7 +2142,7 @@ public class TestingBoard extends Board
 		// that it can sacrifice by throwing them at multiple
 		// structures (just like the AI does).
 
-		else if (rankAtLarge(1-pflag.getColor(), Rank.EIGHT) != 0) {
+		else if (rankAtLarge(1-color, Rank.EIGHT) != 0) {
 
 		// Flag value is worth more than an Eight.
 		// (because we always want an eight to take the
@@ -2160,6 +2150,30 @@ public class TestingBoard extends Board
 
 			setFlagValue(pflag);
 			flagBombTarget(pflag);
+
+			if (pflag.isKnown() && Grid.getY(flagi) == 0) {
+
+			// Keep an Eight guard nearby just in case
+			// (This blows the cover for the flag
+			// structure, so do this only if known).
+			//
+			// TBD: The guard is attracted to a fixed square
+			// above the flag.
+			// It would be better to check the direction of
+			// the attacker and move between.  But if this
+			// is coded, make sure that moving the defender
+			// does not cause back and forth motion.
+			// (The top square should be close enough that
+			// minimax should ward off any attackers.)
+
+				int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi + 22);
+				for (int r = 7; r >= 1; r--)
+					if (rankAtLarge(color, r) != 0) {
+						genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+						break;
+					}
+
+			}
 		}
 	}
 
@@ -3205,7 +3219,13 @@ public class TestingBoard extends Board
 		}
 
 		// lowestUnknownNotSuspectedRank is used in an encounter
-		// with an invincible piece
+		// with an invincible piece.
+
+		// TBD: this is the same as the opponent invincible
+		// rank, so this code should use invincible rank instead.
+		// However, lowestUnknownNotSuspectedRank [1..10]
+		// but invincibleRank[Settings.topColor] [1..9]
+
 		lowestUnknownNotSuspectedRank = Rank.UNKNOWN.toInt();
 		for (int r = 10; r >= 1; r--)
 			if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, r) != 0)
@@ -3752,10 +3772,6 @@ public class TestingBoard extends Board
 		// R3xB4 would remove the pieces from the board
 		// and the AI would not see B2xR3.
 		//
-		// So to generalize, the AI piece must stay on the board
-		// if it attacks a suspected rank in an EVEN exchange,
-		// because the suspected rank might actually be higher.
-		//
 		// By leaving the AI piece on the board, it can make
 		// the following error:
 		// R8
@@ -3763,15 +3779,63 @@ public class TestingBoard extends Board
 		// BB BF BB
 		// unknown Blue is suspected to be an Eight.  R8xB? would
 		// leave the Red Eight on the board in position to attack
-		// the flag.  So an AI Eight does not stay on the board.
+		// the flag.
 
+		// In versions 9.3, the AI piece (other than an Eight)
+		// stayed on the board if it attacks a suspected rank
+		// in an EVEN exchange, because the suspected rank might
+		// actually be higher.
+		//
+		// But this created the following obscure cache bug:
+		// R1 RB
+		// R3 --
+		// -- B3
+		// Red Three and Red Bomb are known and Blue Three
+		// is suspected. 
+		// ...    B3-a6
+		// R3xB3  (null)
+		// is very negative because perhaps B3 is a Two.
+		//
+		// ....   B3-b5
+		// R3-a6  R3xRB
+		// results in the same position and the cache returns
+		// the negative number stored, rather than a highly
+		// positive number because R3 just rammed into a known bomb!
+		//
+		// (Note: the cache bug also exists in a much reduced
+		// form even in WINS. If the pieces are known, there
+		// is no bug, but removing a suspected
+		// opponent piece to a known bomb is not the same as removing
+		// a suspected opponent piece in an exchange with a
+		// known AI piece, but at least both are positive.)
+		//
+		// The solution is to remove both pieces from the
+		// board but check the opponents's adjacent
+		// pieces when the AI attacks.  If the opponent has
+		// a unknown defender piece, then the AI attack must
+		// be debited significantly to account for the risk
+		// that the AI piece survives and then loses to
+		// the defender.
+		//
+		// At first glance, this check appears to be slow.  But it
+		// is much faster than leaving the AI piece around and then
+		// having to check it in QS and generate further moves
+		// for it.
 				if (fpcolor == Settings.topColor
 					&& !tp.isKnown()
-					&& fprank != Rank.EIGHT) {
-					fp.moves++;
-					makeKnown(fp);
-					setPiece(fp, Move.unpackTo(m));
-					fp.setIndex(Move.unpackTo(m));
+					&& (lowestUnknownNotSuspectedRank < fprank.toInt()
+						|| (fprank == Rank.ONE
+							&& hasSpy(Settings.bottomColor)))) {
+					for (int d : dir) {
+						Piece p = getPiece(Move.unpackTo(m) + d);
+						if (p == null
+							|| p.getColor() == fpcolor)
+							continue;
+						if (!p.isKnown()) {
+							vm -= fpvalue/2;
+							break;
+						}
+					}
 				}
 
 		// If the opponent attacker is invincible and is
@@ -5553,8 +5617,10 @@ public class TestingBoard extends Board
 		// by definition, attack on invincible rank loses or is even
 
 			if (isInvincible(tp)) {
-				if (tprank.toInt() <= lowestUnknownNotSuspectedRank
-					&& !isPossibleSpy(tp, fp))
+				if (isPossibleSpyXOne(tp, fp))
+					return Rank.UNK;
+
+				assert tprank.toInt() <= lowestUnknownNotSuspectedRank;
 				return Rank.LOSES; // could be EVEN
 			}
 
@@ -5913,7 +5979,7 @@ public class TestingBoard extends Board
 	// the AI is sure to lose additional material,
 	// so the AI switches to the most aggressive approach.
 
-	boolean isPossibleSpy(Piece fp, Piece tp)
+	boolean isPossibleSpyXOne(Piece fp, Piece tp)
 	{
 		Rank fprank = fp.getRank();
 		if (fprank == Rank.ONE
@@ -5950,7 +6016,7 @@ public class TestingBoard extends Board
 			return 0;
 
 		if (isInvincible(fp)) {
-			if (isPossibleSpy(fp, tp))
+			if (isPossibleSpyXOne(fp, tp))
 				return values[fp.getColor()][fprank.toInt()]*7/10;
 			return 0;
 		}

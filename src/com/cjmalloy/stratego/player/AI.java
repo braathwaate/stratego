@@ -364,10 +364,7 @@ public class AI implements Runnable
 				t += d;
 				p = b.getPiece(t);
 			};
-			if (p.getColor() != 1 - fpcolor) {
-				if (depth <= 1)
-					addMove(moveList.get(FLEE), i, t-d);
-			} else {
+			if (p.getColor() == 1 - fpcolor) {
 				int mo = LOSES;
 				if (!p.isKnown())
 					mo = ATTACK;
@@ -472,7 +469,7 @@ public class AI implements Runnable
 
 	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
-		boolean hasMove = false;
+		boolean isPruned = false;
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
@@ -531,7 +528,7 @@ public class AI implements Runnable
 				if (!allowAll
 					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)
 					&& b.planValue(fp, i, t) <= 1))
-					hasMove = true;
+					isPruned = true;
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
@@ -540,12 +537,12 @@ public class AI implements Runnable
 					&& b.planValue(fp, i, t) <= 1))
 					addMove(moveList.get(APPROACH), i, t);
 				else
-					hasMove = true;
+					isPruned = true;
 			}
 
 		} // d
 
-		return hasMove;
+		return isPruned;
 	}
 
 	// n > 0: prune off inactive moves
@@ -554,7 +551,7 @@ public class AI implements Runnable
 
 	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
-		boolean hasMove = false;
+		boolean isPruned = false;
 		int i = fp.getIndex();
 
 		Rank fprank = fp.getRank();
@@ -637,7 +634,7 @@ public class AI implements Runnable
 		for (int i = 0; i <= LOSES; i++)
 			moveList.add(new ArrayList<Integer>());
 
-		boolean hasMove = false;
+		boolean isPruned = false;
 		for (Piece fp : b.pieces[turn]) {
 			if (fp == null)	// end of list
 				break;
@@ -688,25 +685,30 @@ public class AI implements Runnable
 
 			if (chasePiece != null) {
 				if (getMoves(1, moveList, fp))
-					hasMove = true;
+					isPruned = true;
 			} else {
-				Rank fprank = fp.getRank();
-				if (fprank == Rank.NINE)
-					getScoutFarMoves(depth, moveList, fp);
+				// All AI Scout moves are evaluated
+				// at depth 0, so when n < 0, there
+				// are no pruned Scout moves.
+				if (n >= 0) {
+					Rank fprank = fp.getRank();
+					if (fprank == Rank.NINE)
+						getScoutFarMoves(depth, moveList, fp);
 
-				// NOTE: FORWARD PRUNING
-				// generate scout far moves only for attacks on unknown
-				// valuable pieces.
-				// if there are no nines left, then skip this code
-				else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
-					getPossibleScoutFarMoves(depth, moveList, fp);
+					// NOTE: FORWARD PRUNING
+					// generate scout far moves only for attacks on unknown
+					// valuable pieces.
+					// if there are no nines left, then skip this code
+					else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
+						getPossibleScoutFarMoves(depth, moveList, fp);
+				}
 
 				if (getMoves(n, moveList, fp))
-					hasMove = true;
+					isPruned = true;
 			}
 		}
 
-		return hasMove;
+		return isPruned;
 	}
 
 	private void getBestMove() throws InterruptedException
@@ -755,21 +757,22 @@ public class AI implements Runnable
 
 		if (chasePiece == null) {
 			rootMoveList = new ArrayList<ArrayList<Integer>>();
-			boolean hasMove = getMoves(rootMoveList, n, 0, Settings.topColor, null, null);
-			if (hasMove) {
+			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor, null, null);
+			if (isPruned) {
 
-			log("-++-");
+			log(">>> pick best pruned move");
 
 		// If any moves were pruned off, choose the best looking one
 		// and then evaluate it along with the non-pruned moves
 		// that could affect material balance.
 		//
 		// Why do this forward pruning?  If the AI
-		// were to consider all moves, then the best move
-		// would be found without all this rigmarole.
+		// were to consider all moves together, then the best move
+		// would be found without the rigmarole.
 		// The problem is that there are just too many moves
 		// to consider, resulting in shallow search depth.
-		// By pruning off inactive moves, depth is significantly
+		// By pruning off inactive moves, and then
+		// evaluating only active moves, depth is significantly
 		// increased (by 2-3 ply), making sure that the AI
 		// does not easily blunder material away.
 		//
@@ -787,7 +790,7 @@ public class AI implements Runnable
 		// determine direction.  Or use windowing.
 
 			ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
-			getMoves(moveList, -n+1, 0, Settings.topColor, null, null);
+			getMoves(moveList, -n, 0, Settings.topColor, null, null);
 			int bestPrunedMoveValue = -9999;
 			int bestPrunedMove = 0;
 			for (int mo = 0; mo <= LOSES; mo++)
@@ -800,8 +803,8 @@ public class AI implements Runnable
 		// Note: negamax(0) isn't deep enough because scout far moves
 		// can cause a move outside the active area to be very bad.
 		// For example, a Spy might be far away from the opponent
-		// pieces and could be selected as a null move.  But moving
-		// it could lose the Spy to a far scout move.
+		// pieces and could be selected as the best pruned move.
+		// But moving it could lose the Spy to a far scout move.
 		// So negamax(1) is called to allow the opponent scout
 		// moves to be considered (because QS does not currently
 		// consider scout moves).
@@ -812,14 +815,13 @@ public class AI implements Runnable
 						bestPrunedMove = move;
 					}
 					b.undo();
-					log(DETAIL, "   " + logMove(b, n, move, mt));
+					logMove(n, move, 0, vm, mt);
 				}
 			}
 			addMove(rootMoveList.get(NULLMOVE), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
 			log(PV, logMove(b, n, bestPrunedMove, MoveType.OK));
-			log("-++-");
-
+			log("<< pick best pruned move");
 			}
 		}
 
@@ -988,6 +990,7 @@ public class AI implements Runnable
 			return;		// ai trapped
 		}
 
+		log(">>> pick best move");
 		int vm = negamax(n, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
 		completedDepth = n;
 
@@ -1037,6 +1040,8 @@ public class AI implements Runnable
 		int bestMovePly = killerMove.getMove();
 		int bestMovePlyValue = vm;
 
+		log("<<< pick best move");
+
 		if (n == 1
 			|| chasePiece != null
 			|| n == MAX_PLY - 1) {
@@ -1053,17 +1058,19 @@ public class AI implements Runnable
 		// if the value is better (or just slightly worse) than
 		// the value of the best move searched 2 plies deeper.
 		
+			log(">>> singular extension");
+
 			MoveType mt = makeMove(n, 0, bestMovePly);
 			vm = -negamax(n+1, -9999, 9999, 1, chasedPiece, chasePiece, killerMove); 
 			b.undo();
-			logMove(n+2, bestMovePly, b.getValue(), vm, 0, mt);
+			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
 			
 			if (vm > bestMovePlyValue - 10) {
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
 			} else {
 				log(PV, "\nPV:" + n + " " + bestMoveValue + " >" + vm + ": best move discarded.");
-				log("-+++-");
+				log("<<< singular extension");
 				continue;
 			}
 		}
@@ -1663,7 +1670,7 @@ public class AI implements Runnable
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			else {
 
-			// logMove(n, b, ttMove, b.getValue(), 0, 0, "");
+			// logMove(n, b, ttMove, b.getValue(), 0, "");
 			MoveType mt = makeMove(n, depth, ttMove);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
@@ -1674,7 +1681,7 @@ public class AI implements Runnable
 				long h = b.getHash();
 				b.undo();
 
-				logMove(n, ttMove, b.getValue(), negQS(vm), h, MoveType.TE);
+				logMove(n, ttMove, b.getValue(), negQS(vm), MoveType.TE);
 
 				alpha = Math.max(alpha, vm);
 
@@ -1708,7 +1715,7 @@ public class AI implements Runnable
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
 				long h = b.getHash();
 				b.undo();
-				logMove(n, km, b.getValue(), negQS(vm), h, MoveType.KM);
+				logMove(n, km, b.getValue(), negQS(vm), MoveType.KM);
 				
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1742,7 +1749,7 @@ public class AI implements Runnable
 			moveList = rootMoveList;
 		else {
 			moveList = new ArrayList<ArrayList<Integer>>();
-			boolean hasMove = getMoves(moveList, n, depth, b.bturn, chasePiece, chasedPiece);
+			boolean isPruned = getMoves(moveList, n, depth, b.bturn, chasePiece, chasedPiece);
 
 			// FORWARD PRUNING
 			// Add null move
@@ -1751,7 +1758,7 @@ public class AI implements Runnable
 			// it will be the one selected as the best move.
 			// This allows the AI to subsequently chose an inactive move
 			// as the best move.
-			if (hasMove)
+			if (isPruned)
 				addMove(moveList.get(NULLMOVE), 0);
 		}
 
@@ -1797,7 +1804,7 @@ public class AI implements Runnable
 
 				b.undo();
 
-				logMove(n, max, b.getValue(), negQS(vm), h, mt);
+				logMove(n, max, b.getValue(), negQS(vm), mt);
 
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1858,7 +1865,7 @@ public class AI implements Runnable
 
 
 		if (b.isTwoSquares(tryMove)) {
-			logMove(n, tryMove, b.getValue(), 0, 0, MoveType.TWO_SQUARES);
+			logMove(n, tryMove, b.getValue(), 0, MoveType.TWO_SQUARES);
 			return MoveType.TWO_SQUARES;
 		}
 
@@ -1874,7 +1881,7 @@ public class AI implements Runnable
 	// but can it lead to a two squares result?
 
 				if (b.isPossibleTwoSquares(tryMove)) {
-					logMove(n, tryMove, b.getValue(), 0, 0, MoveType.POSS_TWO_SQUARES);
+					logMove(n, tryMove, b.getValue(), 0, MoveType.POSS_TWO_SQUARES);
 					return MoveType.POSS_TWO_SQUARES;
 				}
 
@@ -1898,7 +1905,7 @@ public class AI implements Runnable
 					b.move(tryMove, depth);
 					if (b.isRepeatedPosition()) {
 						b.undo();
-						logMove(n, tryMove, b.getValue(), 0, 0, MoveType.REPEATED);
+						logMove(n, tryMove, b.getValue(), 0, MoveType.REPEATED);
 						return MoveType.REPEATED;
 					}
 				}
@@ -1992,7 +1999,7 @@ public class AI implements Runnable
 	return s;
 	}
 
-	void logMove(int n, int move, int valueB, int value, long hash, MoveType mt)
+	void logMove(int n, int move, int valueB, int value, MoveType mt)
 	{
 		if (Settings.debugLevel != 0)
 			log(DETAIL, n + ":" + logMove(b, n, move, mt) + " " + valueB + " " + value);
