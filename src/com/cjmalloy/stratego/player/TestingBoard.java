@@ -384,14 +384,10 @@ public class TestingBoard extends Board
 		// Invincibility means that a rank can attack unknown pieces
 		// with the prospect of a win or even exchange.
 		//
-		// Note: a Nine is the highest rank piece that
-		// can ever become invincible, in an endgame where
-		// there are only unknown Nines or Spies remaining.
 		// The Spy can never be invincible, because that means
 		// that the last unknown piece would be a Spy, which at
-		// best would be an even exchange, and could be much
-		// worse if the opponent One was known but the AI One
-		// was unknown.
+		// best would be an even exchange, and the Spy would
+		// be known by default.
 
 		for (int c = RED; c <= BLUE; c++) {
 			int rank;
@@ -608,6 +604,25 @@ public class TestingBoard extends Board
 		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
+
+		{
+		// Revalue expendable pieces based on piece count difference.
+		// If a player has an unknown piece count majority, excess
+		// expendable pieces just get in the way, as
+		// only few are needed for bluffing.  The player
+		// has the luxury of attack for the sake of random discovery.
+		int u = unknownPiecesRemaining[Settings.topColor] -
+			unknownPiecesRemaining[Settings.bottomColor];
+		int c;
+		if (u > 0)
+			c = Settings.topColor;
+		else
+			c = Settings.bottomColor;
+		u = Math.max(Math.abs(u), 5);
+		
+		values[c][9] = values[c][9] * (10 - u) / 10;
+		valueStealth[c][8] = valueStealth[c][8] * (10 - u) / 10;
+		}
 
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
@@ -1817,7 +1832,7 @@ public class TestingBoard extends Board
 		// targetIndex is the closest point adjacent to flag
 
 		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, targetIndex);
-		Piece defender = getDefender(color, destTmp3, pAttacker, stepsTarget);
+		Piece defender = getDefender(color, destTmp3, pAttacker.getRank(), stepsTarget);
 		if (defender == null)
 			return;	// no imminent danger
 
@@ -1839,15 +1854,15 @@ public class TestingBoard extends Board
 	// pieces optimally.  This code is a pale effort to improve defensive
 	// measures past the search horizon.
 
-	private Piece getDefender(int color, int destTmp[], Piece pAttacker, int stepsTarget)
+	private Piece getDefender(int color, int destTmp[], Rank attacker, int stepsTarget)
 	{
 		// TBD: Note that if the attacker is unknown
 		// the AI relies on a Eight or less to defend.
 		// Obviously, that would be no deterrent
 		// to a lower-ranked unknown attacker.
 
-		int attackerRank = pAttacker.getRank().toInt();
-		if (pAttacker.getRank() == Rank.UNKNOWN)
+		int attackerRank = attacker.toInt();
+		if (attacker == Rank.UNKNOWN)
 			attackerRank = 8;
 
 		int stepsDefender = 99;
@@ -1899,7 +1914,7 @@ public class TestingBoard extends Board
 		// stepsDefender == stepsTarget.
 
 		if (pDefender == null  	// attacker not stopable
-			|| stepsDefender != stepsTarget - 1) // no imminent danger
+			|| (stepsTarget != 0 && stepsDefender != stepsTarget - 1)) // no imminent danger
 			return null;
 
 		return pDefender;
@@ -1994,18 +2009,20 @@ public class TestingBoard extends Board
 
 				genPlanA(destTmp, 1-color, pAttacker.getRank().toInt(), DEST_PRIORITY_ATTACK_FLAG);
 
-				Piece defender = getDefender(color, destTmp, pAttacker, stepsAttacker);
+				Piece defender = getDefender(color, destTmp, pAttacker.getRank(), stepsAttacker);
 
 				if (defender != null) {
 					int r = defender.getRank().toInt();
 					activeRank[color][r-1] = defender;
 					genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+				} else {
+					// TBD: try looking for an Eight
 				}
 
 				// Try to push the protector, if any, out of the way
 
 				if (stepsProtector < stepsAttacker) {
-					defender = getDefender(color, destTmp, pProtector, stepsProtector);
+					defender = getDefender(color, destTmp, pProtector.getRank(), stepsProtector);
 					if (defender != null) {
 						int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
 						int r = defender.getRank().toInt();
@@ -2167,12 +2184,12 @@ public class TestingBoard extends Board
 			// minimax should ward off any attackers.)
 
 				int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi + 22);
-				for (int r = 7; r >= 1; r--)
-					if (rankAtLarge(color, r) != 0) {
-						genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
-						break;
-					}
-
+				Piece defender = getDefender(color, destTmp, Rank.SEVEN, 0);
+				if (defender != null) {
+					int r = defender.getRank().toInt();
+					activeRank[color][r-1] = defender;
+					genPlanA(destTmp, color, r,  DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+				}
 			}
 		}
 	}
@@ -3224,7 +3241,7 @@ public class TestingBoard extends Board
 		// TBD: this is the same as the opponent invincible
 		// rank, so this code should use invincible rank instead.
 		// However, lowestUnknownNotSuspectedRank [1..10]
-		// but invincibleRank[Settings.topColor] [1..9]
+		// but invincibleRank[Settings.topColor] [1..7]
 
 		lowestUnknownNotSuspectedRank = Rank.UNKNOWN.toInt();
 		for (int r = 10; r >= 1; r--)
@@ -3477,6 +3494,8 @@ public class TestingBoard extends Board
 
 		Rank fprank = fp.getRank();
 		int fpcolor = fp.getColor();
+		boolean fpknown = fp.isKnown();
+		boolean fpsuspected = fp.isSuspectedRank();
 
 		int r = fprank.toInt()-1;
 
@@ -3527,6 +3546,7 @@ public class TestingBoard extends Board
 			setPiece(null, Move.unpackTo(m));
 
 			Rank tprank = tp.getRank();
+			boolean tpknown = tp.isKnown();
 
 		// note: use actual value for ai attacker
 		// because unknown ai attacker knows its own value
@@ -3677,19 +3697,37 @@ public class TestingBoard extends Board
 							- values[Settings.bottomColor][tprank.toInt()];
 						if (!fp.isKnown())
 							vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
+						vm -= (9 - tprank.toInt());
+
 		// If the AI piece is known and the opponent is unknown,
 		// it may mean that the AI has guessed wrong,
-		// if the opponent has allowed its piece to contact
-		// the known AI piece.  The exchange is too close to call,
-		// so the AI piece loses its value.
+		// and the exchange could be a loss.  This case
+		// should only happen at depth, because if
+		// the opponent actually allows its piece to contact
+		// the known AI piece, the opponent would gain
+		// a lower chase rank and thus the exchange would not be EVEN.
 
-					} else
-						vm += riskOfLoss(tp, fp);
+		// Yet the AI piece should try to avoid this situation,
+		// because of the possibility that it has guessed wrong,
+		// but it cannot overreact and lose material to an idle threat.
+		// For example:
+		// xx -- R3 xx
+		// xx -- R4 xx
+		// -- -- B? --
+		// Unknown Blue approaches known R3.  This makes Blue
+		// a suspected rank of 3.  Red Four should move,
+		// because Blue approaching known Red Three 
+		// is barely negative (this EVEN case) as it is not a foregone
+		// conclusion; Blue might not approach Red Three,
+		// although that would be a very good move, because
+		// then Red Three would have to move away (because
+		// Blue is now a suspected Two), leaving Blue to
+		// capture Red Four.
 
-		// But it has to be better than a known exchange.
-
-					if (!fp.isKnown())
-						vm -= (9 - tprank.toInt());
+					} else {
+						assert !fp.isKnown() : "fp is known?";
+						vm += (9 - tprank.toInt());
+					}
 
 				} else {	// AI is attacker
 
@@ -3812,7 +3850,7 @@ public class TestingBoard extends Board
 		// The solution is to remove both pieces from the
 		// board but check the opponents's adjacent
 		// pieces when the AI attacks.  If the opponent has
-		// a unknown defender piece, then the AI attack must
+		// a lower or unknown defender piece, then the AI attack must
 		// be debited significantly to account for the risk
 		// that the AI piece survives and then loses to
 		// the defender.
@@ -3831,7 +3869,7 @@ public class TestingBoard extends Board
 						if (p == null
 							|| p.getColor() == fpcolor)
 							continue;
-						if (!p.isKnown()) {
+						if (!p.isKnown() || p.getRank().toInt() < fprank.toInt() ) {
 							vm -= fpvalue/2;
 							break;
 						}
@@ -4614,7 +4652,10 @@ public class TestingBoard extends Board
 		//
 		// This particularly affects deep chase, where
 		// the depth is very deep.  Few opponents will see
-		// this deep.
+		// this deep.  Often the AI will leave material
+		// hanging because of a potential deep threat
+		// involving unknown pieces that do not have the
+		// ranks that the AI is worried about.
 		//
 		// This is important in tournament play with substandard
 		// bots.  Stratego is a game of logic, but chance plays
@@ -4625,14 +4666,20 @@ public class TestingBoard extends Board
 		// where the AI should play a winning sequence earlier.
 		//
 		// Depth value reduction
-		// 2 : 95%
-		// 4 : 90%
-		// 6 : 85%
-		// 8 : 80%
-		// 10+ : 75%
+		//   known 	unknown
+		// 2 : 95%	90%
+		// 4 : 90%	80%
+		// 6 : 85%	70%
+		// 8 : 80%	60%
+		// 10+ : 75%	50%
 
-			if (fpcolor == Settings.bottomColor)
-				vm = vm * (20 - Math.min(depth, 10)/2) / 20;
+			if (fpcolor == Settings.bottomColor) {
+				if ((!fpknown && !fpsuspected)
+					|| !tpknown)
+					vm = vm * (10 - Math.min(depth, 10)/2) / 10;
+				else
+					vm = vm * (20 - Math.min(depth, 10)/2) / 20;
+			}
 
 		} // else attack
 
@@ -5604,26 +5651,6 @@ public class TestingBoard extends Board
 		Rank fprank = fp.getRank();
 		Rank tprank = tp.getRank();
 
-		int result = winFight(fprank, tprank);
-
-		if (result == Rank.UNK) {
-
-		if (tp.getColor() == Settings.topColor) {
-
-			// AI IS DEFENDER (tp)
-
-			assert fprank == Rank.UNKNOWN : "opponent piece is known? (" + fprank + ")";
-
-		// by definition, attack on invincible rank loses or is even
-
-			if (isInvincible(tp)) {
-				if (isPossibleSpyXOne(tp, fp))
-					return Rank.UNK;
-
-				assert tprank.toInt() <= lowestUnknownNotSuspectedRank;
-				return Rank.LOSES; // could be EVEN
-			}
-
 		// The AI assumes that any unknown piece
 		// will take a known or flag bomb
 		// because of flag safety.  All other attacks
@@ -5663,14 +5690,41 @@ public class TestingBoard extends Board
 		// can succeed in attacking the flag position even
 		// if the opponent makes a lucky guess.
 
-			if (tprank == Rank.BOMB
-				&& fp.getMaybeEight()
-				&& (flag[Settings.topColor].isKnown()
-					|| fprank == Rank.UNKNOWN)) {
-				if (tp.isKnown() || tp.aiValue() != 0) {
-					return Rank.WINS;	// maybe not
-				} else
-					return Rank.LOSES;	// most likely
+		if (tprank == Rank.BOMB
+			&& tp.getColor() == Settings.topColor
+			&& fp.getMaybeEight()
+			&& (flag[Settings.topColor].isKnown()
+				|| fprank == Rank.UNKNOWN)) {
+			if (tp.isKnown() || tp.aiValue() != 0) {
+				return Rank.WINS;	// maybe not
+			} else
+				return Rank.LOSES;	// most likely
+		}
+
+		int result = winFight(fprank, tprank);
+
+		if (result == Rank.UNK) {
+
+		if (tp.getColor() == Settings.topColor) {
+
+			// AI IS DEFENDER (tp)
+
+			assert fprank == Rank.UNKNOWN : "opponent piece is known? (" + fprank + ")";
+
+		// By definition, attack on invincible rank loses or is even.
+		// But invincible eights should be used for attacking
+		// bombs rather than other eights.
+
+			if (isInvincible(tp)) {
+				if (isPossibleSpyXOne(tp, fp))
+					return Rank.UNK;
+
+				assert tprank.toInt() <= lowestUnknownNotSuspectedRank : tprank.toInt() + " " + invincibleRank[Settings.topColor] + " " + lowestUnknownNotSuspectedRank;
+
+				if (tprank.toInt() >= 8)
+					return Rank.EVEN;	// could be LOSES
+				else
+					return Rank.LOSES; // could be EVEN
 
 			} else if (isFleeing(tp, fp))
 				return Rank.LOSES;	// maybe not
@@ -5770,10 +5824,16 @@ public class TestingBoard extends Board
 		else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
 			return result;
 
-		// by definition, invincible rank wins or is even
+		// By definition, invincible rank wins or is even
 		// on attack of unknown moved pieces.
-		if (isInvincible(fp))
-			return Rank.WINS;	// maybe not, could be EVEN
+		// But invincible eights should be used for attacking
+		// bombs rather than other eights.
+		if (isInvincible(fp)) {
+			if (fprank.toInt() >= 8)
+				return Rank.EVEN;	// maybe not, could be WINS
+			else
+				return Rank.WINS;	// maybe not, could be EVEN
+		}
 
 		else if (tp.getActingRankChase() == Rank.UNKNOWN
 			&& (flag[Settings.bottomColor] == null

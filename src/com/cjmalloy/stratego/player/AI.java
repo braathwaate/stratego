@@ -1315,6 +1315,7 @@ public class AI implements Runnable
 				int vm = qs(depth+1, n-1, false);
 
 				b.undo();
+				log(DETAIL, "   qs(" + n + "):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
 
 		// Save worthwhile attack (vm > best)
 		// (if vm < best, the player will play
@@ -2001,8 +2002,7 @@ public class AI implements Runnable
 
 	void logMove(int n, int move, int valueB, int value, MoveType mt)
 	{
-		if (Settings.debugLevel != 0)
-			log(DETAIL, n + ":" + logMove(b, n, move, mt) + " " + valueB + " " + value);
+		log(DETAIL, n + ":" + logMove(b, n, move, mt) + " " + valueB + " " + value);
 	}
 
 	public void logMove(Move m)
