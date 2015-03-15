@@ -553,6 +553,8 @@ public class TestingBoard extends Board
 
 		} // color
 
+		lowestUnknownNotSuspectedRank = invincibleRank[Settings.topColor];
+
 		// dangerousUnknownRank is set when an opponent
 		// has an invincible unknown rank.  This changes
 		// how the AI views pieces that approach its unknown
@@ -1683,6 +1685,9 @@ public class TestingBoard extends Board
 				= frank.winFight(trank);
 	}
 
+	// > 0 : the rank is still at large, location unknown
+	// = 0 : the rank is gone or if large, the location is guessed
+	// < 0 : the rank is still at large, multiple locations are guessed
 	protected int unknownNotSuspectedRankAtLarge(int color, int r)
 	{
 		return unknownRankAtLarge(color, r) - suspectedRankAtLarge(color, r);
@@ -3235,19 +3240,6 @@ public class TestingBoard extends Board
 		} // prev != null
 		}
 
-		// lowestUnknownNotSuspectedRank is used in an encounter
-		// with an invincible piece.
-
-		// TBD: this is the same as the opponent invincible
-		// rank, so this code should use invincible rank instead.
-		// However, lowestUnknownNotSuspectedRank [1..10]
-		// but invincibleRank[Settings.topColor] [1..7]
-
-		lowestUnknownNotSuspectedRank = Rank.UNKNOWN.toInt();
-		for (int r = 10; r >= 1; r--)
-			if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, r) != 0)
-				lowestUnknownNotSuspectedRank = r;
-
 		// Another useful count is the number of opponent pieces with
 		// lower rank.  If a rank has only 1 opponent piece
 		// of lower rank remaining on the board,
@@ -4358,7 +4350,10 @@ public class TestingBoard extends Board
 		// In an unknown attack, the AI loses its piece but gains
 		// the stealth value of the opposing piece.
 		// But if there are not any opposing pieces of lower rank,
-		// it gains only the stealth value of an Unknown.
+		// the AI piece must be invincible, so the outcome
+		// is unknown only if it attacks an unmoved piece
+		// which could be a bomb (see winFight()).
+		// Thus it gains only the stealth value of an Unknown.
 
 				assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 				tpvalue = valueStealth[1-fpcolor][Rank.UNKNOWN.toInt()-1];
@@ -5718,8 +5713,6 @@ public class TestingBoard extends Board
 			if (isInvincible(tp)) {
 				if (isPossibleSpyXOne(tp, fp))
 					return Rank.UNK;
-
-				assert tprank.toInt() <= lowestUnknownNotSuspectedRank : tprank.toInt() + " " + invincibleRank[Settings.topColor] + " " + lowestUnknownNotSuspectedRank;
 
 				if (tprank.toInt() >= 8)
 					return Rank.EVEN;	// could be LOSES
