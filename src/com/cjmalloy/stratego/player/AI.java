@@ -68,7 +68,7 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
 	private TTEntry[] ttable = new TTEntry[2<<22]; // 4194304
-	private final int QSMAX = 3;	// maximum qs search depth
+	private final int QSMAX = 2;	// maximum qs search depth
 	int bestMove = 0;
 	long stopTime = 0;
 	int moveRoot = 0;
@@ -380,11 +380,17 @@ public class AI implements Runnable
 	// - Search from the valuable AI piece rather than from the
 	// unknown opponent piece, since they are much fewer.
 	// - Use a rotated bitgrid to bitscan for an attack.
+	//
+	// It is tempting to forward prune off these moves except at
+	// depth 0, but this causes the AI to blunder material if the AI Spy
+	// is unavoidably exposed.  Because the opponent
+	// could only take the Spy at depth 0 and if this is the opponent
+	// best move, then the AI will leave material hanging because it thinks
+	// that the opponent can only take the Spy immediately rather than
+	// first taking the material and then taking the Spy later.
+
 	void getPossibleScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
-		if (depth > 1)
-			return;
-
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 
@@ -639,66 +645,70 @@ public class AI implements Runnable
 			if (fp == null)	// end of list
 				break;
 
-			// if the piece is no longer on the board, ignore it
+		// if the piece is no longer on the board, ignore it
+
 			if (b.getPiece(fp.getIndex()) != fp)
 				continue;
 
 			if (!b.grid.hasMove(fp))
 				continue;
 
-			// FORWARD PRUNING
-			// deep chase search
-			// Only examine moves where player and opponent
-			// are separated by up to 1 open square.
+		// FORWARD PRUNING
+		// deep chase search
+		// Only examine moves where player and opponent
+		// are separated by up to 1 open square.
 
-			// What often happens in a extended chase,
-			// is that the chased piece approaches one of its other
-			// pieces, allowing the chaser to fork the two pieces.
-			// For example,
-			// -- -- R3 -- -- --
-			// -- -- B2 -- -- R5
-			// -- -- -- -- -- R4
-			// Red Three has been fleeing Blue Two.
-			// If Red Three moves right, Blue Two will be
-			// able to fork Red Five and Red Four.
-			// But as the search continues, the AI will evaluate
-			// Blue Two moving even further right, because only
-			// one open square separates Blue Two from Red Five.
-			// Thus, Red will move left.
+		// What often happens in a extended chase,
+		// is that the chased piece approaches one of its other
+		// pieces, allowing the chaser to fork the two pieces.
+		// For example,
+		// -- -- R3 -- -- --
+		// -- -- B2 -- -- R5
+		// -- -- -- -- -- R4
+		// Red Three has been fleeing Blue Two.
+		// If Red Three moves right, Blue Two will be
+		// able to fork Red Five and Red Four.
+		// But as the search continues, the AI will evaluate
+		// Blue Two moving even further right, because only
+		// one open square separates Blue Two from Red Five.
+		// Thus, Red will move left.
 
-			// If the Red pieces were more than one open square
-			// away, Blue two could still try to approach them,
-			// but Red has an extra move to respond, and usually
-			// it is able to separate the pieces eliminating
-			// the fork.
+		// If the Red pieces were more than one open square
+		// away, Blue two could still try to approach them,
+		// but Red has an extra move to respond, and usually
+		// it is able to separate the pieces eliminating
+		// the fork.
 
-			// By pruning off all other moves on the board
-			// that are more than one open square away from
-			// an opponent piece, the AI search depth doubles,
-			// making it far less likely for the AI to lose
-			// material in a random chase.
-			// (More often what happens is that the opponent
-			// piece ends the chase, and then
-			// the AI makes a bad move using the broad search,
-			// such as heading into a trap beyond the search
-			// horizon, and then the chase resumes.)
+		// By pruning off all other moves on the board
+		// that are more than one open square away from
+		// an opponent piece, the AI search depth doubles,
+		// making it far less likely for the AI to lose
+		// material in a random chase.
+		// (More often what happens is that the opponent
+		// piece ends the chase, and then
+		// the AI makes a bad move using the broad search,
+		// such as heading into a trap beyond the search
+		// horizon, and then the chase resumes.)
 
 			if (chasePiece != null) {
 				if (getMoves(1, moveList, fp))
 					isPruned = true;
 			} else {
-				// All AI Scout moves are evaluated
-				// at depth 0, so when n < 0, there
-				// are no pruned Scout moves.
+
+		// All AI Scout moves are evaluated
+		// at depth 0, so when n < 0, there
+		// are no pruned Scout moves.
+
 				if (n >= 0) {
 					Rank fprank = fp.getRank();
 					if (fprank == Rank.NINE)
 						getScoutFarMoves(depth, moveList, fp);
 
-					// NOTE: FORWARD PRUNING
-					// generate scout far moves only for attacks on unknown
-					// valuable pieces.
-					// if there are no nines left, then skip this code
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks on unknown
+		// valuable pieces.
+		// if there are no nines left, then skip this code
+
 					else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
 						getPossibleScoutFarMoves(depth, moveList, fp);
 				}
@@ -1173,15 +1183,25 @@ public class AI implements Runnable
 	// RB
 	// R4 R2
 	// B3
-	// Blue has the move:
-	// 2a. Red flee, best = b.value
-	// 2b. R4xB3 is negative, so best is not changed
-	// return b.value
-	// 1a. Blue flee
-	// 2a. Red flee, best = b.value(-100)
-	// 2b. R2xB3, best = b.value(+100)
-	// return best(+100)
-	// 1b. B3xR4
+	// Blue has the move.  Board value is 0.
+	// (flee=f)
+	// 1x. B3xR4
+	// 2x. R2xB3, vm = -100 + 200 = 100
+	// 2n. set flee=t, max=100
+	// 3x. B3xRB, B3xR2, -200
+	// 3. return -100
+	// 2. return 100
+	// 1x. vm = -100
+	// 1n. set flee=t, max=0
+	// 2x. R4xB3
+	// 3x. No captures, vm=-9999
+	// 3n. set flee=t, max=100
+	// 4x. No captures, vm=-9999
+	// 4. return -100
+	// 3. return 100
+	// 2x. vm = -100
+	// 2n. return 0
+	// 1. qs=0
 	//
 	// If Red has the move:
 	// 2a. Blue flee, best = b.value
@@ -1214,25 +1234,15 @@ public class AI implements Runnable
 	// Thus it may leave material at risk to keep its chase piece
 	// near the flag.  
 
-	private int qs(int depth, int n, boolean flee)
+	private int qs(int depth, int n, boolean flee, int nullbest)
 	{
 		if (n < 1)
-			return b.getValue();
+			return negQS(b.getValue());
 
 		boolean bestFlee = false;
 		Piece bestTp = null;
-
-		// try fleeing
-		b.pushNullMove();
-		int best = qs(depth+1, n-1, true);
-		b.undo();
+		int best = -9999;
 		int nextBest = best;
-
-		// "best" is b.getValue() after
-		// opponent's best attack if player can flee.
-		// So usually qs is b.getValue(), unless the
-		// opponent has two good attacks or the player
-		// piece under attack is cornered.
 
 		// Note: the following code snippet is faster,
 		// especially for dense bitmaps:
@@ -1312,10 +1322,10 @@ public class AI implements Runnable
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-				int vm = qs(depth+1, n-1, false);
+				int vm = -qs(depth+1, n-1, false, 0);
 
 				b.undo();
-				log(DETAIL, "   qs(" + n + "):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
+				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
 
 		// Save worthwhile attack (vm > best)
 		// (if vm < best, the player will play
@@ -1325,31 +1335,42 @@ public class AI implements Runnable
 		// on the same piece, because if it flees,
 		// it nullifies both attacks.
 
-				if (b.bturn == Settings.topColor) {
-					if (vm > best) {
-						if (tp != bestTp)
-							nextBest = best;
-						best = vm;
-						bestTp = tp;
-						bestFlee = canFlee;
-					} else if (vm > nextBest && tp != bestTp)
-						nextBest = vm;
-				} else {
-					if (vm < best) {
-						if (tp != bestTp)
-							nextBest = best;
-						best = vm;
-						bestTp = tp;
-						bestFlee = canFlee;
-					} else if (vm < nextBest && tp != bestTp)
-						nextBest = vm;
-				}
+				if (vm > best) {
+					if (tp != bestTp)
+						nextBest = best;
+					best = vm;
+					bestTp = tp;
+					bestFlee = canFlee;
+				} else if (vm > nextBest && tp != bestTp)
+					nextBest = vm;
 			} // dir
 		} // pieces
 		} // k
 
 		if (bestFlee)
 			best = nextBest;
+
+		int vm;
+
+		// If the opponent move was null and the player move
+		// is null, then the result is the same as if neither
+		// player move was null.  This can be thought of as
+		// a simple transposition cache.  It also prevents
+		// the search continuing ad infinitem.
+		if (flee)
+			vm = nullbest;
+		else {
+			nullbest = Math.max(negQS(b.getValue()), best);
+			// try fleeing
+			b.pushNullMove();
+			vm = -qs(depth+1, n, true, -nullbest);
+			b.undo();
+		}
+
+		// log(DETAIL, "   qs(" + n + "n.):" + logMove(b, n, 0, MoveType.OK) + " " + b.getValue() + " " + negQS(vm) + " " + flee);
+
+		if (vm > best)
+			return vm;
 
 		return best;
 	}
@@ -1365,12 +1386,12 @@ public class AI implements Runnable
 		// qs is valueB
 
 		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return valueB;
+			return negQS(valueB);
 
 		// valueBluff() checks for a prior move capture,
 		// so qscache is invalid in this case
 
-		return qs(depth, QSMAX, false);
+		return qs(depth, QSMAX, false, 0);
 /*
 
 		UndoMove um = b.getLastMove();
@@ -1578,7 +1599,7 @@ public class AI implements Runnable
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
-			vm = negQS(qscache(depth));
+			vm = qscache(depth);
 			// save value of position at hash 0 (see saveTTEntry())
 			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
 			return vm;
@@ -1968,13 +1989,12 @@ public class AI implements Runnable
 	String logMove(Board b, int n, int move, MoveType mt)
 	{
 
-	if (move == 0)
-		return "(null move) " + mt;
-
-	int color = b.getPiece(Move.unpackFrom(move)).getColor();
 	String s = "";
-	if (color == 1)
+	if (b.bturn == 1)
 		s += "... ";
+	if (move == 0)
+		return s + "(null)" + mt;
+
 	s += logPiece(b.getPiece(Move.unpackFrom(move)));
 	s += (char)(Move.unpackFromX(move)+97);
 	s += (Move.unpackFromY(move)+1);
@@ -2040,7 +2060,7 @@ public class AI implements Runnable
 			|| hash != entry.hash)
 			return;
 		if (entry.bestMove == 0) {
-			log(PV,  "   (null move)");
+			log(PV,  "   (null)");
 			b.pushNullMove();
 		} else if (entry.bestMove == -1) {
 			log(PV,  "   (end of game)");

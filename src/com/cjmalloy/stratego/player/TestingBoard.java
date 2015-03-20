@@ -78,6 +78,7 @@ public class TestingBoard extends Board
 	protected int lowestUnknownNotSuspectedRank;
 	protected int lowestUnknownExpendableRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
+	protected int[] possibleUnknownMovablePieces = new int[2];
 	protected int[] unknownPiecesRemaining = new int[2];
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
@@ -229,6 +230,7 @@ public class TestingBoard extends Board
 			flag[c]=null;
 			npieces[c] = 0;
 			piecesNotBomb[c] = 0;
+			unknownPiecesRemaining[c] = 0;
 			for (int j=0;j<15;j++) {
 				suspectedRank[c][j] = 0;
 				activeRank[c][j] = null;
@@ -252,6 +254,9 @@ public class TestingBoard extends Board
 				if (!p.isKnown()
 					&& p.getColor() == Settings.bottomColor)
 					np.setRank(Rank.UNKNOWN);
+
+				if (!p.isKnown())
+					unknownPiecesRemaining[p.getColor()]++;
 
 				if (p.hasMoved() || p.isKnown()) {
 					// count the number of moved pieces
@@ -323,8 +328,9 @@ public class TestingBoard extends Board
 		// If all pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		unknownPiecesRemaining[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
-		if (unknownPiecesRemaining[c] == 0) {
+		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
+		if (possibleUnknownMovablePieces[c] == 0) {
+			unknownPiecesRemaining[c]=0;
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
 					continue;
@@ -1716,10 +1722,10 @@ public class TestingBoard extends Board
 	// uUnknownExpendableRankAtLarge is rarely zero.
 	// But this should not deter valuable ranks from attack.
 	// So the AI subtracts a percentage (1/3) of
-	// unknownPiecesRemaining in determining safety.
+	// possibleUnknownMovablePieces in determining safety.
 	private boolean hasFewExpendables(int color)
 	{
-		return nUnknownExpendableRankAtLarge[color] - (unknownPiecesRemaining[color] / 3) <= 4;
+		return nUnknownExpendableRankAtLarge[color] - (possibleUnknownMovablePieces[color] / 3) <= 4;
 	}
 
 	// Target ai or opponent flag
@@ -1882,7 +1888,10 @@ public class TestingBoard extends Board
 					|| stealthValue(p) > values[1-color][attackerRank - 1])
 				continue;
 
-			if (destTmp[i] < stepsDefender) {
+			if (stepsTarget != 0 && destTmp[i] < stepsDefender
+				|| (stepsTarget == 0
+					&& (pDefender == null
+					|| p.getRank().toInt() > pDefender.getRank().toInt()))) {
 				stepsDefender = destTmp[i];
 				pDefender = p;
 			}
@@ -5959,10 +5968,10 @@ public class TestingBoard extends Board
 	boolean isNineTarget(Piece p)
 	{
 		Rank rank = p.getRank();
-		return !p.isKnown()
-			&& (rank == Rank.SPY
-				|| rank == Rank.FLAG
-				|| valueStealth[p.getColor()][rank.toInt()-1] > values[1-p.getColor()][9]);
+		return (rank == Rank.FLAG
+			|| (!p.isKnown()
+				&& (rank == Rank.SPY
+				|| valueStealth[p.getColor()][rank.toInt()-1] > values[1-p.getColor()][9])));
 	}
 
 	// If all bombs have been accounted for,
