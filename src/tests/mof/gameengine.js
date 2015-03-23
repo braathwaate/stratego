@@ -47,8 +47,8 @@ function initializeGameInfo()
 function initializeService()
 {
 	Service = createHttpClient();
-	// ServiceUrl = "http://" + window.location.hostname + "/masteroftheflag/webengine/service.asmx";
-	ServiceUrl = "http://" + "www.jayoogee.com" + "/masteroftheflag/webengine/service.asmx";
+	// ServiceUrl = "http://" + window.location.hostname + "/masteroftheflag/webgameengine/service.svc";
+	ServiceUrl = "http://" + "www.jayoogee.com" + "/masteroftheflag/webgameengine/service.svc";
 /*
 	if (navigator.appName == "Netscape")
 	{
@@ -84,6 +84,7 @@ function createGenerateSetupRequest()
 	return request;
 }
 
+/*
 function createCreateGameRequest()
 {
 	var webPlayerID = "MF Web Site Guest";
@@ -94,6 +95,28 @@ function createCreateGameRequest()
 		"		<CreateGame xmlns=\"http://www.jayoogee.com/StrategyWebGame/\">\n" +
 		"			<webPlayerID>" + webPlayerID + "</webPlayerID>\n" +
 		"			<computerPlayerID>Human Combat Player</computerPlayerID>\n" +
+		"		</CreateGame>\n" +
+		"	</soap:Body>\n" +
+		"</soap:Envelope>\n";
+
+	return request;
+}
+*/
+
+function createCreateGameRequest()
+{
+	var webPlayerID = "MF Web Site Guest";
+	
+	var request = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" +
+		"<soap:Envelope xmlns:soap=\"http://schemas.xmlsoap.org/soap/envelope/\">\n" +
+		"	<soap:Body>\n" +
+		"		<CreateGame xmlns=\"http://www.jayoogee.com/StrategyWebGame/\">\n" +
+		"			<webPlayerInfo>\n" +
+		"				<PlayerID>" + webPlayerID + "</PlayerID>\n" +
+		"			</webPlayerInfo>\n" +
+		"			<computerPlayerInfo>\n" +
+		"				<PlayerID>Human Combat Player</PlayerID>\n" +
+		"			</computerPlayerInfo>\n" +
 		"		</CreateGame>\n" +
 		"	</soap:Body>\n" +
 		"</soap:Envelope>\n";

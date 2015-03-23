@@ -425,19 +425,12 @@ public class AI implements Runnable
 			if (tp == null) {
 				addMove(moveList.get(FLEE), i, t);
 			} else if (tp != Grid.water && tp.getColor() != fpcolor) {
-				int result = b.winFight(fp, tp);
-				int mo = LOSES;
-				if (result == Rank.WINS ||
-					result == Rank.EVEN)
-					mo = WINS;
-				else if (result == Rank.LOSES
-					&& (fprank.toInt() <= 4
-						|| tp.isKnown()))
-					mo = LOSES;
+				if (isLosingMove(fp, tp))
+					addMove(moveList.get(LOSES), i, t);
 				else
-					mo = ATTACK;
+					addMove(moveList.get(ATTACK), i, t);
+
 					
-				addMove(moveList.get(mo), i, t);
 			}
 		} // d
 	}
@@ -456,19 +449,10 @@ public class AI implements Runnable
 				continue;
 
 			if (tp.getColor() != fpcolor) {
-				int result = b.winFight(fp, tp);
-				int mo = LOSES;
-				if (result == Rank.WINS ||
-					result == Rank.EVEN)
-					mo = WINS;
-				else if (result == Rank.LOSES
-					&& (fprank.toInt() <= 4
-						|| tp.isKnown()))
-					mo = LOSES;
+				if (isLosingMove(fp, tp))
+					addMove(moveList.get(LOSES), i, t);
 				else
-					mo = ATTACK;
-					
-				addMove(moveList.get(mo), i, t);
+					addMove(moveList.get(ATTACK), i, t);
 			}
 		} // d
 	}
@@ -1120,7 +1104,7 @@ public class AI implements Runnable
 			
 
 	// Quiescence Search (qs)
-	// Deepening the tree to evaluate captures for qs.
+	// Deepening the tree to evaluate captures and recaptures.
 	// 
 	// This version gives no credit for the "best attack" on a movable
 	// piece on the board because it is likely the opponent will move
@@ -1172,13 +1156,6 @@ public class AI implements Runnable
 	// the difference in strength will become far more noticeable,
 	// because accuracy is necessary for optimal alpha-beta pruning.
 	//
-	// Quiescent search with only attack moves limits the
-	// horizon effect but does not eliminate it, because
-	// the ai is still prone to make bad moves 
-	// that waste more material in a position where
-	// the opponent has a sure favorable attack in the future,
-	// and the ai depth does not reach the position of exchange.
-	//
 	// Test Example.
 	// RB
 	// R4 R2
@@ -1203,21 +1180,32 @@ public class AI implements Runnable
 	// 2n. return 0
 	// 1. qs=0
 	//
-	// If Red has the move:
-	// 2a. Blue flee, best = b.value
-	// 2b. B3xR4, best = -100
-	// return -100 (because Red Four cannot flee)
-	// 1a. Red flee
-	// 2a. Blue flee, best = b.value(-100) (*)
-	// 2b. No attacks remaining
-	// return best (-100)
-	// 1b. R4xB3
+	// This version of quiescent search limits the
+	// horizon effect because captures often are the best
+	// moves.  This allows the AI to see the material effect
+	// of future positions without having to fully expand the
+	// search, effectively extending the search by QSMAX ply.
 	//
-	// (*) this is why QSMAX must be at least 3.
-	// This also prevents a single level horizon effect
+	// So for example if an opponent piece is approaching
+	// a clump of AI pieces, and the search detects the arrival
+	// of the opponent piece adjacent to the clump, qs effectively
+	// evaluates the subsequent captures at lower ply.
+	//
+	// But qs does not eliminate the horizon effect, because
+	// the ai is still prone to make bad moves 
+	// that waste more material in a position where
+	// the opponent has a sure favorable attack in the future,
+	// but the ai search does not reach the adjacent pieces.
+	//
+	// qs does not eliminate a horizon effect
 	// where the ai places another (lesser) piece subject
 	// to attack when the loss of an existing piece is inevitable.
-	// QSMAX 3 is deep enough to see both captures.
+	// When the AI does this, it does so because it assumes
+	// that the opponent will play the moves to take the more
+	// valuable piece.  This happens because the capture of
+	// the lesser pieces pushes the attack on the more valuable
+	// piece past the horizon.  This horizon effect can only be
+	// addressed by extended search.
 	// 
 	// qs does not (and should not) prevent a horizon effect
 	// caused by repetitive chase moves.  Thus, if a lesser
@@ -1236,8 +1224,9 @@ public class AI implements Runnable
 
 	private int qs(int depth, int n, boolean flee, int nullbest)
 	{
+		int bvalue = negQS(b.getValue());
 		if (n < 1)
-			return negQS(b.getValue());
+			return bvalue;
 
 		boolean bestFlee = false;
 		Piece bestTp = null;
@@ -1307,17 +1296,23 @@ public class AI implements Runnable
 		// the qs result from move to move.
 		//
 			for (int d : dir ) {
-				boolean canFlee = false;
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
 				if (tp == null
 					|| tp == Grid.water
-					|| b.bturn == tp.getColor())
-					continue;
+					|| b.bturn == tp.getColor()
 
-				if (flee && isMovable(t))
-					canFlee = true;
+		// Don't evaluate obvious losing moves to save time
+		// (such as attacking a known lower ranked piece).
+		// The main search throws these into the LOSES
+		// bucket, hoping that they will get pruned off.
+		// But it has to evaluate them because of the rare
+		// case when a valuable piece is cornered and has to
+		// sacrifice a lesser piece to clear an escape.
+
+					|| isLosingMove(fp, tp))
+					continue;
 
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
@@ -1340,7 +1335,9 @@ public class AI implements Runnable
 						nextBest = best;
 					best = vm;
 					bestTp = tp;
-					bestFlee = canFlee;
+					if (flee && isMovable(t))
+						bestFlee = true;
+
 				} else if (vm > nextBest && tp != bestTp)
 					nextBest = vm;
 			} // dir
@@ -1360,7 +1357,7 @@ public class AI implements Runnable
 		if (flee)
 			vm = nullbest;
 		else {
-			nullbest = Math.max(negQS(b.getValue()), best);
+			nullbest = Math.max(bvalue, best);
 			// try fleeing
 			b.pushNullMove();
 			vm = -qs(depth+1, n, true, -nullbest);
@@ -1942,6 +1939,20 @@ public class AI implements Runnable
 	private long getHash(int d)
 	{
 		return b.getHash() ^ depthHash[b.bturn][d];
+	}
+
+
+	// Check if a move is an obvious loser
+	boolean isLosingMove(Piece fp, Piece tp)
+	{
+		int result = b.winFight(fp, tp);
+
+		if (result == Rank.LOSES
+			&& (fp.getRank().toInt() <= 4
+				|| tp.isKnown()))
+			return true;
+
+		return false;
 	}
 
 	String logPiece(Piece p)

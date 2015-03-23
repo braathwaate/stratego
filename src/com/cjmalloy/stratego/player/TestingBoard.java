@@ -83,6 +83,7 @@ public class TestingBoard extends Board
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
+	protected UndoMove lastMove;
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -3204,16 +3205,17 @@ public class TestingBoard extends Board
 
 		{
 		int r = 10;
-		UndoMove prev = getLastMove(1);
-		if (prev != null) {
-			int i = prev.getTo();
-			Piece p = getPiece(i);
+		UndoMove lastMove = getLastMove(1);
+		Piece lastMovedPiece = null;
+		if (lastMove != null) {
+			int i = lastMove.getTo();
+			lastMovedPiece = getPiece(i);
 
 		// Even if the approaching piece already
 		// has a lower suspected rank,
 		// override it if it approaches an AI piece.
 
-			if (p != null && !p.isKnown())
+			if (lastMovedPiece != null && !lastMovedPiece.isKnown())
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
 					if (tp == null)
@@ -3228,8 +3230,8 @@ public class TestingBoard extends Board
 		// latitude to flee past unknown enemy rank, IF the
 		// chase piece happpens to become invincible.
 		
-				if (r != 10 && r <= p.getRank().toInt())
-					setSuspectedRank(p, getChaseRank(p, r, false), false);
+				if (r != 10 && r <= lastMovedPiece.getRank().toInt())
+					setSuspectedRank(lastMovedPiece, getChaseRank(lastMovedPiece, r, false), false);
 
 		// set actingRankFlee temporarily on any AI pieces approached
 		// by an opponent piece.  When the AI evaluates any
@@ -3237,16 +3239,16 @@ public class TestingBoard extends Board
 		// the opponent will realize that the approached piece
 		// is weak.
 
-			if (p != null)
+			if (lastMovedPiece != null)
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
 					if (tp == null)
 						continue;
 					if (tp.getColor() == Settings.topColor)
-						tp.setActingRankFlee(p.getRank());
+						tp.setActingRankFlee(lastMovedPiece.getRank());
 				}
 					
-		} // prev != null
+		} // lastMove != null
 		}
 
 		// Another useful count is the number of opponent pieces with
@@ -4028,6 +4030,14 @@ public class TestingBoard extends Board
 						vm -= fpvalue;
 					else if (fprank != Rank.ONE)
 						vm -= riskOfLoss(fp, tp);
+
+		// Because of the loss of stealth, an AI win is often
+		// negative.  Yet the opponent does not know this,
+		// so the value must at least be the bluffing value.
+
+					if (depth != 0
+						&& isEffectiveBluff(fp, tp, m))
+						vm = Math.max(vm, valueBluff(tp, fprank, Move.unpackTo(m)));
 				}
 
 		// If the target is not moved nor known and the attacker
@@ -4670,20 +4680,22 @@ public class TestingBoard extends Board
 		// where the AI should play a winning sequence earlier.
 		//
 		// Depth value reduction
-		//   known 	unknown
-		// 2 : 95%	90%
-		// 4 : 90%	80%
-		// 6 : 85%	70%
-		// 8 : 80%	60%
-		// 10+ : 75%	50%
+		//   known
+		// 2 : 95%
+		// 4 : 90%
+		// 6 : 85%
+		// 8 : 80%
+		// 10+ : 75%
+		//
+		// The depth value reduction must be small so that
+		// the AI does not leave pieces hanging to delay
+		// a possible future attack.  Because of the 
+		// high value of the Spy, this is important when
+		// the Spy is susceptible to attack in the
+		// proximity of unknown or high ranked opponent pieces.
 
-			if (fpcolor == Settings.bottomColor) {
-				if ((!fpknown && !fpsuspected)
-					|| !tpknown)
-					vm = vm * (10 - Math.min(depth, 10)/2) / 10;
-				else
-					vm = vm * (20 - Math.min(depth, 10)/2) / 20;
-			}
+			if (fpcolor == Settings.bottomColor)
+				vm = vm * (20 - Math.min(depth, 10)/2) / 20;
 
 		} // else attack
 
@@ -5340,47 +5352,68 @@ public class TestingBoard extends Board
 
 		if (unknownScoutFarMove)
 			return 3 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
-		// If a high ranked opponent piece approaches
+		// High ranking pieces
+
 		int r = rank.toInt();
-		if (!isPossibleBomb(tp)) {
 
-		// if the attacker is invincible, attack is almost certain
-
-			if (isInvincible(fp)) {
-				if (fp.isKnown())
-					return 9;
-				else
-					return 5;
-			}
-
-		// If an opponent piece approaches a moved AI piece
-		// and the AI piece does not attack
-		// attack is almost certain
-		// TBD: unless the opponent piece is protected
-
-		// (note that getLastMove(2) is called to get the prior
-		// move, because the current move is already on the
-		// stack
-
-			UndoMove prev = getLastMove(2);
-			if (prev != null && prev.getPiece() != tp)
-				return 9;
-
-		}
-
-		if (r <= 4) {
-			if (isPossibleBomb(tp))
+		if (isPossibleBomb(tp)) {
 
 		// tp is not known and has not moved
 		// so it could be a bomb which deters low ranked
 		// pieces from attacking an unknown unmoved piece
 
+			if (r <= 4)
 				return 1; // 10% chance of attack
-			else
-				return r;
+
 		}
 
-		// High ranking pieces
+		// if the attacker is invincible, attack is almost certain
+
+		if (isInvincible(fp)) {
+			if (fp.isKnown())
+				return 9;
+			else
+				return 5;
+		}
+
+		// If an opponent piece approaches
+		// and the AI piece does not attack
+		// attack is almost certain.
+		// TBD: unless the opponent piece is protected
+
+		// This is true regardless of the opponent piece rank.
+		// For example,
+		// -- R1 -- R5
+		// xx xx B4 --
+		// xx xx -- --
+		// Red One is unknown, Blue Four and Red Five are known.
+		// Blue Four has the move and forks Red One and Red Five.
+		// If Red Five moves, then Blue Four will attack
+		// Red One, winning its substantial stealth value.
+		//
+		// Blue Four is deterred from forking only because
+		// it does not know the rank of Red One.  Thus, R1xB4
+		// in WINS is positive only because of bluffing
+		// (Red One *could* be an unknown Red Three).
+		// Otherwise, unknown Red One will not attack Blue Four
+		// because of the loss of stealth (it does not want
+		// to reveal itself for just a Four, because that makes
+		// the opponent Two invincible allowing run amok).
+		// 
+		// (note that getLastMove(2) is called to get the prior
+		// move, because the current move is already on the
+		// stack
+
+		// So if the AI piece wasn't the piece that was
+		// moved, meaning it stayed put, then attack is
+		// almost certain.
+
+		UndoMove prev = getLastMove(2);
+		if (prev != null && prev.getPiece() != tp)
+			return 9;
+
+		if (r <= 4)
+			return r;
 
 		if (r == 10 && rankAtLarge(1-fp.getColor(), Rank.ONE) != 0) {
 			// suspected spy probably won't attack
@@ -5388,7 +5421,7 @@ public class TestingBoard extends Board
 			return 1;
 		}
 
-		// an AI piece that does not attack, attack is almost certain.
+		// An attack on a fleeing piece is almost certain.
 		if (tp.getActingRankFleeHigh() != Rank.NIL
 			&& r <= tp.getActingRankFleeHigh().toInt())
 			return 8;	// 80% chance of attack
@@ -5489,21 +5522,46 @@ public class TestingBoard extends Board
 		// 2. direction of the attacker
 		// 3. multiple targets
 		//
-		// The determination of the target is more computationally
-		// expensive than just basing the risk on the attacker
-		// rank.  To simplify, the AI reduces the risk
-		// based on depth.
-		// This makes the assumption that if the attacker is
-		// far away, there is likely some other target it
-		// is aiming for.  Once the attacker is adjacent,
-		// the AI assumes that attacker is aiming for
-		// this piece, and it is impacted by the full risk.
+		// It is tempting to use depth rather than distance
+		// because the original piece position isn't handy
+		// and depth is.  But that fails because
+		// it entices the AI to leave pieces hanging
+		// by allowing the attacker to first
+		// take the free material and then continue the
+		// former attack later (at a higher depth and thus
+		// lower value).
+		//
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
-		if (depth * 2 / 3 >= risk)
-			risk = 1;
-		else
-			risk -= depth * 2 / 3;
+
+		// The risk is greatly reduced if the attacker
+		// is not the last moved piece, because it is
+		// an indicator that the attacker is not dead set
+		// on attacking.
+
+		if (lastMove != null) {
+			int i = lastMove.getTo();
+			Piece lastMovedPiece = getPiece(i);
+			if (fp != lastMovedPiece)
+				risk /= 2;
+
+		// This program has a big unsolved problem with
+		// the horizon effect, particularly when the Spy
+		// (worth 300 points) could be attacked.  The horizon
+		// effect is addressed by extended search,
+		// but if the attacker is far from the Spy, then
+		// it is possible that the attacker barely reaches
+		// the Spy and extended search is insufficient
+		// in depth to to prevent the AI from leaving pieces hanging.
+		// TBD: This is a temporary hack given low search depth.
+		// The hack causes the AI not to react until the
+		// attacker is very close (2 spaces away).
+
+			if (fprank != Rank.NINE 
+				&& !unknownScoutFarMove
+		  		&& Grid.steps(fp.getIndex(), i) > 2)
+				return apparentV;
+		}
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
