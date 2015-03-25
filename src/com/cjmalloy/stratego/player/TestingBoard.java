@@ -1848,12 +1848,18 @@ public class TestingBoard extends Board
 		if (defender == null)
 			return;	// no imminent danger
 
+		// Even if the unbombed flag is not known, call up
+		// the closest defender, even if it means moving
+		// another unmoved piece.
+		// The opponent (especially bots) may be
+		// throwing pieces at any unmoved piece hoping that
+		// it may be the flag and the active piece too far
+		// away.
+		// TBD: If the active piece is able to defend, then
+		// use it.  Fix this in getDefender().
 		int r = defender.getRank().toInt();
-		if (flagp.isKnown()) {
-			activeRank[color][r-1] = defender;
-			genPlanA(destTmp3, color, r,  DEST_PRIORITY_DEFEND_FLAG);
-		} else if (isActiveRank(color,r))
-			genPlanA(destTmp3, color, r, DEST_PRIORITY_DEFEND_FLAG);
+		activeRank[color][r-1] = defender;
+		genPlanA(destTmp3, color, r,  DEST_PRIORITY_DEFEND_FLAG);
 	}
 
 	// Determine if piece at "index" is at risk of attack
@@ -4676,8 +4682,42 @@ public class TestingBoard extends Board
 		// an important part.  By forcing the opponent to play
 		// out a losing sequence, the AI can win more games.
 		//
-		// TBD: What about winning sequences?  Need an example
-		// where the AI should play a winning sequence earlier.
+		// Winning sequences are also important, because
+		// of the limited search depth.  If the AI delays a
+		// capture, it is possible that the piece can be rescued
+		// or the AI may need to reliquish its capture.
+		// For example,
+		// ----------------------
+		// | -- RF -- RB B4 RB --
+		// | -- -- -- R1 -- -- --
+		// | -- -- -- -- -- -- --
+		// | -- -- -- -- -- -- R?
+		// | -- -- xx xx -- -- xx
+		// | -- -- xx xx -- -- xx
+		// | -- B? -- -- -- -- --
+		// Red has the move.
+		// Red One knows it has Blue Four trapped.  The search
+		// tree rewards Red for the piece because all lines
+		// of play allow Red One to capture Blue Four.  So
+		// moving unknown Red has the same value as approaching
+		// Blue Four.  But if 10 ply were considered, Red
+		// would realize that Red One is needed to protect Red Flag.
+		// If the search is not this deep, then Red play some
+		// other move, allowing Blue to force the AI to relinquish
+		// its capture of Blue Four.
+		//
+		// Consider the following example:
+		// | -- -- -- -- -- -- --
+		// | BB R3 -- -- -- -- B1
+		// | B4 -- BB -- -- -- --
+		// -----------------------
+		// Red Three must move to attack Blue Four now because
+		// if it plays some other move, it cannot win Blue Four
+		// without losing its Three to Blue One in 12 ply.
+		//
+		// These examples have occurred in play.
+
+		//
 		//
 		// Depth value reduction
 		//   known
@@ -4694,7 +4734,7 @@ public class TestingBoard extends Board
 		// the Spy is susceptible to attack in the
 		// proximity of unknown or high ranked opponent pieces.
 
-			if (fpcolor == Settings.bottomColor)
+		//	if (fpcolor == Settings.bottomColor)
 				vm = vm * (20 - Math.min(depth, 10)/2) / 20;
 
 		} // else attack
