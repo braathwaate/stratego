@@ -627,7 +627,7 @@ public class TestingBoard extends Board
 			c = Settings.topColor;
 		else
 			c = Settings.bottomColor;
-		u = Math.max(Math.abs(u), 5);
+		u = Math.min(Math.abs(u), 5);
 		
 		values[c][9] = values[c][9] * (10 - u) / 10;
 		valueStealth[c][8] = valueStealth[c][8] * (10 - u) / 10;
