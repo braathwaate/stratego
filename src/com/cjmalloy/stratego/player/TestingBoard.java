@@ -3208,6 +3208,17 @@ public class TestingBoard extends Board
 	// away from its protection, it inherits a permanent chase rank.
 	// If not, Red Five may approach
 	// the unknown Blue regardless of its previous chase behavior.
+	//
+	// An exception is if an opponent piece forks a known AI
+	// piece and an unknown AI piece.  The identity of the opponent
+	// cannot be determined so it is best to rely on prior information
+	// about the piece.  It could be a lower piece chasing the
+	// the known AI piece but because it is ignoring the possibility
+	// that the unknown AI piece could be even lower in rank,
+	// this is questionable, unless the opponent has a dangerous
+	// unknown rank.  More likely it is a higher piece
+	// bluffing as a lower piece so that it can attack the unknown
+	// piece.  (See Board.java: no permanent chase rank set).
 
 		{
 		int r = 10;
@@ -3224,13 +3235,18 @@ public class TestingBoard extends Board
 			if (lastMovedPiece != null && !lastMovedPiece.isKnown())
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
-					if (tp == null)
+					if (tp == null
+						|| tp.getColor() == Settings.bottomColor)
 						continue;
-					if (tp.getColor() == Settings.topColor
-						&& tp.isKnown()
-						&& tp.getRank().toInt() < r) 
-						r = tp.getRank().toInt();
+					if (tp.isKnown()) {
+						if (tp.getRank().toInt() < r) 
+							r = tp.getRank().toInt();
+					} else {
+						r = 10;
+						break;
+					}
 				}
+
 		// Note that the AI considers the chase piece not bluffing
 		// when it calls setSuspectedRank().  This gives it more
 		// latitude to flee past unknown enemy rank, IF the
@@ -3876,7 +3892,7 @@ public class TestingBoard extends Board
 					for (int d : dir) {
 						Piece p = getPiece(Move.unpackTo(m) + d);
 						if (p == null
-							|| p.getColor() == fpcolor)
+							|| p.getColor() != 1-fpcolor)
 							continue;
 						if (!p.isKnown() || p.getRank().toInt() < fprank.toInt() ) {
 							vm -= fpvalue/2;

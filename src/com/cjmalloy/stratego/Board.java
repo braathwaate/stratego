@@ -890,20 +890,6 @@ public class Board
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
 	}
 
-	boolean forked(int i)
-	{
-		int color = getPiece(i).getColor();
-		for (int d : dir) {
-			int j = i + d;
-			Piece p = getPiece(j);
-			if (p == null)
-				continue;
-			if (p.isKnown() && p.getColor() != color)
-				return true;
-		}
-		return false;
-	}
-
 	// Chase acting rank is set implicitly if
 	// a known piece under attack does not move
 	// and it has only one possible unknown defender.
@@ -960,7 +946,7 @@ public class Board
 				continue;
 
 		// Then find a chaser piece of the same color
-		// adjacent to the chaser (rank does not matter
+		// adjacent to the chased piece (rank does not matter
 		// at this point).
 
 			for (int d : dir) {
@@ -973,19 +959,11 @@ public class Board
 					|| !chaser.hasMoved())
 					continue;
 
-		// If the chased piece (moved or unmoved) is not known,
-		// and the chaser had no prior chase rank,
-		// the piece gains a permanent chase rank of Unknown.
-		// This is because a piece that willingly moves next
-		// to an unknown is willing to sacrifice itself
-		// (and so the AI guesses that the piece is probably
-		// a high-ranked piece).
-		//
-		// The difficulty is determining if the piece willingly
-		// moved next to an unknown or was cornered.  So if
-		// the piece already has a chase rank, it is retained
-		// if it approaches an unknown.
-		//
+		// If the chaser forks two or more chased pieces,
+		// and one of the chased pieces is known
+		// and the other is unknown, then nothing can be
+		// determined.
+
 		// If a protected unknown chaser attacking an unknown
 		// chased piece also forks a known piece, it could
 		// be the unknown attacker is targeting the known piece
@@ -1010,13 +988,43 @@ public class Board
 		// I am thinking of coding Blue as an Unknown chaser, but
 		// this is risky.
 
+			Piece chased2 = null;
+			for (int d2 : dir) {
+				int k = j + d2;
+				if (!Grid.isValid(k))
+					continue;
+				chased2 = getPiece(k);
+				if (chased2 == null
+					|| chased2.getColor() == turn
+					|| chased2 == chased)
+					continue;
+
+				if (chased.isKnown() != chased2.isKnown())
+					break;
+				chased2 = null;
+			}
+			if (chased2 != null)
+				continue;
+
+		// If the chased piece (moved or unmoved) is not known,
+		// and the chaser had no prior chase rank,
+		// the piece gains a permanent chase rank of Unknown.
+		// This is because a piece that willingly moves next
+		// to an unknown is willing to sacrifice itself
+		// (and so the AI guesses that the piece is probably
+		// a high-ranked piece).
+		//
+		// The difficulty is determining if the piece willingly
+		// moved next to an unknown or was cornered.  So if
+		// the piece already has a chase rank, it is retained
+		// if it approaches an unknown.
+		//
+
 				if (!chased.isKnown()) {
 					if (!chaser.isKnown()) {
-						if (!forked(j)) {
-							Rank chaserRank = chaser.getActingRankChase();
-							if (chaserRank == Rank.NIL)
-								chaser.setActingRankChaseEqual(Rank.UNKNOWN);
-						}
+						Rank chaserRank = chaser.getActingRankChase();
+						if (chaserRank == Rank.NIL)
+							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
 						continue;
 					}
 

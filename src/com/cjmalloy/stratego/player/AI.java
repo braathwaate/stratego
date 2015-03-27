@@ -1718,8 +1718,6 @@ public class AI implements Runnable
 
 		// Try the killer move before move generation
 		// to save time if the killer move causes ab pruning.
-		// TBD: killer move can be multi-hop, but then
-		// checking for a legal move requires checking all squares
 		int km = killerMove.getMove();
 		if (km != -1
 			&& km != 0 // null move legal only if pruned
