@@ -775,119 +775,6 @@ rl.on('line', function(line){
 function onSetWebMoveResponse()
 {
 	require('util').debug('onSetWebMoveResponse ' + Service.readyState + ' ' + Service.status);
-/*
-	if (Service.readyState == 4)
-	{
-		UIState.ServiceCallInProgress = false;
-	
-		if (Service.status == 0) {	
-			require('util').debug('ERROR');
-			//submit SetWebMove request to web service
-			Service.open("POST", Constants.ServiceURL, true);
-			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
-			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
-			
-			UIState.ServiceCallInProgress = true;
-		} else if (Service.status == 200)
-		{
-			//setup own figures from web service call
-			// var setWebMoveResponseXML = Service.responseXML;
-			var setWebMoveResponseXML = serviceResponse();
-			var success = parseBool(getElementText(setWebMoveResponseXML.getElementsByTagName("SetWebMoveResult")[0]));
-			var gameOver = parseBool(getElementText(setWebMoveResponseXML.getElementsByTagName("gameOver")[0]));
-			var winner = getElementText(setWebMoveResponseXML.getElementsByTagName("winner")[0]);
-		
-			require('util').debug("Success:" + success);
-			if (success)
-			{
-				//clear captured figures
-				GameInfo.CurrentCapturedFigureCount = 0;
-			
-				//set default move results
-				var attackerType = GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type;
-				var defenderType = "None";
-				var attackerRemains = true;
-				var defenderRemains = false;
-				
-				//get move results from response xml if collision
-				var collision = getElementText(setWebMoveResponseXML.getElementsByTagName("Collision")[0]);
-				
-				if (collision == "true")
-				{
-					attackerType = getElementText(setWebMoveResponseXML.getElementsByTagName("WebPlayerType")[0]);
-					defenderType = getElementText(setWebMoveResponseXML.getElementsByTagName("ComputerPlayerType")[0]);
-					attackerRemains = parseBool(getElementText(setWebMoveResponseXML.getElementsByTagName("WebPlayerRemains")[0]));
-					defenderRemains = parseBool(getElementText(setWebMoveResponseXML.getElementsByTagName("ComputerPlayerRemains")[0]));
-					if (attackerRemains)
-						lastMove += " KILLS ";
-					else if (defenderRemains)
-						lastMove += " DIES ";
-					else
-						lastMove += " BOTHDIE ";
-					lastMove += type2rank(attackerType) + " " + type2rank(defenderType);
-				} else
-					lastMove += " OK";
-				require('util').debug(lastMove);	// mof move
-				console.log(lastMove);
-				//set move on board
-				applyMove(UIState.SelectedMove.StartRow,
-					UIState.SelectedMove.StartCol,
-					UIState.SelectedMove.EndRow,
-					UIState.SelectedMove.EndCol,
-					attackerType,
-					defenderType,
-					attackerRemains,
-					defenderRemains);
-					
-				//display enemy type
-				if ("None" != defenderType  &&  defenderRemains)
-				{
-					UIState.DisplayMoveEndFigure = true;
-				}
-				
-				//update fields on board
-				updateBoard();
-				displayCapturedFiguresMessage();
-				
-				//unselect hide selected field
-				selectField(false);
-				selectField2(false);
-				
-				if (!gameOver)
-				{
-					//request service access privileges
-					try
-					{
-						if (navigator.appName == "Netscape")
-						{
-							netscape.security.PrivilegeManager.enablePrivilege("UniversalBrowserRead");
-						}
-					}
-					catch(exception)
-					{
-					}
-						
-					//submit SetWebMove request to web service
-					Service.open("POST", Constants.ServiceURL, true);
-					Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
-					Service.onreadystatechange = onSetComputerMoveResponse;
-					Service.send(createSetComputerMoveRequest());
-					UIState.ServiceCallInProgress = true;
-				}
-				else
-				{
-					displayMessage(getGameOverMessage(winner));
-					GameInfo.State = GameEngineConstants.InitialState;	
-				}
-			}
-			else
-			{
-				displayMessage("Invalid move.");				
-			}
-		}
-	}
-*/
 
 	if (Service.readyState == 4)
 	{
@@ -898,8 +785,9 @@ function onSetWebMoveResponse()
 			//submit SetWebMove request to web service
 			Service.open("POST", Constants.ServiceURL, true);
 			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
+			Service.setRequestHeader("SOAPAction", "http://www.jayoogee.com/StrategyWebGame/SetWebMove");
 			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[startRow][startCol].Type));
 			
 			UIState.ServiceCallInProgress = true;
 		} else if (Service.status == 200)
@@ -1474,68 +1362,6 @@ function makeMove(line)
 	if (!(x1 == x2 && y1 == y2))
 		setMove(y1, x1, y2, x2);
 }
-
-
-/*
-function setMove(startRow, startCol, endRow, endCol)
-{
-	// require('util').debug("setMove " + startRow + " " + startCol + " " + endRow + " " + endCol + " " + type2rank(GameInfo.FigureMatrix[startRow][startCol].Type));
-	if (endRow != startRow || endCol != startCol)
-	{
-		//validate move selection
-		var validSelection = false;
-		
-		if (1 == Math.abs(endRow - startRow) + Math.abs(endCol - startCol))
-		{
-			//selection is 1 step away
-			validSelection = true;
-		}
-		else if ("Two" == GameInfo.FigureMatrix[startRow][startCol].Type &&
-				(endRow == startRow || endCol == startCol))
-		{
-			//selection is type 2 move
-			validSelection = true;
-		}
-		
-		if (validSelection)
-		{
-			//clear display fields
-			clearDisplayFields();
-			
-			//save move selection
-			UIState.SelectedMove.StartRow = startRow;
-			UIState.SelectedMove.StartCol = startCol;
-			UIState.SelectedMove.EndRow = endRow;
-			UIState.SelectedMove.EndCol = endCol;
-			
-			//request service access privileges
-			try
-			{
-				if (navigator.appName == "Netscape")
-				{
-					netscape.security.PrivilegeManager.enablePrivilege("UniversalBrowserRead");
-				}
-			} 
-			catch (exception)
-			{
-			}
-			
-			//submit SetWebMove request to web service
-			Service.open("POST", Constants.ServiceURL, true);
-			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
-			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
-			
-			UIState.ServiceCallInProgress = true;
-		}
-	}
-	else
-	{
-		selectField(false);
-	}
-}
-*/
-
 
 function setMove(startRow, startCol, endRow, endCol)
 {
