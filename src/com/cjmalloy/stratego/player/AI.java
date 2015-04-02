@@ -73,6 +73,7 @@ public class AI implements Runnable
 	long stopTime = 0;
 	int moveRoot = 0;
 	int completedDepth = 0;
+	boolean deepSearch = false;
 
 	enum MoveType {
 		TWO_SQUARES,
@@ -619,7 +620,7 @@ public class AI implements Runnable
 	}
 
 
-	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn, Piece chasePiece, Piece chasedPiece)
+	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
 	{
 		for (int i = 0; i <= LOSES; i++)
 			moveList.add(new ArrayList<Integer>());
@@ -674,7 +675,7 @@ public class AI implements Runnable
 		// such as heading into a trap beyond the search
 		// horizon, and then the chase resumes.)
 
-			if (chasePiece != null) {
+			if (deepSearch) {
 				if (getMoves(1, moveList, fp))
 					isPruned = true;
 			} else {
@@ -722,6 +723,7 @@ public class AI implements Runnable
 		QSCtable = new QSEntry [2][10007];
 
 		moveRoot = b.undoList.size();
+		deepSearch = false;
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -749,9 +751,9 @@ public class AI implements Runnable
 
 		Move killerMove = new Move(null, -1);
 
-		if (chasePiece == null) {
+		if (!deepSearch) {
 			rootMoveList = new ArrayList<ArrayList<Integer>>();
-			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor, null, null);
+			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor);
 			if (isPruned) {
 
 			log(">>> pick best pruned move");
@@ -784,7 +786,7 @@ public class AI implements Runnable
 		// determine direction.  Or use windowing.
 
 			ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
-			getMoves(moveList, -n, 0, Settings.topColor, null, null);
+			getMoves(moveList, -n, 0, Settings.topColor);
 			int bestPrunedMoveValue = -9999;
 			int bestPrunedMove = 0;
 			for (int mo = 0; mo <= LOSES; mo++)
@@ -803,7 +805,7 @@ public class AI implements Runnable
 		// moves to be considered (because QS does not currently
 		// consider scout moves).
 		// 
-					int vm = -negamax(1, -9999, 9999, 1, null, null, killerMove); 
+					int vm = -negamax(1, -9999, 9999, 1, killerMove); 
 					if (vm > bestPrunedMoveValue) {
 						bestPrunedMoveValue = vm;
 						bestPrunedMove = move;
@@ -867,7 +869,7 @@ public class AI implements Runnable
 		// but otherwise remove the move that attacks
 		// the chaser from consideration.
 
-		if (chasePiece == null
+		if (!deepSearch
 			&& lastMovedPiece != null
 
 		// Begin deep chase after xx iterations of broad search
@@ -954,6 +956,7 @@ public class AI implements Runnable
 		// Chased piece has at least 2 moves
 		// to open squares.
 		// Pick the better path.
+					deepSearch = true;
 					chasePiece = lastMovedPiece;
 					chasePiece.setIndex(lastMoveTo);
 					chasedPiece = b.getPiece(from);
@@ -985,7 +988,7 @@ public class AI implements Runnable
 		}
 
 		log(">>> pick best move");
-		int vm = negamax(n, -9999, 9999, 0, chasePiece, chasedPiece, killerMove); 
+		int vm = negamax(n, -9999, 9999, 0, killerMove); 
 		completedDepth = n;
 
 		// To negate the horizon effect where the ai
@@ -1037,7 +1040,7 @@ public class AI implements Runnable
 		log("<<< pick best move");
 
 		if (n == 1
-			|| chasePiece != null
+			|| deepSearch
 			|| n == MAX_PLY - 1) {
 
 		// no horizon effect possible until ply 2
@@ -1048,18 +1051,20 @@ public class AI implements Runnable
 		} else {
 
 		// Singular Extension.
-		// The AI accepts the best move only
-		// if the value is better (or just slightly worse) than
-		// the value of the best move searched 2 plies deeper.
+		// The AI accepts a new best move only
+		// the value of the new best move searched 2 plies deeper.
+		// is better (or just slightly worse) than the current
+		// best move or new best move.
 		
 			log(">>> singular extension");
 
 			MoveType mt = makeMove(n, 0, bestMovePly);
-			vm = -negamax(n+1, -9999, 9999, 1, chasedPiece, chasePiece, killerMove); 
+			vm = -negamax(n+1, -9999, 9999, 1, killerMove); 
 			b.undo();
 			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
 			
-			if (vm > bestMovePlyValue - 10) {
+			if (vm > bestMoveValue - 10
+				|| vm > bestMovePlyValue - 10) {
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
 			} else {
@@ -1521,7 +1526,7 @@ public class AI implements Runnable
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
 
-	private int negamax(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove) throws InterruptedException
+	private int negamax(int n, int alpha, int beta, int depth, Move killerMove) throws InterruptedException
 	{
 		if (bestMove != 0
 			&& stopTime != 0
@@ -1544,7 +1549,7 @@ public class AI implements Runnable
 		int ttmove = -1;
 		TTEntry.SearchType searchType;
 		int bestmove = -1;
-		if (chasePiece != null)
+		if (deepSearch)
 			searchType = TTEntry.SearchType.DEEP;
 		else
 			searchType = TTEntry.SearchType.BROAD;
@@ -1608,7 +1613,7 @@ public class AI implements Runnable
 		if (depth == 0 && ttmove == 0)
 			ttmove = -1;
 
-		vm = negamax2(n, alpha, beta, depth, chasePiece, chasedPiece, killerMove, ttmove);
+		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove);
 
 		assert hashOrig == b.getHash() : "hash changed";
 
@@ -1673,7 +1678,7 @@ public class AI implements Runnable
 		return (to == from);
 	}
 
-	private int negamax2(int n, int alpha, int beta, int depth, Piece chasePiece, Piece chasedPiece, Move killerMove, int ttMove) throws InterruptedException
+	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
@@ -1695,7 +1700,7 @@ public class AI implements Runnable
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
 
 				long h = b.getHash();
 				b.undo();
@@ -1729,7 +1734,7 @@ public class AI implements Runnable
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
 				long h = b.getHash();
 				b.undo();
 				logMove(n, km, b.getValue(), negQS(vm), MoveType.KM);
@@ -1766,7 +1771,7 @@ public class AI implements Runnable
 			moveList = rootMoveList;
 		else {
 			moveList = new ArrayList<ArrayList<Integer>>();
-			boolean isPruned = getMoves(moveList, n, depth, b.bturn, chasePiece, chasedPiece);
+			boolean isPruned = getMoves(moveList, n, depth, b.bturn);
 
 			// FORWARD PRUNING
 			// Add null move
@@ -1815,7 +1820,7 @@ public class AI implements Runnable
 					|| mt == MoveType.CHASED))
 					continue;
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, chasedPiece, chasePiece, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
 
 				long h = b.getHash();
 

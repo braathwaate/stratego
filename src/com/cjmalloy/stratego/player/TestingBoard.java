@@ -137,7 +137,13 @@ public class TestingBoard extends Board
 	//	both rank N and N-1 have the same strength.
 	// • Bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
-	// • The Nine is the lowest valued piece on the board.  However,
+	// • The Spy is the lowest valued Piece on the board.  However,
+	//	it has the highest stealth value.  The stealth value
+	//	of an unsuspected Spy is worth less than a General but
+	//	more than a Colonel.  However, once the Spy is suspected,
+	//	it has limited value except in certain reduced piece
+	//	endgames with Ones.
+	// • The Nine is the next lowest valued piece on the board.  However,
 	//	its stealth value is highest for ranks Six through Nine
 	//	(stealth value increases by 3 points for each of
 	//	these ranks).  High stealth value encourages the Nine
@@ -147,10 +153,6 @@ public class TestingBoard extends Board
 	//	+ stealth) must be less than the stealth of the attacked
 	//	low ranked piece.  A known Nine should attack a suspected
 	//	Four.
-	// • The value of the Spy is worth less than a General but
-	//	more than a Colonel.
-	// • The value of the Spy becomes equal to a Nine once the
-	//	opponent Marshal is removed.
 	// • The value of the Miner depends on the number of structures
 	//	left than could surround a flag.
 	//	- When the opposing player has more structures left than Miners
@@ -182,7 +184,7 @@ public class TestingBoard extends Board
 		20,	// 7 Sergeant
 		35,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
-		300,	// Spy
+		VALUE_NINE-5,	// Spy
 		0,	// Bomb (valued by code)
 		1000,	// Flag (valued by code)
 		0,	// Unknown (valued by code, minimum piece value)
@@ -887,6 +889,22 @@ public class TestingBoard extends Board
 		else if (r >= 6 && r <= 9)
 			v = 5 + (r - 6) * 3;
 
+		// Spy stealth depends on whether the Spy is
+		// suspected.  If the location of the Spy has not been guessed,
+		// its value is about a Colonel.  But once it is suspected,
+		// its value is worth much less.  Because the value
+		// of an opponent Spy only is used if the AI has
+		// suspected its location, this is the only value
+		// for the opponent Spy.  But the AI doesn't know
+		// if the opponent has guessed its Spy, so the only
+		// value is a high value.
+		else if (r == 10) {
+			if (c == Settings.bottomColor)
+				v = 60;	// TBD: depends on remaining pieces
+			else
+				v = VALUE_THREE;
+		}
+		
 		// Unknown Spy Flag stealth
 		else if (r > 9)
 			v = values[c][r]/5;
@@ -1820,7 +1838,7 @@ public class TestingBoard extends Board
 
 		int stepsTarget = 99;
 		int targetIndex = 0;
-		int destTmp2[] = genDestTmp(GUARDED_OPEN, color, pAttacker.getIndex());
+		int destTmp2[] = genDestTmp(GUARDED_OPEN, 1-color, pAttacker.getIndex());
 		for (int d : dir) {
 			int i = flagi + d;
 			if (!Grid.isValid(i))
@@ -2773,12 +2791,15 @@ public class TestingBoard extends Board
 	// Generate a matrix of consecutive values with the highest
 	// value at the destination "to". (Lee's algorithm).
 	//
-	// Pieces of "color" or opposing bombs
-	// block the destination from discovery.  It is the opposite
-	// color of the piece seeking the destination.
+	// For attackers, "color" is the opposite color of the piece
+	// seeking the destination.
+	// A piece of any color blocks the destination from discovery,
+	// unless the caller is invincible or the Spy, in which case
+	// the maze continues through moved pieces.
 	//
-	// Pieces of the opposite "color" do not
-	// block the destination.
+	// If the destination "to" contains a piece of "color",
+	// the maze continues.  If the destination "to" contains
+	// a piece of the opposite "color", this function returns immediately.
 	//
 	// Seed the matrix with "n" at "to".
 	//
@@ -2807,13 +2828,14 @@ public class TestingBoard extends Board
 			Piece p = getPiece(j);
 
 		// Any piece blocks the way
+		// (except for the destination piece, if any).
 		// (I had tried to allow a path through 
 		// pieces of opposite "color" to have a 1 move penalty,
 		// because the attacker can move these out of the way,
 		// but this causes bunching up of attackers).
 
 			if (p != null
-				&& j != to
+				&& !(j == to && p.getColor() == color)
 
 		// If the caller is invincible or the Spy,
 		// then the maze continues through moved pieces.
@@ -3487,11 +3509,6 @@ public class TestingBoard extends Board
 		if (rankWon.toInt() <= 8)
 			p.setMaybeEight(false);
 
-		// If the One is killed (by a Spy), demote SPY value
-		if (p.getRank() == Rank.SPY) {
-			assert rankWon == Rank.ONE || rankWon == Rank.FLAG : "Spy can only win One or Flag but won " + rankWon; 
-			p.setAiValue(values[p.getColor()][Rank.NINE.toInt()] - 10);
-		}
 	}
 
 	public void move(int m, int depth)
@@ -5691,13 +5708,16 @@ public class TestingBoard extends Board
 
 				v += valueStealth[p.getColor()][actualRank.toInt()-1];
 
-		// Suspected ranks have much less value
-		// than known ranks because of uncertainty.
-		// The value of a suspected rank is the value
-		// of an unknown (minimum rank value) plus
-		// the the rank value divided by 5.  This represents
-		// the high risk that a suspected rank is bluffing
-		// or not moving optimally.
+		// Suspected ranks have much less value than known ranks
+		// because of uncertainty.  The value of a suspected rank
+		// is the value of an unknown or the rank value divided by 5,
+		// whichever is greater.  This represents the high risk
+		// that a suspected rank is bluffing or not moving optimally.
+		//
+		// (Note: the value of an unknown is the minimum value
+		// of the remaining unknowns.  Hence, if the Spy and One
+		// are the last two pieces remaining, it is the value
+		// of the Spy.)
 		//
 		// For example:
 		// RS R1
@@ -5741,7 +5761,7 @@ public class TestingBoard extends Board
 		//
 
 				if (p.isSuspectedRank())
-					v = values[p.getColor()][Rank.UNKNOWN.toInt()] + v / 5;
+					v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
 
 				if (p.isBlocker())
 					v += 10;
@@ -6268,13 +6288,28 @@ public class TestingBoard extends Board
 		// 4x5 : -25
 		// 3x5 : -22
 
-		// TBD: this needs further tuning.
+		// TBD: This needs further tuning.
 		// e.g. a suspected rank of Four
 		// that actually chased a piece (rather than protecting)
 		// rarely turns out to be a lower rank, because a suspected
 		// rank of Four means that the piece chased a known Five,
 		// which are unpredictable, and could easily have
 		// counter-attacked and exposed the lower rank.
+
+		// Note: This fails if the opponent uses low ranks to bluff.
+		// For example, if the unknown opponent One chases a Five,
+		// it would make the AI think that the opponent was a Four
+		// and so might attack it with a Three.  Another case is
+		// a One bluffing as a Spy, protecting a Two from
+		// the AI One. Because of the substantial difference in rank
+		// of a Spy and almost any other piece, there is
+		// little risk of loss in the AI attacking the suspected Spy,
+		// which actually turns out to be the One.
+		//
+		// These situations do occur in play, but infrequently.
+		// Incorporating the intelligence to discern this type
+		// of bluffing is beyond the scope of this program
+		// (and perhaps artificial intelligence).
 
 		int diff = 1 + tprank.toInt() - fprank.toInt();
 		diff = diff * diff;
