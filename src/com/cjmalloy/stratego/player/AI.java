@@ -74,6 +74,7 @@ public class AI implements Runnable
 	int moveRoot = 0;
 	int completedDepth = 0;
 	boolean deepSearch = false;
+	private Piece lastMovedPiece;
 
 	enum MoveType {
 		TWO_SQUARES,
@@ -426,7 +427,7 @@ public class AI implements Runnable
 			if (tp == null) {
 				addMove(moveList.get(FLEE), i, t);
 			} else if (tp != Grid.water && tp.getColor() != fpcolor) {
-				if (isLosingMove(fp, tp))
+				if (b.isLosingMove(fp, tp))
 					addMove(moveList.get(LOSES), i, t);
 				else
 					addMove(moveList.get(ATTACK), i, t);
@@ -450,7 +451,7 @@ public class AI implements Runnable
 				continue;
 
 			if (tp.getColor() != fpcolor) {
-				if (isLosingMove(fp, tp))
+				if (b.isLosingMove(fp, tp))
 					addMove(moveList.get(LOSES), i, t);
 				else
 					addMove(moveList.get(ATTACK), i, t);
@@ -523,9 +524,7 @@ public class AI implements Runnable
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
-				if (!allowAll
-					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
-					&& b.planValue(fp, i, t) <= 1))
+				if (!allowAll)
 					addMove(moveList.get(APPROACH), i, t);
 				else
 					isPruned = true;
@@ -559,20 +558,6 @@ public class AI implements Runnable
 			if (fp.isKnown())
 				return false;
 
-		// Unmoved unknown pieces really aren't very
-		// scary to the opponent, unless they can attack
-		// on their first move.  The AI has to generate
-		// moves for its unmoved unknown pieces because
-		// lower ranks may be needed for defense.  But it
-		// is unlikely (but possible) that the piece
-		// will be part of a successful attack.
-		//
-		// Prior to version 9.3, the AI didn't generate moves
-		// for any unknown unmoved opponent piece unless
-		// it could attack on its first move.  This effective
-		// forward pruning was generalized in 9.3 to include
-		// all inactive pieces.
-		//
 		// Yet an unknown bomb or suspected bomb is so unlikely to have
 		// any impact (except for attack on first move),
 		// even if the bomb is within the active area.
@@ -583,6 +568,10 @@ public class AI implements Runnable
 		//
 		// In addition, return false, to prevent the option
 		// of a null move.
+		//
+                // Note that AI bombs are treated identically,
+                // thus limiting their scope of travel to immediate
+                // attack.
 
 			if (!b.grid.hasAttack(fp))
 				return false;
@@ -593,6 +582,42 @@ public class AI implements Runnable
 
 		if (n > 0) {
 			int fpcolor = fp.getColor();
+
+                // Unmoved unknown AI pieces really aren't very
+                // scary to the opponent, unless they can attack
+                // on their first move.  The AI has to generate
+                // moves for its unmoved unknown pieces because
+                // lower ranks may be needed for defense.  But it
+                // is unlikely (but possible) that the piece
+                // will be part of a successful attack.
+                // TBD: So it may be possible to prune off unmoved
+                // high rank piece moves in the active area.
+                //
+                // Unknown unmoved opponent pieces are also not
+                // very scary to the AI.
+                // Prior to version 9.3, the AI didn't generate moves
+                // for any unknown unmoved opponent piece unless
+                // it could attack on its first move.  This effective
+                // forward pruning was generalized in 9.3 to include
+                // all inactive pieces in version 9.4.
+                //
+                // But version 9.4 suffers from a horizon effect
+                // when these pieces are in the active area, but far
+                // away from potential AI targets.  If the extended
+                // search is not deep enough, the AI may mistakely
+                // assume an attack by an unknown piece is the best
+                // move, and allow some lesser attack on its pieces,
+                // thus losing material.
+                //
+                // So in version 9.5, the AI prunes off moves by
+                // any unknown opponent piece more than 1 space away, unless
+                // the unknown piece was the last piece moved by
+                // the opponent.
+
+			if (fprank == Rank.UNKNOWN
+                                && fp != lastMovedPiece
+				&& n > 2)
+                                n = 2;
 
 			if (b.grid.hasAttack(fp)) {
 				getAllMoves(moveList, fp);
@@ -606,12 +631,8 @@ public class AI implements Runnable
 
 			int fpcolor = fp.getColor();
 			assert fpcolor == Settings.topColor : "n<0 code only for AI";
-			if (b.grid.hasAttack(fp)) {
-				return false;
-			} else {
-				getApproachMoves(n, moveList, fp);
-				return false;
-			}
+			getApproachMoves(n, moveList, fp);
+			return false;
 		} else {
 			getAllMoves(moveList, fp);
 		}
@@ -1097,12 +1118,10 @@ public class AI implements Runnable
 			Piece tp = b.getPiece(j);
 			if (tp == null)
 				return true;
-			if (tp == Grid.water || tp.getColor() == fp.getColor())
+			if (tp.getColor() != 1 - fp.getColor()
+				|| b.isLosingMove(fp, tp))
 				continue;
-			int result = b.winFight(fp, tp);
-			if (result == Rank.WINS
-				|| result == Rank.EVEN)
-				return true;
+			return true;
 		}
 		return false;
 	}
@@ -1316,7 +1335,7 @@ public class AI implements Runnable
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
 
-					|| isLosingMove(fp, tp))
+					|| b.isLosingMove(fp, tp))
 					continue;
 
 				int tmpM = Move.packMove(i, t);
@@ -1942,20 +1961,6 @@ public class AI implements Runnable
 	private long getHash(int d)
 	{
 		return b.getHash() ^ depthHash[b.bturn][d];
-	}
-
-
-	// Check if a move is an obvious loser
-	boolean isLosingMove(Piece fp, Piece tp)
-	{
-		int result = b.winFight(fp, tp);
-
-		if (result == Rank.LOSES
-			&& (fp.getRank().toInt() <= 4
-				|| tp.isKnown()))
-			return true;
-
-		return false;
 	}
 
 	String logPiece(Piece p)

@@ -959,34 +959,16 @@ public class Board
 					|| !chaser.hasMoved())
 					continue;
 
-		// If the chaser forks two or more chased pieces,
-		// and one of the chased pieces is known
-		// and the other is unknown, then nothing can be
-		// determined.
-
-		// If a protected unknown chaser attacking an unknown
-		// chased piece also forks a known piece, it could
-		// be the unknown attacker is targeting the known piece
-		// and not the unknown, so no rank is assigned.  For example,
+		// If an unprotected unknown chaser forks a known and unknown
+		// piece, assume that the chaser is after the known piece,
+		// unless the known piece is a known bomb.
 		// -- R3 --
 		// B? -- R?
-		// B? B? --
-		// Unknown Blue (a One or Two) moves towards Red Three.
-		// Blue doesn't care that R?xB? reveals its rank
-		// because B?xR3 wins.
+		// This assigns the chaser a rank of Two.
 		//
-		// TBD: However, if the unknown chaser is not protected,
-		// then what can happen?
-		// -- R3 --
+		// -- RB --
 		// B? -- R?
-		// Unknown Blue forks Red Three and Unknown Red.
-		// Is Unknown Blue a Two, risking R?xB? if R? is a One?
-		// Is Blue hoping that Red thinks that Unknown Blue is
-		// a high ranked piece, so that Red plays R3xB?, when
-		// in reality Unknown Blue is a Two, and then Blue
-		// moves its Two away, winning the Red Three?
-		// I am thinking of coding Blue as an Unknown chaser, but
-		// this is risky.
+		// This assigns the chaser a rank of Unknown.
 
 			Piece chased2 = null;
 			for (int d2 : dir) {
@@ -999,8 +981,13 @@ public class Board
 					|| chased2 == chased)
 					continue;
 
-				if (chased.isKnown() != chased2.isKnown())
+				if (!chased.isKnown()
+					&& chased2.isKnown()
+					&& chased2.getRank() != Rank.BOMB)
 					break;
+
+		// Unknown chaser can be assigned a chase rank.
+
 				chased2 = null;
 			}
 			if (chased2 != null)

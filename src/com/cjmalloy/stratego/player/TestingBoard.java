@@ -1207,7 +1207,7 @@ public class TestingBoard extends Board
 			// (to preserve its stealth) or it has a chase plan
 			// (see chase()).
 			if (unknownRankAtLarge(1-p.getColor(), Rank.ONE) != 0
-				&& valueStealth[1-p.getColor()][0] > values[p.getColor()][p.getRank().toInt()]
+				&& valueStealth[1-p.getColor()][0] > pieceValue(p)
 				&& p.getColor() == Settings.bottomColor
 				&& !hasFewExpendables(p.getColor())
 				&& p.getIndex() > 65)
@@ -2720,34 +2720,28 @@ public class TestingBoard extends Board
 		} else
 			near = j;
 
-		// Send a lower ranked piece along to protect the Eight(s)
-		// and possibly confuse the opponent about which is which.
-		int r;
-		for (r = 5; r >= 1; r--)
-			if (isActiveRank(1-p.getColor(),r)) {
-				int destTmp[] = genDestTmpGuarded(p.getColor(), near, Rank.toRank(r));
-				genPlanA(0, destTmp, 1-p.getColor(), r, DEST_PRIORITY_LOW);
-				break;
-		}
+		// (Before version 9.5, an active piece was sent to protect
+		// the Eight.  But this is redundant because opponent
+		// pieces are already chased in chase(), so if an opponent
+		// piece is guarding the flag, the AI will target it anyway.
+		// Moreover, if the flag is guarded by a low ranked piece
+		// (usually the case), sending a known piece of
+		// higher rank is pointless and counterproductive.
+		// 
 
-		if (r == 0) {
-			for (r = invincibleRank[1-p.getColor()]; r >= 1; r--)
-				if (rankAtLarge(1-p.getColor(), r) != 0) {
-					int destTmp[] = genDestTmpGuarded(p.getColor(), near, Rank.toRank(r));
-					genNeededPlanA(0, destTmp, 1-p.getColor(), r, DEST_PRIORITY_LOW);
-					break;
-				}
-		}
+		if (sendEight) {
 
 		// Send the miner(s)
 		// multiple structures can be investigated in parallel
-		if (sendEight) {
+
 			int destTmp[] = genDestTmpGuarded(p.getColor(), j, Rank.EIGHT);
 			genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
 			genPlanB(destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
 		}
 
-		// Send along expendable pieces as a subterfuge measure
+		// Send along unknown expendable pieces as a subterfuge measure.
+		// This is done even if sendEight is false because
+		// it is useful to probe the opponents defense.
 		// If the protectors of the bomb structure are outnumbered,
 		// they often can be drawn towards the extra unknowns
 		// allowing the eight to attack the bomb.
@@ -3367,7 +3361,7 @@ public class TestingBoard extends Board
 	// Sixes, Sevens and Nines (and excess Eights) are expendable
 	public boolean isExpendable(Piece p)
 	{
-		return values[p.getColor()][p.getRank().toInt()] <= VALUE_SIX;
+		return pieceValue(p) <= VALUE_SIX;
 	}
 
 	public void setNeededRank(int color, int rank)
@@ -5087,31 +5081,6 @@ public class TestingBoard extends Board
 	// that it can get more bluffing value by moving its further
 	// back piece towards now known Blue One.
 	//
-	// In other cases, one can argue that the bluffing value should
-	// be much higher.  In the example below, Unknown Blue
-	// is about to fork two known Red Fives.  Red anticipates the
-	// possible fork, but sees that the loss is inevitable.
-	// (After Red Five moves up, Blue Four moves up, Red Five moves
-	// up, Blue can take either Five, because the Five is only
-	// protected by an unknown Four.  Because the bluffing value
-	// is low, the AI sees that it will lose the Five anyway.
-	// R? -- R4 R?
-	// xx R5 -- xx
-	// xx -- R5 xx
-	// -- B? -- B?
-	//
-	// Another example suggesting a higher bluffing value:
-	// B? B? B? B?
-	// B? R4 -- B?
-	// xx B3 -- xx
-	// xx R7 -- xx
-	// B? B? -- --
-	// Blue Three has forked Red Four and Red Seven.
-	// Red has the move.  Will Blue Three
-	// actually take Red Four?  Probably not, but because bluffing
-	// value is low, Red Four moves sideways allowing Blue Three to
-	// take Red Seven.
-
 	// How it works.
 	// Example:
 	// R? R5
@@ -5179,6 +5148,43 @@ public class TestingBoard extends Board
 		// AI from risking known pieces. There is no
 		// penalty in risking an unknown piece, given that the
 		// the opponent piece is not invincible.
+
+		// One can argue that the bluffing value for known pieces should
+		// be much higher.  In the example below, Unknown Blue
+		// is about to fork two known Red Fives.  Red anticipates the
+		// possible fork, but sees that the loss is inevitable.
+		// (After Red Five moves up, Blue Four moves up, Red Five moves
+		// up, Blue can take either Five, because the Five is only
+		// protected by an unknown Four.  Because the bluffing value
+		// is low, the AI sees that it will lose the Five anyway.
+		// R? -- R4 R?
+		// xx R5 -- xx
+		// xx -- R5 xx
+		// -- B? -- B?
+		//
+		// Another example suggesting a higher bluffing value:
+		// B? B? B? B?
+		// B? R4 -- B?
+		// xx B3 -- xx
+		// xx R7 -- xx
+		// B? B? -- --
+		// Blue Three has forked Red Four and Red Seven.
+		// Red has the move.  Will Blue Three
+		// actually take Red Four?  Possibly not, but because bluffing
+		// value is low, Red Four moves sideways allowing Blue Three to
+		// take Red Seven.
+		//
+		// Because of this uncertainly, the AI will sacrifice material
+		// to avoid the possibility of capture of a known piece
+		// of higher value, even when the piece appears to be
+		// protected.
+		//
+		// TBD: the AI assumes that the opponent piece will call the
+		// bluff, and hence may allow material to be captured
+		// without playing the moves to protect the material.
+		// That is, it will may just leave the material hanging.
+		// This should be solved by "depth value reduction", but
+		// this needs to be verified.
 
 				else
 					return -(prev1.value - prev2.value) / 2;
@@ -5595,9 +5601,8 @@ public class TestingBoard extends Board
 		// 2. direction of the attacker
 		// 3. multiple targets
 		//
-		// It is tempting to use depth rather than distance
-		// because the original piece position isn't handy
-		// and depth is.  But that fails because
+		// It is tempting to use depth rather than distance.
+		// But that fails because
 		// it entices the AI to leave pieces hanging
 		// by allowing the attacker to first
 		// take the free material and then continue the
@@ -5626,13 +5631,20 @@ public class TestingBoard extends Board
 		// it is possible that the attacker barely reaches
 		// the Spy and extended search is insufficient
 		// in depth to to prevent the AI from leaving pieces hanging.
+		//
 		// TBD: This is a temporary hack given low search depth.
 		// The hack causes the AI not to react until the
-		// attacker is very close (2 spaces away).
+		// approaching attacker is very close (2 spaces away).
+		//
+		// Note: this code addresses suspected or known opponent
+		// pieces attacking unknown AI pieces.  If the opponent
+		// piece is unknown, it is handled in UNK, but move
+		// generation is limited to 1 space of separation in AI.java,
+		// so the horizon effect is limited as well.
 
-			if (fprank != Rank.NINE 
+			else if (fprank != Rank.NINE 
 				&& !unknownScoutFarMove
-		  		&& Grid.steps(fp.getIndex(), i) > 2)
+		  		&& Grid.steps(tp.getIndex(), i) > 2)
 				return apparentV;
 		}
 
@@ -6219,7 +6231,7 @@ public class TestingBoard extends Board
 
 		// The Spy risks total loss regardless of the opposing rank
 		if (fprank == Rank.SPY)
-			return values[fp.getColor()][fprank.toInt()];
+			return pieceValue(fp);
 
 		// The AI believes the opponent rank is weaker if it fled
 		// from a higher rank, but only if it
@@ -6260,7 +6272,7 @@ public class TestingBoard extends Board
 				return 0;
 			// TBD: this is probably too conservative,
 			// especially if fp is expendable
-			return values[fp.getColor()][fprank.toInt()]*7/10;
+			return pieceValue(fp)*7/10;
 		}
 
 		// If the opponent has a dangerous unknown rank,
@@ -6268,7 +6280,7 @@ public class TestingBoard extends Board
 		// AI piece.
 		if (fprank.toInt() <= 4
 			&& fprank.toInt() > dangerousUnknownRank)
-			return values[fp.getColor()][fprank.toInt()]*7/10;
+			return pieceValue(fp)*7/10;
 
 		// The risk of loss depends on the piece value
 		// and the difference between the ranks.
@@ -6314,7 +6326,7 @@ public class TestingBoard extends Board
 		int diff = 1 + tprank.toInt() - fprank.toInt();
 		diff = diff * diff;
 
-		return values[fp.getColor()][fprank.toInt()] / diff;
+		return pieceValue(fp) / diff;
 	}
 
 	// 
@@ -6334,5 +6346,25 @@ public class TestingBoard extends Board
 			|| i == 112
 			|| i == 119);
 	}
+
+	int pieceValue(Piece p)
+	{
+		return values[p.getColor()][p.getRank().toInt()];
+	}
+
+        // Check if a move is an obvious loser
+        boolean isLosingMove(Piece fp, Piece tp)
+        {
+                int result = winFight(fp, tp);
+
+                if ((result == Rank.LOSES
+                        && (fp.getRank().toInt() <= 4
+                                || tp.isKnown()))
+                        || stealthValue(fp) > pieceValue(tp))
+                        return true;
+
+                return false;
+        }
+
 }
 
