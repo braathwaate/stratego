@@ -61,7 +61,7 @@ public class TestingBoard extends Board
 	protected Piece[][] activeRank = new Piece[2][15];	// moved rank Piece
 	protected boolean[][] neededRank = new boolean[2][15];	// needed ranks
 	protected int[][] lowerRankCount = new int[2][10];
-	protected int[][] unknownLowerRankCount = new int[2][10];
+	protected int[][] unknownLowerRank = new int[2][10];
 	protected int[][][][] planA = new int[2][15][2][121];	// plan A
 	protected int[][][][] planB = new int[2][15][2][121];	// plan B
 	protected int[][] winRank = new int[15][15]; // winfight cache
@@ -669,13 +669,8 @@ public class TestingBoard extends Board
 		for (int c = RED; c <= BLUE; c++)
 			needExpendableRank(c);
 
-		// Opponent bombs that block the lanes can be a benefit or
-		// a detriment to the AI.  Removing them costs an eight,
-		// so unless there is good reason to remove them, 
-		// keep the lane blocked off.
-		// valueLaneBombs();
 		genWinRank();
-		targetUnknownBlockers();
+		// targetUnknownBlockers();
 		genPieceLists();
 
 		assert flag[Settings.topColor] != null : "AI flag unknown";
@@ -2760,28 +2755,6 @@ public class TestingBoard extends Board
 		chaseWithUnknownExpendable(p, destTmp);
 	}
 
-	// some bombs are worth removing and others we can ignore.
-	// initially all bombs are worthless (0)
-	private void valueLaneBombs()
-	{
-		// remove bombs that block the lanes
-		int [][] frontPattern = { { 78, 79 }, {90, 79}, {82, 83}, {86, 87}, {86, 98} };
-		for (int i = 0; i < 5; i++) {
-			Piece p1 = getPiece(frontPattern[i][0]);
-			Piece p2 = getPiece(frontPattern[i][1]);
-			if (p1 != null && p1.getRank() == Rank.BOMB
-				&& p2 != null && p2.getRank() == Rank.BOMB) {
-				int destTmp[] = genDestTmpGuarded(p1.getColor(), frontPattern[i][0], Rank.EIGHT);
-				p1.setAiValue(aiBombValue(p1.getColor()));
-				genNeededPlanA(0, destTmp, 1-p1.getColor(), 8, DEST_PRIORITY_LOW);
-
-				int destTmp2[] = genDestTmpGuarded(p2.getColor(), frontPattern[i][1], Rank.EIGHT);
-				p2.setAiValue(aiBombValue(p2.getColor()));
-				genNeededPlanA(0, destTmp2, 1-p2.getColor(), 8, DEST_PRIORITY_LOW);
-			}
-		}
-	}
-
 	// Generate a matrix of consecutive values with the highest
 	// value at the destination "to". (Lee's algorithm).
 	//
@@ -3289,6 +3262,11 @@ public class TestingBoard extends Board
 		} // lastMove != null
 		}
 
+		for (int c = RED; c <= BLUE; c++) {
+			int lowerRanks = 0;
+			int unkLowerRank = 0;
+			for (int r = 1; r <= 10; r++) {
+
 		// Another useful count is the number of opponent pieces with
 		// lower rank.  If a rank has only 1 opponent piece
 		// of lower rank remaining on the board,
@@ -3301,14 +3279,22 @@ public class TestingBoard extends Board
 		// rule or forked with another one of its pieces.
 		// This can be solved by increasing look-ahead.
 
-		for (int c = RED; c <= BLUE; c++) {
-			int lowerRanks = 0;
-			int unknownLowerRanks = 0;
-			for (int r = 1; r <= 10; r++) {
 				lowerRankCount[c][r-1] = lowerRanks;
 				lowerRanks += rankAtLarge(c, r);
-				unknownLowerRankCount[c][r-1] = unknownLowerRanks;
-				unknownLowerRanks += unknownRankAtLarge(c, r);
+
+		// It is useful to known what unknown opponent rank
+		// will attack a player piece.  For example, if
+		// the opponent has a known Three and known Two
+		// remaining, and the other opponent Three is 
+		// in the tray, the opponent One is the only unknown
+		// opponent piece that can attack a player Four.
+		// But the stealth value of the One is higher than
+		// the value of a Four, so this makes the Four 
+		// locally invincible.
+
+				unknownLowerRank[c][r-1] = unkLowerRank;
+				if (unknownRankAtLarge(c, r) != 0)
+					unkLowerRank = 4;
 			}
 		}
 
@@ -3723,8 +3709,7 @@ public class TestingBoard extends Board
 		// more negative.
 
 					if (!tp.isKnown()) {
-						vm += apparentWinValue(depth,
-							fp,
+						vm += apparentWinValue(fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
@@ -3944,7 +3929,7 @@ public class TestingBoard extends Board
 				if (fpcolor == Settings.topColor)
 					vm += stealthValue(tp);
 				else {
-					vm += apparentWinValue(depth, fp, fprank, unknownScoutFarMove, tp, stealthValue(tp), valueStealth[tp.getColor()][Rank.UNKNOWN.toInt()-1]);
+					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp), valueStealth[tp.getColor()][Rank.UNKNOWN.toInt()-1]);
 					vm += riskOfLoss(tp, fp);
 				}
 		
@@ -4147,8 +4132,7 @@ public class TestingBoard extends Board
 						else {
 							vm -= fpvalue * (10 - risk) / 10;
 
-							vm += apparentWinValue(depth,
-								fp,
+							vm += apparentWinValue( fp,
 								fprank,
 								unknownScoutFarMove,
 								tp,
@@ -4168,8 +4152,7 @@ public class TestingBoard extends Board
 					else  {
 
 		// unconditional win
-						vm += apparentWinValue(depth,
-							fp,
+						vm += apparentWinValue(fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
@@ -4598,7 +4581,7 @@ public class TestingBoard extends Board
 		// of the AI piece.
 						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 
-						int tpvalue = apparentWinValue(depth, fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
+						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
 
 		// Outcome is the negation as if ai
 		// were the attacker.
@@ -4667,102 +4650,6 @@ public class TestingBoard extends Board
 				//vm = 0; // fubar
 				break;
 			} // switch
-
-		// Prefer early successful attacks
-		//
-		// Note: it is impossible to determine what moves
-		// the opponent actually considers, so the AI cannot
-		// second-guess the opponent and play a suboptimal move,
-		// hoping the opponent will miss a good move.
-		//
-		// The depth adjustment here is intended to
-		// delay losing sequences.
-		// By delaying losing sequences, the opponent may misplay,
-		// but this cannot be predicted.  Generally, the AI
-		// will play the best move.
-		//
-		// However, consider the following example:
-		// RB -- RB -- --
-		// -- R5 -- R3 --
-		// -- B2 -- -- --
-		//
-		// Blue Two has moved towards Red Five.
-		// Red Five can move back, allowing Blue Two
-		// to trap it.  Red Five can move left, but
-		// the Two Squares rule will eventually push
-		// it right next to Red Three (in 8 ply), allowing Blue Two
-		// to fork Red Five and Blue Three.
-		//
-		// So Red knows that it can lose its Five.
-		// It this situation, Red should play out the sequence
-		// and hope that Blue Two misplays.
-		//
-		// This particularly affects deep chase, where
-		// the depth is very deep.  Few opponents will see
-		// this deep.  Often the AI will leave material
-		// hanging because of a potential deep threat
-		// involving unknown pieces that do not have the
-		// ranks that the AI is worried about.
-		//
-		// This is important in tournament play with substandard
-		// bots.  Stratego is a game of logic, but chance plays
-		// an important part.  By forcing the opponent to play
-		// out a losing sequence, the AI can win more games.
-		//
-		// Winning sequences are also important, because
-		// of the limited search depth.  If the AI delays a
-		// capture, it is possible that the piece can be rescued
-		// or the AI may need to reliquish its capture.
-		// For example,
-		// ----------------------
-		// | -- RF -- RB B4 RB --
-		// | -- -- -- R1 -- -- --
-		// | -- -- -- -- -- -- --
-		// | -- -- -- -- -- -- R?
-		// | -- -- xx xx -- -- xx
-		// | -- -- xx xx -- -- xx
-		// | -- B? -- -- -- -- --
-		// Red has the move.
-		// Red One knows it has Blue Four trapped.  The search
-		// tree rewards Red for the piece because all lines
-		// of play allow Red One to capture Blue Four.  So
-		// moving unknown Red has the same value as approaching
-		// Blue Four.  But if 10 ply were considered, Red
-		// would realize that Red One is needed to protect Red Flag.
-		// If the search is not this deep, then Red play some
-		// other move, allowing Blue to force the AI to relinquish
-		// its capture of Blue Four.
-		//
-		// Consider the following example:
-		// | -- -- -- -- -- -- --
-		// | BB R3 -- -- -- -- B1
-		// | B4 -- BB -- -- -- --
-		// -----------------------
-		// Red Three must move to attack Blue Four now because
-		// if it plays some other move, it cannot win Blue Four
-		// without losing its Three to Blue One in 12 ply.
-		//
-		// These examples have occurred in play.
-
-		//
-		//
-		// Depth value reduction
-		//   known
-		// 2 : 95%
-		// 4 : 90%
-		// 6 : 85%
-		// 8 : 80%
-		// 10+ : 75%
-		//
-		// The depth value reduction must be small so that
-		// the AI does not leave pieces hanging to delay
-		// a possible future attack.  Because of the 
-		// high value of the Spy, this is important when
-		// the Spy is susceptible to attack in the
-		// proximity of unknown or high ranked opponent pieces.
-
-		//	if (fpcolor == Settings.bottomColor)
-				vm = vm * (20 - Math.min(depth, 10)/2) / 20;
 
 		} // else attack
 
@@ -5145,9 +5032,12 @@ public class TestingBoard extends Board
 
 		// In other cases the AI only receives half of the
 		// value of the bluffing piece.  This discourages the
-		// AI from risking known pieces. There is no
-		// penalty in risking an unknown piece, given that the
-		// the opponent piece is not invincible.
+		// AI from unnecessarily risking its pieces (known or
+		// unknown fleers), encouraging it to find authentic protectors
+		// for them.  But if the AI piece is truly unknown, the
+		// the AI piece did not lose its apparent piece value
+		// (see WINS), so prev1.value - prev2.value is small
+		// (just the value from valueBluff() below).
 
 		// One can argue that the bluffing value for known pieces should
 		// be much higher.  In the example below, Unknown Blue
@@ -5520,7 +5410,7 @@ public class TestingBoard extends Board
 
 	}
 
-	int apparentWinValue(int depth, Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV, int apparentV)
+	int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV, int apparentV)
 	{
 		assert fp.getColor() == Settings.bottomColor : "apparentWinValue only for opponent attacker";
 
@@ -5602,13 +5492,16 @@ public class TestingBoard extends Board
 		// 3. multiple targets
 		//
 		// It is tempting to use depth rather than distance.
-		// But that fails because
-		// it entices the AI to leave pieces hanging
-		// by allowing the attacker to first
+		// But that fails because it entices the AI
+		// to leave pieces hanging by allowing the attacker to first
 		// take the free material and then continue the
 		// former attack later (at a higher depth and thus
 		// lower value).
 		//
+		// The other problem with using depth is that the
+		// transposition would have to index by depth, because
+		// it would cause the same position to be evaluated
+		// differently at different depths.
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 
@@ -5775,8 +5668,10 @@ public class TestingBoard extends Board
 				if (p.isSuspectedRank())
 					v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
 
-				if (p.isBlocker())
-					v += 10;
+		// see targetUnknownBlockers
+		// TBD: must be a better way
+		//		if (p.isBlocker())
+		//			v += 10;
 
 			} // piece not known
 		} // v == 0
@@ -6116,8 +6011,8 @@ public class TestingBoard extends Board
 		Rank rank = p.getRank();
 		return (rank == Rank.FLAG
 			|| (!p.isKnown()
-				&& (rank == Rank.SPY
-				|| valueStealth[p.getColor()][rank.toInt()-1] > values[1-p.getColor()][9])));
+				&& rank != Rank.NINE	// nines have high stealth value but are not targets
+				&& valueStealth[p.getColor()][rank.toInt()-1] > values[1-p.getColor()][9]));
 	}
 
 	// If all bombs have been accounted for,

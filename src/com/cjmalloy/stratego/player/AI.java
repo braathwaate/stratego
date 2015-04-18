@@ -524,7 +524,9 @@ public class AI implements Runnable
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
-				if (!allowAll)
+				if (!allowAll
+					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
+					&& b.planValue(fp, i, t) <= 1))
 					addMove(moveList.get(APPROACH), i, t);
 				else
 					isPruned = true;
@@ -826,7 +828,7 @@ public class AI implements Runnable
 		// moves to be considered (because QS does not currently
 		// consider scout moves).
 		// 
-					int vm = -negamax(1, -9999, 9999, 1, killerMove); 
+					int vm = -negamax(1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
 					if (vm > bestPrunedMoveValue) {
 						bestPrunedMoveValue = vm;
 						bestPrunedMove = move;
@@ -1009,7 +1011,7 @@ public class AI implements Runnable
 		}
 
 		log(">>> pick best move");
-		int vm = negamax(n, -9999, 9999, 0, killerMove); 
+		int vm = negamax(n, -9999, 9999, 0, killerMove, 0); 
 		completedDepth = n;
 
 		// To negate the horizon effect where the ai
@@ -1080,7 +1082,7 @@ public class AI implements Runnable
 			log(">>> singular extension");
 
 			MoveType mt = makeMove(n, 0, bestMovePly);
-			vm = -negamax(n+1, -9999, 9999, 1, killerMove); 
+			vm = -negamax(n+1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
 			b.undo();
 			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
 			
@@ -1246,11 +1248,11 @@ public class AI implements Runnable
 	// Thus it may leave material at risk to keep its chase piece
 	// near the flag.  
 
-	private int qs(int depth, int n, boolean flee, int nullbest)
+	private int qs(int depth, int n, boolean flee, int nullbest, int dvr)
 	{
 		int bvalue = negQS(b.getValue());
 		if (n < 1)
-			return bvalue;
+			return bvalue + dvr;
 
 		boolean bestFlee = false;
 		Piece bestTp = null;
@@ -1341,7 +1343,7 @@ public class AI implements Runnable
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-				int vm = -qs(depth+1, n-1, false, 0);
+				int vm = -qs(depth+1, n-1, false, 0, dvr + depthValueReduction(depth+1));
 
 				b.undo();
 				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
@@ -1384,7 +1386,7 @@ public class AI implements Runnable
 			nullbest = Math.max(bvalue, best);
 			// try fleeing
 			b.pushNullMove();
-			vm = -qs(depth+1, n, true, -nullbest);
+			vm = -qs(depth+1, n, true, -nullbest, dvr);
 			b.undo();
 		}
 
@@ -1396,7 +1398,7 @@ public class AI implements Runnable
 		return best;
 	}
 
-	private int qscache(int depth)
+	private int qscache(int depth, int dvr)
 	{
 
 		BitGrid bg = new BitGrid();
@@ -1407,12 +1409,12 @@ public class AI implements Runnable
 		// qs is valueB
 
 		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return negQS(valueB);
+			return negQS(valueB) + dvr;
 
 		// valueBluff() checks for a prior move capture,
 		// so qscache is invalid in this case
 
-		return qs(depth, QSMAX, false, 0);
+		return qs(depth, QSMAX, false, 0, dvr);
 /*
 
 		UndoMove um = b.getLastMove();
@@ -1545,7 +1547,7 @@ public class AI implements Runnable
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
 
-	private int negamax(int n, int alpha, int beta, int depth, Move killerMove) throws InterruptedException
+	private int negamax(int n, int alpha, int beta, int depth, Move killerMove, int dvr) throws InterruptedException
 	{
 		if (bestMove != 0
 			&& stopTime != 0
@@ -1590,16 +1592,16 @@ public class AI implements Runnable
 				if (entry.flags == TTEntry.Flags.EXACT) {
 					killerMove.setMove(entry.bestMove);
 					log("exact " + moveRoot + " " + entry.moveRoot );
-					return entry.bestValue;
+					return entry.bestValue + dvr;
 				}
 				else if (entry.flags == TTEntry.Flags.LOWERBOUND)
-					alpha = Math.max(alpha, entry.bestValue);
+					alpha = Math.max(alpha, entry.bestValue + dvr);
 				else if (entry.flags== TTEntry.Flags.UPPERBOUND)
-					beta = Math.min(beta, entry.bestValue);
+					beta = Math.min(beta, entry.bestValue + dvr);
 				if (alpha >= beta) {
 					killerMove.setMove(entry.bestMove);
 					log("cutoff " + moveRoot + " " + entry.moveRoot );
-					return entry.bestValue;
+					return entry.bestValue + dvr;
 				}
 			}
 		}
@@ -1620,9 +1622,9 @@ public class AI implements Runnable
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
-			vm = qscache(depth);
+			vm = qscache(depth, dvr);
 			// save value of position at hash 0 (see saveTTEntry())
-			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm, -1);
+			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm-dvr, -1);
 			return vm;
 		}
 
@@ -1632,7 +1634,7 @@ public class AI implements Runnable
 		if (depth == 0 && ttmove == 0)
 			ttmove = -1;
 
-		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove);
+		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove, dvr);
 
 		assert hashOrig == b.getHash() : "hash changed";
 
@@ -1646,9 +1648,9 @@ public class AI implements Runnable
 			entryType = TTEntry.Flags.EXACT;
 
 		// save each move at each ply for PV
-		saveTTEntry(n, searchType, entryType, vm, killerMove.getMove());
+		saveTTEntry(n, searchType, entryType, vm-dvr, killerMove.getMove());
 		// save value of position at hash 0 (see saveTTEntry())
-		saveTTEntry(n, searchType, entryType, vm, -1);
+		saveTTEntry(n, searchType, entryType, vm-dvr, -1);
 
 		return vm;
 	}
@@ -1697,7 +1699,7 @@ public class AI implements Runnable
 		return (to == from);
 	}
 
-	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove) throws InterruptedException
+	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove, int dvr) throws InterruptedException
 	{
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
@@ -1719,7 +1721,7 @@ public class AI implements Runnable
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
 
 				long h = b.getHash();
 				b.undo();
@@ -1753,7 +1755,7 @@ public class AI implements Runnable
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
 				long h = b.getHash();
 				b.undo();
 				logMove(n, km, b.getValue(), negQS(vm), MoveType.KM);
@@ -1839,7 +1841,7 @@ public class AI implements Runnable
 					|| mt == MoveType.CHASED))
 					continue;
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove);
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
 
 				long h = b.getHash();
 
@@ -1962,6 +1964,111 @@ public class AI implements Runnable
 	{
 		return b.getHash() ^ depthHash[b.bturn][d];
 	}
+
+
+	// Prefer early successful attacks
+	//
+	// Note: it is impossible to determine what moves
+	// the opponent actually considers, so the AI cannot
+	// second-guess the opponent and play a suboptimal move,
+	// hoping the opponent will miss a good move.
+	//
+	// The depth adjustment here is intended to
+	// delay losing sequences.
+	// By delaying losing sequences, the opponent may misplay,
+	// but this cannot be predicted.  Generally, the AI
+	// will play the best move.
+	//
+	// However, consider the following example:
+	// RB -- RB -- --
+	// -- R5 -- R3 --
+	// -- B2 -- -- --
+	//
+	// Blue Two has moved towards Red Five.
+	// Red Five can move back, allowing Blue Two
+	// to trap it.  Red Five can move left, but
+	// the Two Squares rule will eventually push
+	// it right next to Red Three (in 8 ply), allowing Blue Two
+	// to fork Red Five and Blue Three.
+	//
+	// So Red knows that it can lose its Five.
+	// It this situation, Red should play out the sequence
+	// and hope that Blue Two misplays.
+	//
+	// This particularly affects deep chase, where
+	// the depth is very deep.  Few opponents will see
+	// this deep.  Often the AI will leave material
+	// hanging because of a potential deep threat
+	// involving unknown pieces that do not have the
+	// ranks that the AI is worried about.
+	//
+	// This is important in tournament play with substandard
+	// bots.  Stratego is a game of logic, but chance plays
+	// an important part.  By forcing the opponent to play
+	// out a losing sequence, the AI can win more games.
+	//
+	// Winning sequences are also important, because
+	// of the limited search depth.  If the AI delays a
+	// capture, it is possible that the piece can be rescued
+	// or the AI may need to reliquish its capture.
+	// For example,
+	// ----------------------
+	// | -- RF -- RB B4 RB --
+	// | -- -- -- R1 -- -- --
+	// | -- -- -- -- -- -- --
+	// | -- -- -- -- -- -- R?
+	// | -- -- xx xx -- -- xx
+	// | -- -- xx xx -- -- xx
+	// | -- B? -- -- -- -- --
+	// Red has the move.
+	// Red One knows it has Blue Four trapped.  The search
+	// tree rewards Red for the piece because all lines
+	// of play allow Red One to capture Blue Four.  So
+	// moving unknown Red has the same value as approaching
+	// Blue Four.  But if 10 ply were considered, Red
+	// would realize that Red One is needed to protect Red Flag.
+	// If the search is not this deep, then Red play some
+	// other move, allowing Blue to force the AI to relinquish
+	// its capture of Blue Four.
+	//
+	// Consider the following example:
+	// | -- -- -- -- -- -- --
+	// | BB R3 -- -- -- -- B1
+	// | B4 -- BB -- -- -- --
+	// -----------------------
+	// Red Three must move to attack Blue Four now because
+	// if it plays some other move, it cannot win Blue Four
+	// without losing its Three to Blue One in 12 ply.
+	//
+	// These examples have occurred in play.
+
+	//
+	//
+	// Depth value reduction
+	//   known
+	// 2 : 5%
+	// 4 : 10%
+	// 6 : 15%
+	// 8 : 20%
+	// 10+ : 25%
+	//
+	// The depth value reduction must be small so that
+	// the AI does not leave pieces hanging to delay
+	// a possible future attack.  Because of the 
+	// high value of the Spy, this is important when
+	// the Spy is susceptible to attack in the
+	// proximity of unknown or high ranked opponent pieces.
+
+	int depthValueReduction(int depth)
+	{
+		// vm = vm * (20 - Math.min(depth, 10)/2) / 20;
+		UndoMove um = b.getLastMove();
+		if (um == null)
+			return 0;
+
+		return -(b.getValue() - um.value) * (Math.min(depth, 10)/2) / 20;
+	}
+
 
 	String logPiece(Piece p)
 	{

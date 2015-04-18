@@ -534,16 +534,82 @@ public class Board
 			}
 		}
 
-		// Flee acting rank can be set implicitly if
-		// the piece neglects to capture an adjacent opponent
+		// Flee acting rank can be set implicitly if a player
+		// piece neglects to capture an adjacent opponent
 		// piece and the immediate player move was not a capture,
 		// a chase or the response to a chase.
+		//
 		// However, it is difficult to determine whether the
-		// opponent merely played some other move that requires
+		// player merely played some other move that requires
 		// immediate response and planned to move the fleeing piece
-		// later.  It is better to leave the flee rank at
+		// later. So in version 9.1, this code was entirely removed,
+		// with the thought that was better to leave the flee rank at
 		// NIL until the piece actually flees.
-		// So this code was removed in version 9.1.
+		//
+		// But the removal of the code meant that if an opponent piece
+		// passes by an unknown player piece, and the player
+		// piece neglects to attack, the flee rank would not be set,
+		// and so the player would still
+		// think that the piece would still be useful for
+		// chasing the opponent piece away.  But of course
+		// the opponent would call the bluff, and attack the
+		// moved piece, because now the opponent knows it is
+		// a weaker piece.
+		//
+		// So the code was restored for version 9.5, adding
+		// additional checks to guess if the last move played
+		// should delay the setting of flee rank.  This is definitely
+		// tricky, and undoubtably does not handle all cases,
+		// but this code is essential to prevent an opponent from using
+		// low ranked pieces to probe the player's ranks and
+		// baiting them to move.
+
+		// New code in Version 9.5.
+		// Check for a possible delay before setting the flee rank.
+		// - if the player chases an equal or lower ranked piece
+		int to = Move.unpackTo(m);
+		int chaserank = 99;
+		for (int d : dir) {
+			int j = to + d;
+			if (!Grid.isValid(j))
+				continue;
+			Piece op = getPiece(j);
+			if (op == null
+				|| op.getColor() == fp.getColor())
+				continue;
+			Rank rank = op.getApparentRank();
+			if (rank.toInt() <  chaserank)
+				chaserank = rank.toInt();
+		}
+
+		for ( int i = 12; i <= 120; i++) {
+			if (i == from)
+				continue;
+			Piece fleeTp = getPiece(i);
+			if (fleeTp == null
+				|| fleeTp.isKnown()
+				|| fleeTp.getColor() != fp.getColor())
+				continue;
+			
+			for (int d : dir) {
+				int j = i + d;
+				if (!Grid.isValid(j))
+					continue;
+				Piece op = getPiece(j);
+				if (op == null
+					|| op.getColor() == fp.getColor()
+					|| isProtectedFlee(op, fleeTp, j)
+					|| tp != null)	// TBD: test rank
+					continue;
+
+				Rank rank = op.getApparentRank();
+				if (rank == Rank.BOMB
+					|| rank.toInt() > chaserank)	// new in version 9.5
+					continue;
+
+				fleeTp.setActingRankFlee(rank);
+			}
+		}
 	}
 
 	// Return true if the chase piece is obviously protected.
@@ -1346,23 +1412,19 @@ public class Board
 					return false;
 			}
 
-		// Commented out in 9.4.
-		// If the third square is occupied by an opponent piece,
-		// assume a possible two squares result.  This forces the AI
-		// to attack the third square piece or allow the
-		// chaser to attack.  For example,
-		// -- R? --
-		// R1 B3 R?
-		// -- -- R?
-		// xx xx xx
-		//
-		// Blue Three has the move.  If it moves down, and the
-		// Red One moves down, it will not be allowed to return
-		// (ends in possible two squares).  So it must choose
-		// an unknown piece to attack or face certain loss against
-		// Red One.
-		//if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
-		//	return false;
+		// fleeing is OK, even if back to the same square
+		// for example,
+		// -------
+		// R? R5 |
+		// R? -- |
+		// B4 -- |
+		// Red Five moves down and Blue Four moves right.
+		// It is OK for Red Five to return to its original
+		// square.
+		Piece op = getPiece(from - (to - from));
+		if (op != null && op.getColor() ==
+			1 - getPiece(from).getColor())
+			return false;
 
 		UndoMove oppmove1 = getLastMove(1);
 		if (oppmove1 == null)
