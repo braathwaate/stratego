@@ -55,7 +55,8 @@ public class TestingBoard extends Board
 
 	protected Piece[][] pieces = new Piece[2][41];	// piece arrays
 	protected int[] npieces = new int[2];		// piece counts
-	protected int[] invincibleRank = new int[2];	// rank that always wins or ties
+	protected int[] invincibleRankInt = new int[2];	// rank that always wins or ties
+	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
 	protected Piece[][] activeRank = new Piece[2][15];	// moved rank Piece
@@ -397,13 +398,21 @@ public class TestingBoard extends Board
 		// that the last unknown piece would be a Spy, which at
 		// best would be an even exchange, and the Spy would
 		// be known by default.
+		// TBD: if there is one unknown piece remaining
+		// and the others are suspected, then the unknown piece
+		// should be suspected as well.
 
 		for (int c = RED; c <= BLUE; c++) {
 			int rank;
-			for (rank = 1;rank<9;rank++)
+			for (rank = 1;rank<15;rank++)
+				invincibleRank[1-c][rank-1] = false;
+
+			for (rank = 1;rank<10;rank++) {
+				invincibleRank[1-c][rank-1] = true;
 				if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
 					break;
-			invincibleRank[1-c] = rank;
+			}
+			invincibleRankInt[1-c] = rank;
 
 			for (rank = 1;rank<9;rank++)
 				if (rankAtLarge(1-c, rank) != 0)
@@ -562,7 +571,7 @@ public class TestingBoard extends Board
 
 		} // color
 
-		lowestUnknownNotSuspectedRank = invincibleRank[Settings.topColor];
+		lowestUnknownNotSuspectedRank = invincibleRankInt[Settings.topColor];
 
 		// dangerousUnknownRank is set when an opponent
 		// has an invincible unknown rank.  This changes
@@ -577,14 +586,14 @@ public class TestingBoard extends Board
 
 		dangerousUnknownRank = 99;
 		dangerousKnownRank = 99;
-		if ((invincibleRank[Settings.bottomColor] == 1
+		if ((invincibleRankInt[Settings.bottomColor] == 1
 			&& !hasSpy(Settings.topColor))
-			|| (invincibleRank[Settings.bottomColor] != 1
-				&& invincibleRank[Settings.bottomColor] >= invincibleRank[Settings.topColor])) {
-			if (unknownRankAtLarge(Settings.bottomColor, invincibleRank[Settings.bottomColor]) != 0)
-				dangerousUnknownRank = invincibleRank[Settings.bottomColor];
-			else if (rankAtLarge(Settings.bottomColor, invincibleRank[Settings.bottomColor]) != 0)
-				dangerousKnownRank = invincibleRank[Settings.bottomColor];
+			|| (invincibleRankInt[Settings.bottomColor] != 1
+				&& invincibleRankInt[Settings.bottomColor] >= invincibleRankInt[Settings.topColor])) {
+			if (unknownRankAtLarge(Settings.bottomColor, invincibleRankInt[Settings.bottomColor]) != 0)
+				dangerousUnknownRank = invincibleRankInt[Settings.bottomColor];
+			else if (rankAtLarge(Settings.bottomColor, invincibleRankInt[Settings.bottomColor]) != 0)
+				dangerousKnownRank = invincibleRankInt[Settings.bottomColor];
 		}
 
 		// Destination Value Matrices
@@ -615,6 +624,7 @@ public class TestingBoard extends Board
 		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
+		genInvincibleRank();	// depends on stealth
 
 		{
 		// Revalue expendable pieces based on piece count difference.
@@ -755,11 +765,20 @@ public class TestingBoard extends Board
 	// An unknown General should not take a Five, but a Four
 	// would be tempting.
 	//
+	// I have seesawed on whether an unknown Marshal should take a Three.
+	// If it takes a Three, it makes the opponent Two invincible.
+	// But if doesn't take a Three, then the opponent Threes
+	// become defacto invincible once the Two is known.
+	//
+	// This means that an unknown AI One must take
+	// a Three if its Two is known or has been lost.
+	//
+	// The sum of the higher ranked pieces is used because the
 	// Stealth value for pieces (1-4) is slightly less than
 	// the sum of next two higher ranked pieces still on the board
 	// times a risk factor if stealth is maintained.
 	//
-	// The risk factor is 0.2, which is a 20% probability
+	// The risk factor is 20%, which is the probability
 	// of capture of each of these pieces.
 	//
 	// If the piece is the only player piece that prevents an opponent
@@ -767,25 +786,19 @@ public class TestingBoard extends Board
 	// by 1/3.  If there are more than one player pieces, the value is
 	// decreased by 1/3.
 	//
-	// This means that an unknown AI One will not
-	// take a Three if the both Twos are still on the board.
-	// But if the AI has lost its Two, the AI will attack
-	// the opponent Three, because the opponent Three
-	// can run amok.  But once the One takes the Three,
-	// then the Two will run amok.  Its a no-win situation.
-	//
-	// The sum of the higher ranked pieces is used because the
 	// stealth of a lower ranked piece decreases the less chance
 	// it has for capture a valuable piece.
 	// For example, if the Ones are still on the board, the
 	// Twos have been removed, the stealth of the One
 	// drops in half.
 	//
-	// A One stealth value is equal to 800 *.2 (160 +- 53  points)
-	// if the both Twos are still on the board.
+	// A One stealth value is equal to 800 *.2 (160 +- 53 points)
+	// if the both Twos are still on the board and player Two
+	// is unknown.
 	//
 	// A Two stealth value is equal to 400 *.2 (80 +- 27 points)
-	// if two Threes are still on the board.
+	// if two Threes are still on the board and any player Three
+	// is unknown.
 	//
 	// A Three stealth value is equal to 200 *.2 (40 +- 13 points)
 	// if two Fours are still on the board.
@@ -912,14 +925,14 @@ public class TestingBoard extends Board
 		// For example, Red has an
 		// unknown One, two known Threes, and an unknown Four.
 		// Blue has a known Two and an unknown Four.
-		// invincibleRank[Red] = 4
-		// invincibleRank[Blue] = 1
+		// invincibleRankInt[Red] = 4
+		// invincibleRankInt[Blue] = 1
 		// Red is winning by more than the value of a One,
 		// but the unknown One should remain cloaked to
 		// negate the power of the opponent Two.
 
 		else if (isWinning(c) > values[c][r]
-			&& r > invincibleRank[1-c])
+			&& r > invincibleRankInt[1-c])
 			v = 0;
 
 		else if (c == Settings.bottomColor) {
@@ -946,7 +959,10 @@ public class TestingBoard extends Board
 							break;
 					}
 
-					n = rankAtLarge(c, rs);
+		// note: unknownRankAtLarge is called to reduce
+		// One stealth if own Two becomes known
+
+					n = unknownRankAtLarge(c, rs);
 					if (n != 0) {
 						n = Math.min(n, count);
 						v += values[c][rs] * n;
@@ -969,7 +985,7 @@ public class TestingBoard extends Board
 		// encourage an invincible piece to slam into
 		// unknown pieces
 
-				else if (isInvincible(Rank.toRank(r), c))
+				else if (isInvincible(c, r))
 					v = Math.min(v, values[1-c][Rank.UNKNOWN.toInt()]);
 				else if (unknownDefenders > 3)
 					v -= v/3;
@@ -1016,6 +1032,33 @@ public class TestingBoard extends Board
 			v /= sumValues[Settings.topColor];
 			values[Settings.topColor][rank] =
 				values[Settings.topColor][rank]*5/6 + (int)v;
+		}
+	}
+
+	// Certain higher ranked pieces may also have the prospect
+	// of a positive result from attacking unknown pieces,
+	// if the stealth value of the unknown low ranked
+	// opponent piece is higher than the value of the player
+	// piece.  For example, the opponent One is unknown, but
+	// the opponent Two and Threes are known.  So the player
+	// Four is "invincible" (able to attack unknown pieces
+	// with good prospect), because if the opponent One
+	// is the unknown defender, the player still "wins",
+	// because then its other pieces become invincible.
+
+	// Note that the AI stealth values are used because the
+	// opponent stealth values are lower (explained elsewhere).
+	void genInvincibleRank()
+	{
+		for (int c = RED; c <= BLUE; c++) {
+		int lowUnknownRank = 1;
+		for (int rank = 2; rank<9;rank++) {
+			if (valueStealth[Settings.topColor][lowUnknownRank-1] > values[1-c][rank])
+				invincibleRank[1-c][rank-1] = true;
+				
+			if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
+				lowUnknownRank = rank;
+		}
 		}
 	}
 
@@ -1249,7 +1292,7 @@ public class TestingBoard extends Board
 		// search tree, but this can be rectified by deeper
 		// searching in the future.
 
-		//			if (p.hasMoved() || j <= invincibleRank[1-p.getColor()])
+		//			if (p.hasMoved() || j <= invincibleRankInt[1-p.getColor()])
 						continue;
 
 		// If the chasing rank is unknown, it is discouraged
@@ -1262,6 +1305,14 @@ public class TestingBoard extends Board
 				setFleePlan(1-p.getColor(), planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 				setFleePlan(1-p.getColor(), planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
 			}
+	}
+
+	protected void chaseWithExpendable(Piece p, int tmp[])
+	{
+		for ( int r : expendableRank ) {
+			genPlanA(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+			genPlanB(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+		}
 	}
 
 	protected void chaseWithUnknownExpendable(Piece p, int tmp[])
@@ -1314,8 +1365,10 @@ public class TestingBoard extends Board
 		//
 			int found = 0;
 			int minsteps = 99;
-			for (int j = chasedRank - 1; j > invincibleRank[1-p.getColor()]; j--)
-				if (knownRankAtLarge(1-p.getColor(),j) != 0
+			for (int j = chasedRank - 1; j > 0; j--)
+				if (isInvincible(1-p.getColor(),j))
+					continue;
+				else if (knownRankAtLarge(1-p.getColor(),j) != 0
 					&& Grid.steps(activeRank[1-p.getColor()][j-1].getIndex(), i) < minsteps) {
 					minsteps = Grid.steps(activeRank[1-p.getColor()][j-1].getIndex(), i);
 					found = j;
@@ -1384,8 +1437,10 @@ public class TestingBoard extends Board
 		// Note the use of GUARDED_OPEN.  See note below.
 		//
 			else
-			for (int j = chasedRank - 1; j > invincibleRank[1-p.getColor()]; j--)
-				if (rankAtLarge(1-p.getColor(),j) != 0) {
+			for (int j = chasedRank - 1; j > 0; j--)
+				if (isInvincible(1-p.getColor(), j))
+					continue;
+				else if (rankAtLarge(1-p.getColor(),j) != 0) {
 					Piece chaser = activeRank[1-p.getColor()][j-1];
 					if (chaser != null || rnd.nextInt(30) == 0) {
 						if (chaser != null && !chaser.isKnown())
@@ -1431,14 +1486,21 @@ public class TestingBoard extends Board
 				|| chasedRank == Rank.SPY.toInt())
 				chaseWithUnknownExpendable(p, destTmp[GUARDED_UNKNOWN]);
 
+		// Chase suspected low ranked pieces with known
+		// expendables to confirm their identity
+
+			if (p.isSuspectedRank() && chasedRank <= 3)
+				chaseWithExpendable(p, destTmp[GUARDED_UNKNOWN]);
+
 		} else if (p.hasMoved()) {
 		// chase unknown fleeing pieces as well
 			if (p.getActingRankFleeLow() != Rank.NIL
-				&& p.getActingRankFleeLow().toInt() <= 4)
-				for (int j = p.getActingRankFleeLow().toInt(); j > invincibleRank[1-p.getColor()]; j--)
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+				&& p.getActingRankFleeLow().toInt() <= 4) {
+				for (int j = p.getActingRankFleeLow().toInt(); j > 0; j--)
+					if (!isInvincible(1-p.getColor(),j))
+						genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 
-			else if (p.getActingRankFleeLow() == Rank.UNKNOWN) {
+			} else if (p.getActingRankFleeLow() == Rank.UNKNOWN) {
 				for ( int j : expendableRank ) {
 					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 					genPlanB(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
@@ -1465,15 +1527,14 @@ public class TestingBoard extends Board
 		// longer chase it.  This is how the AI tries to assess
 		// the rank of unknown piece without actually attacking it.
 		
-			for ( int j = 9; j > invincibleRank[1-p.getColor()]; j--)
-				if (knownRankAtLarge(1-p.getColor(), j) != 0) {
+			for ( int j = 9; j > 0; j--)
+				if (isInvincible(1-p.getColor(), j))
+					continue;
+				else if (knownRankAtLarge(1-p.getColor(), j) != 0) {
 					genPlanA(destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 					genPlanB(destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				}
-			for ( int j : expendableRank ) {
-				genPlanA(destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-				genPlanB(destTmp[GUARDED_UNKNOWN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-			}
+			chaseWithExpendable(p, destTmp[GUARDED_UNKNOWN]);
 				
 		} else { // unknown and unmoved
 
@@ -1564,10 +1625,9 @@ public class TestingBoard extends Board
 		// So this code is the best that the ai can do.
 		//
 
-		for (int j = 1;
-			j <= invincibleRank[1-p.getColor()]
-				&& j < chasedRank;
-			j++) {
+		for (int j = 1; j < chasedRank; j++) {
+			if (!isInvincible(1-p.getColor(), j))
+				continue;
 			if (rankAtLarge(1-p.getColor(),j) == 0)
 				continue;
 
@@ -1870,9 +1930,7 @@ public class TestingBoard extends Board
 		// away.
 		// TBD: If the active piece is able to defend, then
 		// use it.  Fix this in getDefender().
-		int r = defender.getRank().toInt();
-		activeRank[color][r-1] = defender;
-		genPlanA(destTmp3, color, r,  DEST_PRIORITY_DEFEND_FLAG);
+		setDefender(defender, destTmp3, DEST_PRIORITY_DEFEND_FLAG);
 	}
 
 	// Determine if piece at "index" is at risk of attack
@@ -1944,14 +2002,37 @@ public class TestingBoard extends Board
 		//
 		// This is exactly opposite the desired result.
 		// So in Version 9.4, the reward was increased and
-		// limited to only when absolutely necessary, when
-		// stepsDefender == stepsTarget.
+		// limited to only when absolutely necessary:
+		// (stepsTarget != 0 && stepsDefender != stepsTarget - 1)) // no imminent danger
+		//
+		// Yet this introduced another bug because the
+		// defender does not realize that it is the piece
+		// defending the flag and could wander off.
+		// So in version 9.5, the pre-9.4 comparison was
+		// restored, but cropped the reward to only
+		// the adjacent squares.
 
 		if (pDefender == null  	// attacker not stopable
-			|| (stepsTarget != 0 && stepsDefender != stepsTarget - 1)) // no imminent danger
+			|| (stepsTarget != 0 && stepsDefender < stepsTarget)) // no imminent danger
 			return null;
 
 		return pDefender;
+	}
+
+	void setDefender(Piece defender, int tmp[], int priority)
+	{
+		int [] adjacent = new int[121];
+		for (int j = 0; j <= 120; j++)
+			adjacent[j] = DEST_VALUE_NIL;
+		int di = defender.getIndex();
+		adjacent[di] = tmp[di];
+		for (int d: dir)
+			adjacent[di+d] = tmp[di+d];
+
+		int r = defender.getRank().toInt();
+		int color = defender.getColor();
+		activeRank[color][r-1] = defender;
+		genNeededPlanA(0, adjacent, color, r, priority);
 	}
 
 	// Because the search tree is so shallow that it is often
@@ -2046,9 +2127,7 @@ public class TestingBoard extends Board
 				Piece defender = getDefender(color, destTmp, pAttacker.getRank(), stepsAttacker);
 
 				if (defender != null) {
-					int r = defender.getRank().toInt();
-					activeRank[color][r-1] = defender;
-					genNeededPlanA(0, destTmp, color, r, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 				} else {
 					// TBD: try looking for an Eight
 				}
@@ -2059,9 +2138,7 @@ public class TestingBoard extends Board
 					defender = getDefender(color, destTmp, pProtector.getRank(), stepsProtector);
 					if (defender != null) {
 						int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
-						int r = defender.getRank().toInt();
-						activeRank[color][r-1] = defender;
-						genPlanA(destTmp4, color, r, DEST_PRIORITY_DEFEND_FLAG_AREA);
+						setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG_AREA);
 					}
 				}
 
@@ -2219,11 +2296,8 @@ public class TestingBoard extends Board
 
 				int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi + 22);
 				Piece defender = getDefender(color, destTmp, Rank.SEVEN, 0);
-				if (defender != null) {
-					int r = defender.getRank().toInt();
-					activeRank[color][r-1] = defender;
-					genPlanA(destTmp, color, r,  DEST_PRIORITY_DEFEND_FLAG_BOMBS);
-				}
+				if (defender != null)
+					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 			}
 		}
 	}
@@ -2817,7 +2891,7 @@ public class TestingBoard extends Board
 
 				&& (guard == Rank.NIL
 					|| !(p.hasMoved()
-						&& (isInvincible(guard, 1-color)
+						&& (isInvincible(1-color, guard.toInt())
 							|| guard == Rank.SPY))))
 				continue;
 
@@ -2843,7 +2917,7 @@ public class TestingBoard extends Board
 						if (result == Rank.WINS
 							|| result == Rank.UNK
 								&& !((guard == Rank.ONE && !hasSpy(color))
-									|| guard != Rank.ONE && isInvincible(guard,1-color)))
+									|| guard != Rank.ONE && isInvincible(1-color, guard.toInt())))
 							isGuarded = true;
 					} else if (!gp.isKnown())
 						isGuarded = true;
@@ -3217,11 +3291,17 @@ public class TestingBoard extends Board
 			int i = lastMove.getTo();
 			lastMovedPiece = getPiece(i);
 
-		// Even if the approaching piece already
-		// has a lower suspected rank,
-		// override it if it approaches an AI piece.
+		// Even if the approaching piece already has a lower
+		// suspected rank, override it if it approaches an AI piece.
+		// But if the chase rank was unknown, assume that the
+		// piece is bluffing.  Otherwise, the opponent can too
+		// easily bluff.
+		// TBD: Bluffing is why suspected rank analysis of the
+		// setup is required, so this override needs to be revisited.
 
-			if (lastMovedPiece != null && !lastMovedPiece.isKnown())
+			if (lastMovedPiece != null
+				&& !lastMovedPiece.isKnown()
+				&& lastMovedPiece.getActingRankChase() != Rank.UNKNOWN) {
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
 					if (tp == null
@@ -3243,6 +3323,7 @@ public class TestingBoard extends Board
 		
 				if (r != 10 && r <= lastMovedPiece.getRank().toInt())
 					setSuspectedRank(lastMovedPiece, getChaseRank(lastMovedPiece, r, false), false);
+			}
 
 		// set actingRankFlee temporarily on any AI pieces approached
 		// by an opponent piece.  When the AI evaluates any
@@ -3309,18 +3390,15 @@ public class TestingBoard extends Board
 		possibleBomb();
 	}
 
-	//
-	// TBD: this should be assigned in constructor statically
-	//
-	public boolean isInvincible(Rank rank, int color) 
+	public boolean isInvincible(int color, int r) 
 	{
-		return (rank.toInt() <= invincibleRank[color]);
+		return invincibleRank[color][r-1];
 	}
 
 	public boolean isInvincible(Piece p) 
 	{
 		Rank rank = p.getRank();
-		return isInvincible(rank, p.getColor());
+		return isInvincible(p.getColor(), rank.toInt());
 	}
 
 	//

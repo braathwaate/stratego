@@ -1435,9 +1435,16 @@ public class Board
 		if (oppmove3 == null)
 			return false;
 
+		UndoMove m4 = getLastMove(4);
+		if (m4 == null)
+			return false;
+
 		// player began two moves before opponent?
-		return !(oppmove3.getFrom() == oppmove1.getTo()
-			&& oppmove3.getTo() == oppmove1.getFrom());
+		return !(
+			(oppmove3.getFrom() == oppmove1.getTo()
+			&& oppmove3.getTo() == oppmove1.getFrom()
+			&& !(m4.getFrom() == m2.getTo()
+				&& m4.getTo() == m2.getFrom())));
 	}
 
 	public boolean isChased(int m)
