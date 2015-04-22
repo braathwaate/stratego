@@ -51,7 +51,8 @@ public class TestingBoard extends Board
 	private static final int DEST_VALUE_NIL = 9999;
 	private static final int GUARDED_OPEN = 0;
 	private static final int GUARDED_UNKNOWN = 1;
-	private static final int GUARDED_MOVED = 2;
+	private static final int GUARDED_OPEN_MOVED = 2;
+	private static final int GUARDED_MOVED = 3;
 
 	protected Piece[][] pieces = new Piece[2][41];	// piece arrays
 	protected int[] npieces = new int[2];		// piece counts
@@ -1062,42 +1063,6 @@ public class TestingBoard extends Board
 		}
 	}
 
-	// An unknown piece blocking the destination
-	// of a low ranked piece is worth discovering,
-	// because it might be bluffing.
-	// Perhaps it is blocking access to the flag?
-	//
-	// TBD: this code needs to be rethought out.  The goal is
-	// to handle situations like the following example:
-	// Red Two is cornered by unknown Blue, which probably is
-	// bluffing to keep Red Two corralled.
-	//
-	// -- -- R? R?
-	// B? -- R2 R?
-	// -- -- xx xx
-	// 
-	void targetUnknownBlockers()
-	{
-		for (int i=12;i<=120;i++) {
-			if (!Grid.isValid(i))
-				continue;
-			Piece tp = getPiece(i);
-			if (tp == null || tp.isKnown() || !tp.hasMoved())
-				continue;
-
-			// TBD: see below
-			// genDestTmp(false, tp.getColor(), i, DEST_PRIORITY_BLOCKER);
-			for (int lowr : importantRank) {
-				Piece fp = activeRank[1-tp.getColor()][lowr-1];
-				if (fp != null
-					&& planv(planA[fp.getColor()][lowr-1], fp.getIndex(), i) > DEST_PRIORITY_CHASE) {
-					tp.setBlocker(true);
-
-				}
-			}
-		}
-	}
-
 	// Low rank piece discovery is much more important
 	// than finding the structure that contains the flag.
 	// The structure will become evident
@@ -1751,7 +1716,7 @@ public class TestingBoard extends Board
 			&& isWinning(1-p.getColor()) >= 0) {
 
 			// go for an even exchange
-			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, p.getRank());
+			int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, p.getRank());
 			genNeededPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), chasedRank, DEST_PRIORITY_CHASE);
 		}
 	}
@@ -1845,7 +1810,7 @@ public class TestingBoard extends Board
 			int bi = flagi + d;
 			Piece bp = getPiece(bi);
 			if (bp != null && bp.getRank() == Rank.BOMB) {
-				int[] destTmp = genDestTmpGuarded(color, bi, Rank.EIGHT);
+				int[] destTmp = genDestTmpGuardedOpen(color, bi, Rank.EIGHT);
 				genNeededPlanA(0, destTmp, 1-color, 8,  DEST_PRIORITY_ATTACK_FLAG);
 			}
 		}
@@ -1930,7 +1895,8 @@ public class TestingBoard extends Board
 		// away.
 		// TBD: If the active piece is able to defend, then
 		// use it.  Fix this in getDefender().
-		setDefender(defender, destTmp3, DEST_PRIORITY_DEFEND_FLAG);
+		int destTmp4[] = genDestTmpGuarded(1-color, targetIndex, pAttacker.getRank());
+		setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG);
 	}
 
 	// Determine if piece at "index" is at risk of attack
@@ -2021,18 +1987,10 @@ public class TestingBoard extends Board
 
 	void setDefender(Piece defender, int tmp[], int priority)
 	{
-		int [] adjacent = new int[121];
-		for (int j = 0; j <= 120; j++)
-			adjacent[j] = DEST_VALUE_NIL;
-		int di = defender.getIndex();
-		adjacent[di] = tmp[di];
-		for (int d: dir)
-			adjacent[di+d] = tmp[di+d];
-
 		int r = defender.getRank().toInt();
 		int color = defender.getColor();
 		activeRank[color][r-1] = defender;
-		genNeededPlanA(0, adjacent, color, r, priority);
+		genNeededPlanA(0, tmp, color, r, priority);
 	}
 
 	// Because the search tree is so shallow that it is often
@@ -2137,7 +2095,7 @@ public class TestingBoard extends Board
 				if (stepsProtector < stepsAttacker) {
 					defender = getDefender(color, destTmp, pProtector.getRank(), stepsProtector);
 					if (defender != null) {
-						int[] destTmp4 = genDestTmp(GUARDED_OPEN, color, pProtector.getIndex());
+						int[] destTmp4 = genDestTmpGuarded(1-color, pProtector.getIndex(), pProtector.getRank());
 						setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG_AREA);
 					}
 				}
@@ -2803,7 +2761,7 @@ public class TestingBoard extends Board
 		// Send the miner(s)
 		// multiple structures can be investigated in parallel
 
-			int destTmp[] = genDestTmpGuarded(p.getColor(), j, Rank.EIGHT);
+			int destTmp[] = genDestTmpGuardedOpen(p.getColor(), j, Rank.EIGHT);
 			genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
 			genPlanB(destTmp, 1-p.getColor(), 8, DEST_PRIORITY_LOW);
 		}
@@ -2891,12 +2849,13 @@ public class TestingBoard extends Board
 
 				&& (guard == Rank.NIL
 					|| !(p.hasMoved()
-						&& (isInvincible(1-color, guard.toInt())
-							|| guard == Rank.SPY))))
+						&& guarded == GUARDED_MOVED)))
 				continue;
 
 		// check for guarded squares
-			if ((guarded == GUARDED_MOVED || guarded == GUARDED_UNKNOWN) && j != to) {
+			if ((guarded == GUARDED_MOVED
+				|| guarded == GUARDED_UNKNOWN
+				|| guarded == GUARDED_OPEN_MOVED) && j != to) {
 				boolean isGuarded = false;
 				for (int d : dir) {
 					int i = j + d;
@@ -2909,7 +2868,7 @@ public class TestingBoard extends Board
 						|| gp.getColor() != color)
 						continue;
 
-					if (guarded == GUARDED_MOVED) {
+					if (guarded == GUARDED_MOVED || guarded == GUARDED_OPEN_MOVED) {
 						if (!gp.hasMoved())
 							continue;
 					
@@ -2944,6 +2903,11 @@ public class TestingBoard extends Board
 	private int[] genDestTmp(int guarded, int color, int to)
 	{
 		return genDestTmpCommon(guarded, color, to, Rank.NIL);
+	}
+
+	private int[] genDestTmpGuardedOpen(int color, int to, Rank guard)
+	{
+		return genDestTmpCommon(GUARDED_OPEN_MOVED, color, to, guard);
 	}
 
 	private int[] genDestTmpGuarded(int color, int to, Rank guard)
@@ -3433,7 +3397,7 @@ public class TestingBoard extends Board
 		neededRank[color][rank-1] = true;
 	}
 
-	public int planv(int [][] plan, int from, int to)
+	public int planv(int [][] plan, int from, int to, int depth)
 	{
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
@@ -3469,6 +3433,9 @@ public class TestingBoard extends Board
 
 				if (priority == DEST_PRIORITY_FLEE)
 					return (vfrom - vto) * priority;
+				else if (priority >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
+					return 0;
+
 				else if (vfrom == vto + 1)
 					return priority;
 				else
@@ -3480,18 +3447,18 @@ public class TestingBoard extends Board
 	// Give Plan A value to one piece of a rank
 	// and Plan B value to the rest of the pieces
 	// if the piece has moved or is known
-	public int planValue(Piece fp, int from, int to)
+	public int planValue(Piece fp, int from, int to, int depth)
 	{
 		int fpcolor = fp.getColor();
 		int r = fp.getRank().toInt() - 1;
 
 		if (activeRank[fpcolor][r] == fp
 			|| activeRank[fpcolor][r] == null && neededRank[fpcolor][r])
-			return planv(planA[fpcolor][r], from, to);
+			return planv(planA[fpcolor][r], from, to, depth);
 		else if (fp.hasMoved()
 				|| fp.isKnown()
 				|| neededRank[fpcolor][r])
-			return planv(planB[fpcolor][r], from, to);
+			return planv(planB[fpcolor][r], from, to, depth);
 		return 0;
 	}
 
@@ -3626,7 +3593,7 @@ public class TestingBoard extends Board
 
 		if (tp == null) { // move to open square
 
-			vm += planValue(fp, Move.unpackFrom(m), Move.unpackTo(m));
+			vm += planValue(fp, Move.unpackFrom(m), Move.unpackTo(m), depth);
 			if (unknownScoutFarMove) {
 				vm -= stealthValue(fp);
 				makeKnown(fp);
@@ -4786,11 +4753,20 @@ public class TestingBoard extends Board
 		if (r >= 5 && lowestUnknownExpendableRank >= r)
 			r = 5;
 
+		// unknownValue() should be more positive than a LOSS.
+		// For example, if an AI piece has a choice between
+		// a suspected Five and an unknown piece, it should attack
+		// the unknown piece.  So if the piece is a Six or higher,
+		// it gains the stealth value of a Four.
+
+		else if (r > 6)
+			r = 6;
+
 		// Once all the expendable ranks are gone,
 		// the AI can expect to receive more stealth value
 		// in an unknown exchange.
 
-		else if (lowestUnknownExpendableRank < 5)
+		if (lowestUnknownExpendableRank < 5)
 			r = Math.min(r, lowestUnknownExpendableRank);
 
 		int tpvalue = 0;

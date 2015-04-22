@@ -501,32 +501,27 @@ public class AI implements Runnable
 		// Red has the move.  But no moves will be generated
 		// for it because it is too far from Blue Eight
 		// to result in a material change, i.e. R7xR8 is
-		// avoidable, so the AI will look to its other pieces on
-		// board or resort to a null move and examine the
-		// pre-processing values.
+		// avoidable.
 		//
 		// But Blue Eight is threatening to attack the bomb
 		// structure. And obviously the bombs and flags cannot
 		// simply run away.
 		//
-		// So the AI must consider defensive moves outside of
-		// the pruning area as well.  Rather than doubling the
-		// pruning area, defensive moves are determined
-		// by pre-processing, and so the search examines
-		// moves towards these goals,
-		// even if the moves are outside of the pruning area.
+		// Pre-processing determined that R7 moving left
+		// is essential to protect the bomb structure, so
+		// assigned the highest pre-processing value.  This will
+		// mean that the move will be picked as the best
+		// pruned off move and then added to the root move list.
 
 			if (n > 0) {
 				if (!allowAll
-					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)
-					&& b.planValue(fp, i, t) <= 1))
+					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)))
 					isPruned = true;
 				else
 					addMove(moveList.get(APPROACH), i, t);
 			} else if (n < 0) {
 				if (!allowAll
-					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)
-					&& b.planValue(fp, i, t) <= 1))
+					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)))
 					addMove(moveList.get(APPROACH), i, t);
 				else
 					isPruned = true;
@@ -1086,8 +1081,8 @@ public class AI implements Runnable
 			b.undo();
 			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
 			
-			if (vm > bestMoveValue - 10
-				|| vm > bestMovePlyValue - 10) {
+			if (vm >= bestMoveValue - 5
+				|| vm >= bestMovePlyValue - 5) {
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
 			} else {
