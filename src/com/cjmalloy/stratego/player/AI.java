@@ -1086,7 +1086,7 @@ public class AI implements Runnable
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
 			} else {
-				log(PV, "\nPV:" + n + " " + bestMoveValue + " >" + vm + ": best move discarded.");
+				log(PV, "\nPV:" + n + " " + vm + " < " + bestMoveValue + "," + bestMovePlyValue + ": best move discarded.");
 				log("<<< singular extension");
 				continue;
 			}

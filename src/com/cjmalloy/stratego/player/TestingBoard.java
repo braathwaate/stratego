@@ -86,6 +86,7 @@ public class TestingBoard extends Board
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
 	protected UndoMove lastMove;
+	protected Piece lastMovedPiece;
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -621,11 +622,11 @@ public class TestingBoard extends Board
 		// so that needs to be called later.
 
 		setUnmovedValues();	// chase and possibleFlag depend on this
-		possibleFlag();
-		aiFlagSafety(); // depends on possibleFlag
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
 		genInvincibleRank();	// depends on stealth
+		possibleFlag();
+		aiFlagSafety(); // depends on possibleFlag, valueStealth, values
 
 		{
 		// Revalue expendable pieces based on piece count difference.
@@ -3249,8 +3250,8 @@ public class TestingBoard extends Board
 
 		{
 		int r = 10;
-		UndoMove lastMove = getLastMove(1);
-		Piece lastMovedPiece = null;
+		lastMove = getLastMove(1);
+		lastMovedPiece = null;
 		if (lastMove != null) {
 			int i = lastMove.getTo();
 			lastMovedPiece = getPiece(i);
@@ -5564,11 +5565,8 @@ public class TestingBoard extends Board
 		// an indicator that the attacker is not dead set
 		// on attacking.
 
-		if (lastMove != null) {
-			int i = lastMove.getTo();
-			Piece lastMovedPiece = getPiece(i);
-			if (fp != lastMovedPiece)
-				risk /= 2;
+		if (fp != lastMovedPiece)
+			risk /= 2;
 
 		// This program has a big unsolved problem with
 		// the horizon effect, particularly when the Spy
@@ -5589,11 +5587,10 @@ public class TestingBoard extends Board
 		// generation is limited to 1 space of separation in AI.java,
 		// so the horizon effect is limited as well.
 
-			else if (fprank != Rank.NINE 
-				&& !unknownScoutFarMove
-		  		&& Grid.steps(tp.getIndex(), i) > 2)
+		else if (fprank != Rank.NINE 
+			&& !unknownScoutFarMove
+			&& Grid.steps(tp.getIndex(), lastMove.getTo()) > 2)
 				return apparentV;
-		}
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
@@ -6298,6 +6295,9 @@ public class TestingBoard extends Board
 
 	int pieceValue(Piece p)
 	{
+		int v = p.aiValue();
+		if (v != 0)
+			return v;
 		return values[p.getColor()][p.getRank().toInt()];
 	}
 
