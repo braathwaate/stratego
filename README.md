@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.9.4][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.4/stratego_v0.9.4.jar
+[Stratego player v0.9.5][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.5/stratego_v0.9.5.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -114,6 +114,21 @@ Red has the move.  Without pointless move reduction, it would take many ply to d
 This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  One issue is how much to weight suspected pieces given a bluffing opponent.
 ## Suspected Rank Analysis.
 This the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but this gives it significant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.  Yet against a skilled human opponent, the AI is a patsy. Why?  Because humans much more easily guess the rank of the opponent unknown pieces.  This human ability needs to be distilled into algorithms that gives the AI the same advantage.
+
+V. de Boer advocates a probabilistic approach, which each piece assigned a probability for each the 12 ranks that it might be.  The probabilities are adjusted based on piece movements such as when opponent pieces migrate away from or towards areas of known player pieces.  Some simple setup information is also considered, such as the Spy is favored to be adjacent or behind the opponent General. This strategy is complicated by bluffing, as unknown lesser pieces then can bluff and push superior pieces into the arms of waiting attackers.
+
+Demon Of Ignorance saves history about piece encounters factually, not probabilistically.  For example, when an piece approaches a opposing piece, the encounter is recorded, and the approaching piece is assigned a chase rank.  Similarly, if a piece flees an opposing piece, the fleeing piece is assigned a flee rank.  The question then becomes how to use this recorded information in the heuristic, because chasers can bluff and superior fleers can flee to avoid discovery.  But it is important that the event does not degrade or be expunged by subsequent piece movements.
+
+To reduce the effect of bluffing,
+it is imperative that when evaluating the risk and reward of an attack
+(perhaps on a known opponent piece that was recently discovered),
+assumptions must be made about the opponent setup,
+and the attack must then be executed fully, ignoring opponent unknown piece attempts at rebuff.
+
+The Stratego bot Probe 2 makes guesses about the opponent setup, favoring the Marshal and General to attack unknown unmoved pieces on the front row below the lakes.  This strategy, once discovered, allows a player to place bombs below the lakes (an unusual setup from an advanced player point of view) and win Probe's Marshal and General in a high percentage of games.  Yet it demonstrates the correct approach: formulate an attack based on risk and reward, and stick to it.  However,  Probe suffers from susceptibility to bluffing by any piece. Thus any unknown chaser is assumed to be of superior rank, and the opponent can push Probe's superior pieces at will.
+
+Probe 2 is also frequently successful at identifying the opponent location of the flag, perhaps by looking at setup information or pattern matching.
+
 ##  Plans.
 There are very few plans.
 1. Chase opponent pieces that that could result in a favorable exchange.
@@ -162,3 +177,4 @@ and revealed pieces.
 
 [Invincible. A Stratego Bot, V. de Boer](http://www.kbs.twi.tudelft.nl/Publications/MSc/2008-deBoer-Msc.html).
 
+[Probe 2. Three Time Computer Stratego World Champion](http://www.probe.imersatz.com).
