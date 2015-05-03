@@ -729,6 +729,7 @@ public class AI implements Runnable
 		int tmpM = 0;
 		bestMove = 0;
 		int bestMoveValue = 0;
+		int ncount = 0;
 
 		// Because of substantial pre-processing before each move,
 		// the entries in the transposition table
@@ -1073,23 +1074,34 @@ public class AI implements Runnable
 		// the value of the new best move searched 2 plies deeper.
 		// is better (or just slightly worse) than the current
 		// best move or new best move.
-		
+
 			log(">>> singular extension");
 
 			MoveType mt = makeMove(n, 0, bestMovePly);
 			vm = -negamax(n+1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
 			b.undo();
 			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
-			
-			if (vm >= bestMoveValue - 5
-				|| vm >= bestMovePlyValue - 5) {
+
+		// The new move is kept until the ply deepens beyond the depth
+		// of the singular extension, because at that point, the
+		// value is no longer valid, because it was calculated
+		// below the current ply.  Because ply 1 is not searched
+		// with a singular extension, that means that ply 2 always
+		// selects a new move.
+
+			if (bestMove == bestMovePly
+				|| vm >= bestMoveValue - 5
+				|| vm >= bestMovePlyValue - 5
+				|| ncount-- == 0) {
 				bestMove = bestMovePly;
 				bestMoveValue = vm;
+				ncount = 2;
 			} else {
 				log(PV, "\nPV:" + n + " " + vm + " < " + bestMoveValue + "," + bestMovePlyValue + ": best move discarded.");
 				log("<<< singular extension");
 				continue;
 			}
+
 		}
 
 		hh[bestMove]+=n;
@@ -1245,9 +1257,9 @@ public class AI implements Runnable
 
 	private int qs(int depth, int n, boolean flee, int nullbest, int dvr)
 	{
-		int bvalue = negQS(b.getValue());
+		int bvalue = negQS(b.getValue() + dvr);
 		if (n < 1)
-			return bvalue + dvr;
+			return bvalue;
 
 		boolean bestFlee = false;
 		Piece bestTp = null;
@@ -1404,7 +1416,7 @@ public class AI implements Runnable
 		// qs is valueB
 
 		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return negQS(valueB) + dvr;
+			return negQS(valueB + dvr);
 
 		// valueBluff() checks for a prior move capture,
 		// so qscache is invalid in this case

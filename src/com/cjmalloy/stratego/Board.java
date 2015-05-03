@@ -507,6 +507,7 @@ public class Board
 
 		// movement aways
 		int from = Move.unpackFrom(m);
+		int chaserank = 99;
 		for (int d : dir) {
 			int chaser = from + d;
 			if (!Grid.isValid(chaser))
@@ -519,14 +520,23 @@ public class Board
 				if (rank == Rank.BOMB)
 					continue;
 
-				// if the chase piece is protected,
-				// nothing can be guessed about the rank
-				// of the fleeing piece.  It could be
-				// fleeing because it is a high ranked
-				// piece but it could also be
-				// a low ranked piece that wants to attack
-				// the chase piece, but does not because
-				// of the protection.
+		// New in version 9.5
+		// If the opponent piece flees, it can delay the setting
+		// of implicit flee rank if the piece
+		// is unknown or of equal or lower rank than a piece
+		// under attack elsewhere on the board.
+
+				chaserank = fp.getApparentRank().toInt();
+
+		// if the chase piece is protected,
+		// nothing can be guessed about the rank
+		// of the fleeing piece.  It could be
+		// fleeing because it is a high ranked
+		// piece but it could also be
+		// a low ranked piece that wants to attack
+		// the chase piece, but does not because
+		// of the protection.
+
 				if (isProtectedFlee(chasePiece, fp, chaser))
 					continue;
 
@@ -566,9 +576,9 @@ public class Board
 
 		// New code in Version 9.5.
 		// Check for a possible delay before setting the flee rank.
-		// - if the player chases an equal or lower ranked piece
+		// - if the player chases an unknown or an equal or
+		// lower ranked piece
 		int to = Move.unpackTo(m);
-		int chaserank = 99;
 		for (int d : dir) {
 			int j = to + d;
 			if (!Grid.isValid(j))
@@ -581,6 +591,12 @@ public class Board
 			if (rank.toInt() <  chaserank)
 				chaserank = rank.toInt();
 		}
+
+		// New in version 9.5
+		// If an unknown piece flees or is chased,
+		// delay the setting of implicit flee rank.
+		if (chaserank == Rank.UNKNOWN.toInt())
+			return;
 
 		for ( int i = 12; i <= 120; i++) {
 			if (i == from)
@@ -604,7 +620,7 @@ public class Board
 
 				Rank rank = op.getApparentRank();
 				if (rank == Rank.BOMB
-					|| rank.toInt() > chaserank)	// new in version 9.5
+					|| rank.toInt() >= chaserank)	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
@@ -705,10 +721,10 @@ public class Board
 		// an unknown piece as a protector, even if the protector
 		// is not a lower ranked piece (i.e. bluffing).
 		// For example,
-		// -- -- xx xx
-		// -- -- B4 R3
-		// -- R2 -- B?
-		// -- -- -- --
+		// -- -- xx xx --
+		// -- -- B4 R3 --
+		// -- R2 -- B? --
+		// -- -- -- -- --
 		// Blue Four is chased by Red Three, which then moves down
 		// next to Red Two.  Red Two is invincible only because
 		// Blue One is unknown but has a suspected chase rank elsewhere
@@ -718,6 +734,34 @@ public class Board
 			Move m = getLastMove();
 			if (m.getPiece() == chased)
 				return;
+
+		// If a chased piece was forked, the player had to choose
+		// a piece to be left subject to attack.  Thus if the piece
+		// happens to have an adjacent unknown piece which could
+		// be construed as a protector, do not set the chase rank.
+		// For example,
+		// xx xx -- --
+		// -- B4 R3 --
+		// -- B? B5 --
+		// -- -- -- --
+		// Red Three has forked Blue Four and Blue Five.  Unknown
+		// Blue is a suspected isolated bomb.  Blue Four moves
+		// left, leaving Blue Five subject to attack.  Do not
+		// set a chase rank on unknown Blue.
+		//
+		// TBD: Note that the following check fails if Blue did not
+		// move one of the forked pieces.
+		// For example,
+		// xx xx -- --
+		// -- B4 R3 --
+		// -- B? B4 --
+		// -- -- -- --
+		// Blue knows it will lose a Four, so neither flees.
+		// The AI assigns a suspected chase rank to unknown Blue,
+		// which happens to be an isolated bomb.
+
+		if (Grid.isAdjacent(m.getFrom(), chaser.getIndex()))
+			return;
 
 		// If both the chased piece and the protector are unknown,
 		// and the chased piece approached the chaser
@@ -1044,8 +1088,10 @@ public class Board
 				chased2 = getPiece(k);
 				if (chased2 == null
 					|| chased2.getColor() == turn
-					|| chased2 == chased)
+					|| chased2 == chased) {
+					chased2 = null;
 					continue;
+				}
 
 				if (!chased.isKnown()
 					&& chased2.isKnown()
@@ -1098,7 +1144,7 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-					if (chaser.getRank().toInt() >= 5)
+					if (chaser.getApparentRank().toInt() >= 5)
 						continue;
 				}
 
@@ -1339,18 +1385,6 @@ public class Board
 	// pieces, allowing it to see the effect of the two squares
 	// rule much earlier in the search tree.
 	//
-	// If the target square has an escape square,
-	// the code must allow the move.  For example,
-	// xx xx xx xx		R? -- -- --
-	// -- R3 -- R?		-- R3 R? --
-	// -- -- -- --		-- -- -- --
-	// -- B2 -- --		-- B2 -- --
-	//
-	// Blue Two has the move and approaches Red Three.
-	// If R3 moves to the left, it must be allowed to return
-	// back to its original position, because the target
-	// square has an escape route.
-	//
 	// Note that this rule works even if chaser and chased pieces
 	// are far away.  For example,
 	// xx xx xx
@@ -1403,14 +1437,45 @@ public class Board
 		if (!Grid.isAdjacent(m))
 			return false;
 
-		// test for escape square (which allows move)
-		int count = 0;
-		for (int d : dir)
-			if (getPiece(to + d) == null) {
-				count++;
-				if (count == 2)
-					return false;
-			}
+		// If the target square has an opposite escape square,
+		// the code must allow the move.  For example,
+		// xx xx xx xx
+		// -- R3 -- R?
+		// -- -- -- --
+		// -- B2 -- --
+		//
+		// Blue Two has the move and approaches Red Three.
+		// If R3 moves to the left, it must be allowed to return
+		// back to its original position, because the target
+		// square has an escape route.
+		//
+		// Version 9.5 added code to handle the following case.
+		// R? -- -- --
+		// -- R3 R? --
+		// -- -- -- --
+		// -- B2 -- --
+		//
+		// The idea was to allow R3 to move back right after
+		// it moved left.  But this is a pointless move, and
+		// the transposition table erroneously returns the value
+		// from the stored position when B2 tries to move back
+		// to the right to chase R3.  But that stored value is
+		// not valid, because R3 began the two squares sequence
+		// and will be forced to use the escape route next.
+		// For example,
+		// R? -- R? --
+		// -- R3 R? --
+		// -- -- -- --
+		// -- B2 -- --
+		// Because R3 will be forced to use the escape square above
+		// it, it will soon become trapped, with a very negative value.
+		// So Version 9.6 removed the 9.5 code and replaced it
+		// with the 9.3 test for three squares.
+
+		// test for three squares (which is allowed)
+		Piece p = getPiece(to + to - from);
+		if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
+			return false;
 
 		// fleeing is OK, even if back to the same square
 		// for example,
@@ -1431,20 +1496,59 @@ public class Board
 			return false;
 		int oppFrom1 = oppmove1.getFrom();
 
+		// This rule checks if the player move is forced.  If the
+		// player is returning to the same square and the
+		// opponent was doing something else on the board,
+		// it could still lead to a two squares result, but
+		// no two squares prediction can be made because the move
+		// was not forced.  For example,
+		// -- R9 xx
+		// B4 -- B1
+		// -- -- --
+		// -- -- B? 
+		// Unknown but suspected Blue One moves down.  Red Nine
+		// moves down two squares to begin a two squares sequence
+		// to be able to attack Blue One and confirm its identity.
+		// When the move back to its original square is considered,
+		// isPossibleTwoSquares() returns false because Blue's
+		// first move was not forced, and in order to force
+		// Blue to move back down, Red Nine would have to move
+		// up one square, subjecting it to attack by Blue Four.
+
+		// Determine if the player move is forced.
+		// Opponent and player pieces not alternating
+		// in the same column or row?
+		if ((oppmove1.getToX() != Grid.getX(from)
+			&& oppmove1.getToY() != Grid.getY(from))
+			|| (oppmove1.getFromX() != Grid.getX(to)
+			&& oppmove1.getFromY() != Grid.getY(to)))
+			return false;
+
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)
 			return false;
+
+		// player began two moves before opponent?
+
+		if (!(oppmove3.getFrom() == oppmove1.getTo()
+			&& oppmove3.getTo() == oppmove1.getFrom()))
+			return true;
 
 		UndoMove m4 = getLastMove(4);
 		if (m4 == null)
 			return false;
 
-		// player began two moves before opponent?
-		return !(
-			(oppmove3.getFrom() == oppmove1.getTo()
-			&& oppmove3.getTo() == oppmove1.getFrom()
-			&& !(m4.getFrom() == m2.getTo()
-				&& m4.getTo() == m2.getFrom())));
+		if (!(m4.getFrom() == m2.getTo()
+			&& m4.getTo() == m2.getFrom()))
+			return false;
+
+		UndoMove oppmove5 = getLastMove(5);
+		if (oppmove5 == null)
+			return false;
+
+		return !(oppmove5.getFrom() == oppmove3.getTo()
+			&& oppmove5.getTo() == oppmove3.getFrom());
+
 	}
 
 	public boolean isChased(int m)
