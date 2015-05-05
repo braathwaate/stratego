@@ -68,7 +68,7 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
 	private TTEntry[] ttable = new TTEntry[2<<22]; // 4194304
-	private final int QSMAX = 2;	// maximum qs search depth
+	private final int QSMAX = 6;	// maximum qs search depth
 	int bestMove = 0;
 	long stopTime = 0;
 	int moveRoot = 0;
@@ -1112,67 +1112,12 @@ public class AI implements Runnable
 		} // iterative deepening
 	}
 
-
-	// return true if a piece is safely movable.
-	// Safely movable means it has an open space
-	// or can attack a known piece of lesser rank.
-	private boolean isMovable(int i)
-	{
-		Piece fp = b.getPiece(i);
-		Rank rank = fp.getRank();
-		if (rank == Rank.FLAG || rank == Rank.BOMB)
-			return false;
-		for (int d: dir) {
-			int j = i + d;
-			Piece tp = b.getPiece(j);
-			if (tp == null)
-				return true;
-			if (tp.getColor() != 1 - fp.getColor()
-				|| b.isLosingMove(fp, tp))
-				continue;
-			return true;
-		}
-		return false;
-	}
-			
-
 	// Quiescence Search (qs)
-	// Deepening the tree to evaluate captures and recaptures.
+	// Deepening the tree to evaluate worthwhile captures
+	// and flee moves.  The search ends when the position becomes
+	// quiescent (no more worthwhile captures) or limited by
+	// QSMAX ply.
 	// 
-	// This version gives no credit for the "best attack" on a movable
-	// piece on the board because it is likely the opponent will move
-	// the defender the very next move.  This prevents the ai
-	// from thinking it has won or lost at the end of
-	// a chase sequence, because otherwise the qs would give value when
-	// (usually, unless cornered) the chase sequence can be extended
-	// indefinitely without any material loss or gain.
-	//
-	// If credit were given for the "best attack", it would mean that
-	// the ai would allow one of its pieces to be captured in exchange
-	// for a potential attack on a more valuable piece.  But it is
-	// likely that the the opponent would just move the valuable piece
-	// away until the Two Squares or More Squares rule kicks in.
-	//
-	// qs can handle complicated evaluations:
-	// -- -- --
-	// -- R7 --
-	// R4 B3 R3
-	//
-	// Red is AI and has the move.
-	//
-	// 1. Fleeing is considered first.  Fleeing will return a negative
-	// board position (B3xR7) because the best that Red can do is to move
-	// R4.
-	//
-	// 2. The captures R4xB3, R3xB3 and R7xB3 are then evaluated,
-	// along with the Blue responses.  
-	//
-	// Because R3xB3 removes B3 from the board, the board position
-	// after blue response will be zero.
-	//
-	// Hence, the capture board position (0) is greater than the flee board
-	// position (-), so qs will return zero.
-	//
 	// I had tried to use Evaluation Based Quiescence Search
 	// as suggested by Schaad, but found that it often returned
 	// inaccurate results, even when recaptures were considered.
@@ -1188,30 +1133,6 @@ public class AI implements Runnable
 	// that as the tree is deepened further by coding improvements,
 	// the difference in strength will become far more noticeable,
 	// because accuracy is necessary for optimal alpha-beta pruning.
-	//
-	// Test Example.
-	// RB
-	// R4 R2
-	// B3
-	// Blue has the move.  Board value is 0.
-	// (flee=f)
-	// 1x. B3xR4
-	// 2x. R2xB3, vm = -100 + 200 = 100
-	// 2n. set flee=t, max=100
-	// 3x. B3xRB, B3xR2, -200
-	// 3. return -100
-	// 2. return 100
-	// 1x. vm = -100
-	// 1n. set flee=t, max=0
-	// 2x. R4xB3
-	// 3x. No captures, vm=-9999
-	// 3n. set flee=t, max=100
-	// 4x. No captures, vm=-9999
-	// 4. return -100
-	// 3. return 100
-	// 2x. vm = -100
-	// 2n. return 0
-	// 1. qs=0
 	//
 	// This version of quiescent search limits the
 	// horizon effect because captures often are the best
@@ -1255,16 +1176,13 @@ public class AI implements Runnable
 	// Thus it may leave material at risk to keep its chase piece
 	// near the flag.  
 
-	private int qs(int depth, int n, boolean flee, int nullbest, int dvr)
+	private int qs(int depth, int n, int alpha, int beta, int dvr)
 	{
 		int bvalue = negQS(b.getValue() + dvr);
 		if (n < 1)
 			return bvalue;
 
-		boolean bestFlee = false;
-		Piece bestTp = null;
 		int best = -9999;
-		int nextBest = best;
 
 		// Note: the following code snippet is faster,
 		// especially for dense bitmaps:
@@ -1307,8 +1225,7 @@ public class AI implements Runnable
 
 		// TBD: Far attacks by nines or unknown pieces
 		// are not handled.  This would improve the
-		// accuracy of qs.  isMovable() would have to
-		// check the direction of the attack.
+		// accuracy of qs.
 		//
 		// TBD: Another reason to handle far attacks is
 		// the deep chase code.  It relies on qs, so
@@ -1328,13 +1245,22 @@ public class AI implements Runnable
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
 		//
+			boolean tryFlee = false;
+			for (int flee = 0; flee < 2; flee++) {
+			if (flee == 1 && !tryFlee)
+				break;
 			for (int d : dir ) {
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null
-					|| tp == Grid.water
-					|| b.bturn == tp.getColor()
+				if (tp == null) {
+					if (flee == 0)
+						continue;
+				} else {
+					if (flee == 1)
+						continue;
+					if (tp.getColor() != 1 - b.bturn)
+						continue;
 
 		// Don't evaluate obvious losing moves to save time
 		// (such as attacking a known lower ranked piece).
@@ -1344,13 +1270,16 @@ public class AI implements Runnable
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
 
-					|| b.isLosingMove(fp, tp))
-					continue;
+					if (b.isLosingMove(fp, tp)) {
+						tryFlee = true;
+						continue;
+					}
+				}
 
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-				int vm = -qs(depth+1, n-1, false, 0, dvr + depthValueReduction(depth+1));
+				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
 
 				b.undo();
 				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
@@ -1363,49 +1292,35 @@ public class AI implements Runnable
 		// on the same piece, because if it flees,
 		// it nullifies both attacks.
 
-				if (vm > best) {
-					if (tp != bestTp)
-						nextBest = best;
+				if (vm > best)
 					best = vm;
-					bestTp = tp;
-					if (flee && isMovable(t))
-						bestFlee = true;
 
-				} else if (vm > nextBest && tp != bestTp)
-					nextBest = vm;
+				alpha = Math.max(alpha, vm);
+
+				if (alpha >= beta)
+					return vm;
 			} // dir
-		} // pieces
-		} // k
-
-		if (bestFlee)
-			best = nextBest;
-
-		int vm;
+			} // flee
+		} // data
+		} // bi
 
 		// If the opponent move was null and the player move
 		// is null, then the result is the same as if neither
 		// player move was null.  This can be thought of as
 		// a simple transposition cache.  It also prevents
 		// the search continuing ad infinitem.
-		if (flee)
-			vm = nullbest;
-		else {
-			nullbest = Math.max(bvalue, best);
-			// try fleeing
-			b.pushNullMove();
-			vm = -qs(depth+1, n, true, -nullbest, dvr);
-			b.undo();
-		}
 
-		// log(DETAIL, "   qs(" + n + "n.):" + logMove(b, n, 0, MoveType.OK) + " " + b.getValue() + " " + negQS(vm) + " " + flee);
+		if (b.getLastMove() == null)
+			return Math.max(best, bvalue);
 
-		if (vm > best)
-			return vm;
+		b.pushNullMove();
+		int vm = -qs(depth+1, n-1, -beta, -alpha, dvr);
+		b.undo();
 
-		return best;
+		return	Math.max(vm, best);
 	}
 
-	private int qscache(int depth, int dvr)
+	private int qscache(int depth, int alpha, int beta, int dvr)
 	{
 
 		BitGrid bg = new BitGrid();
@@ -1421,7 +1336,7 @@ public class AI implements Runnable
 		// valueBluff() checks for a prior move capture,
 		// so qscache is invalid in this case
 
-		return qs(depth, QSMAX, false, 0, dvr);
+		return qs(depth, QSMAX, alpha, beta, dvr);
 /*
 
 		UndoMove um = b.getLastMove();
@@ -1629,7 +1544,7 @@ public class AI implements Runnable
 				&& b.getLastMove() != null
 				&& b.getLastMove().tp != null
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
-			vm = qscache(depth, dvr);
+			vm = qscache(depth, alpha, beta, dvr);
 			// save value of position at hash 0 (see saveTTEntry())
 			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm-dvr, -1);
 			return vm;
