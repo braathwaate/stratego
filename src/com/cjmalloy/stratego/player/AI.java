@@ -348,9 +348,6 @@ public class AI implements Runnable
 			if (p != null)
 				continue;
 
-		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks and far rank
-
 			t += d;
 			p = b.getPiece(t);
 
@@ -361,6 +358,10 @@ public class AI implements Runnable
 				&& p.getColor() != 1 - fpcolor)
 				continue;
 			while (p == null) {
+
+		// NOTE: FORWARD PRUNING
+		// generate scout far moves only for attacks when depth > 1
+
 				if (depth <= 1)
 				 	addMove(moveList.get(FLEE), i, t);
 				t += d;
@@ -391,7 +392,7 @@ public class AI implements Runnable
 	// that the opponent can only take the Spy immediately rather than
 	// first taking the material and then taking the Spy later.
 
-	void getPossibleScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	void getAttackingScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
@@ -459,7 +460,7 @@ public class AI implements Runnable
 		} // d
 	}
 
-	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp, BitGrid unsafeGrid)
 	{
 		boolean isPruned = false;
 		int i = fp.getIndex();
@@ -468,11 +469,33 @@ public class AI implements Runnable
 		// if the piece is close enough, the move is allowed
 		// 
 		boolean allowAll =
-			(!(Math.abs(n/2) < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, Math.abs(n/2)))
-				|| (fpcolor == Settings.topColor
-					&& unknownNinesAtLarge > 0
-					&& b.isNineTarget(fp)));
+			!(Math.abs(n/2) < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, Math.abs(n/2)));
 
+		// If a valuable piece can be attacked by a far scout move,
+		// it should be allowed to flee (or another
+		// piece should be allowed to block).  The difficulty
+		// is how to determine if the valuable piece is vulnerable.
+		//
+		// Prior to version 9.6, all moves by valuable pieces
+		// were allowed:
+		// 	allowAll = allowAll || (fpcolor == Settings.topColor
+		//			&& unknownNinesAtLarge > 0
+		//			&& b.isNineTarget(fp)));
+		//
+		// This is a significant waste of time if the piece
+		// isn't vulnerable, for instance, a valuable piece
+		// on the back row with other pieces in front.
+		// This code also did not consider blocking moves.  And
+		// it pointless to react to a future scout far move
+		// when n=1, because qs() does not consider scout far moves.
+		//
+		// In version 9.6, a BitGrid of the squares that can
+		// be attacked by opponent scouts is created when n >= 2.
+		// A move is considered only if it is a valuable piece
+		// moving to a safe square or a non-valuable piece moves
+		// to a non-safe square (blocking move).
+
+		boolean isValuable = b.isNineTarget(fp) && unsafeGrid.testBit(i+11);
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
@@ -514,7 +537,12 @@ public class AI implements Runnable
 		// pruned off move and then added to the root move list.
 
 			if (n > 0) {
-				if (!allowAll
+				if (n >= 2
+					&& !allowAll
+					&& ((isValuable && !unsafeGrid.testBit(t))
+						|| (!isValuable && unsafeGrid.testBit(t))))
+					addMove(moveList.get(APPROACH), i, t);
+				else if (!allowAll
 					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)))
 					isPruned = true;
 				else
@@ -536,7 +564,7 @@ public class AI implements Runnable
 	// n = 0; no pruning
 	// n < 0: prune off active moves
 
-	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
+	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp, BitGrid unsafeGrid)
 	{
 		boolean isPruned = false;
 		int i = fp.getIndex();
@@ -620,7 +648,7 @@ public class AI implements Runnable
 				getAllMoves(moveList, fp);
 				return false;
 			} else
-				return getApproachMoves(n, moveList, fp);
+				return getApproachMoves(n, moveList, fp, unsafeGrid);
 
 		} else if (n < 0) {
 
@@ -628,7 +656,7 @@ public class AI implements Runnable
 
 			int fpcolor = fp.getColor();
 			assert fpcolor == Settings.topColor : "n<0 code only for AI";
-			getApproachMoves(n, moveList, fp);
+			getApproachMoves(n, moveList, fp, unsafeGrid);
 			return false;
 		} else {
 			getAllMoves(moveList, fp);
@@ -637,6 +665,30 @@ public class AI implements Runnable
 		return false;
 	}
 
+	void genSafe(BitGrid unsafeGrid)
+	{
+		final int[] lanes = { 111, 112, 115, 116, 119, 120 };
+		for (int lane : lanes) {
+			boolean unsafe = false;
+			int i = lane;
+			for (i = lane; ; i -= 11) {
+				Piece p = b.getPiece(i);
+				if (p != null) {
+					if (p.getColor() != Settings.bottomColor)
+						break;
+					if (p.getRank() != Rank.UNKNOWN
+						&& p.getRank() != Rank.NINE) {
+						unsafe = false;
+						continue;
+					}
+					unsafe = true;
+					continue;
+				}
+				if (unsafe)
+					unsafeGrid.setBit(i);
+			}
+		}
+	}
 
 	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
 	{
@@ -644,6 +696,12 @@ public class AI implements Runnable
 			moveList.add(new ArrayList<Integer>());
 
 		boolean isPruned = false;
+		BitGrid unsafeGrid = new BitGrid();
+		if (turn == Settings.topColor
+			&& unknownNinesAtLarge > 0
+			&& n >= 2)
+			genSafe(unsafeGrid);
+
 		for (Piece fp : b.pieces[turn]) {
 			if (fp == null)	// end of list
 				break;
@@ -694,29 +752,20 @@ public class AI implements Runnable
 		// horizon, and then the chase resumes.)
 
 			if (deepSearch) {
-				if (getMoves(1, moveList, fp))
+				if (getMoves(1, moveList, fp, unsafeGrid))
 					isPruned = true;
 			} else {
-
-		// All AI Scout moves are evaluated
-		// at depth 0, so when n < 0, there
-		// are no pruned Scout moves.
 
 				if (n >= 0) {
 					Rank fprank = fp.getRank();
 					if (fprank == Rank.NINE)
 						getScoutFarMoves(depth, moveList, fp);
 
-		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks on unknown
-		// valuable pieces.
-		// if there are no nines left, then skip this code
-
 					else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
-						getPossibleScoutFarMoves(depth, moveList, fp);
+						getAttackingScoutFarMoves(depth, moveList, fp);
 				}
 
-				if (getMoves(n, moveList, fp))
+				if (getMoves(n, moveList, fp, unsafeGrid))
 					isPruned = true;
 			}
 		}
@@ -1246,23 +1295,20 @@ public class AI implements Runnable
 		// the qs result from move to move.
 		//
 			boolean tryFlee = false;
-			for (int flee = 0; flee < 2; flee++) {
-			if (flee == 1 && !tryFlee)
-				break;
 			for (int d : dir ) {
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null) {
-					if (flee == 0)
-						continue;
-				} else {
-					if (flee == 1)
-						continue;
-					if (tp.getColor() != 1 - b.bturn)
-						continue;
+				if (tp == null)
+					continue;
 
-		// Don't evaluate obvious losing moves to save time
+				if (tp.getColor() != 1 - b.bturn)
+					continue;
+
+				int tmpM = Move.packMove(i, t);
+				b.move(tmpM, depth);
+
+		// Don't evaluate losing captures to save time
 		// (such as attacking a known lower ranked piece).
 		// The main search throws these into the LOSES
 		// bucket, hoping that they will get pruned off.
@@ -1270,15 +1316,12 @@ public class AI implements Runnable
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
 
-					if (b.isLosingMove(fp, tp)) {
-						tryFlee = true;
-						continue;
-					}
+				if (-negQS(b.getValue() + dvr) < bvalue) {
+					tryFlee = true;
+					b.undo();
+					continue;
 				}
-
-				int tmpM = Move.packMove(i, t);
-				b.move(tmpM, depth);
-
+		
 				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
 
 				b.undo();
@@ -1288,9 +1331,32 @@ public class AI implements Runnable
 		// (if vm < best, the player will play
 		// some other move)
 
-		// bestTp: do not give extra credit for two attacks
-		// on the same piece, because if it flees,
-		// it nullifies both attacks.
+				if (vm > best)
+					best = vm;
+
+				alpha = Math.max(alpha, vm);
+
+				if (alpha >= beta)
+					return vm;
+			} // dir
+
+			if (tryFlee)
+			for (int d : dir ) {
+				int t = i + d;	
+
+				Piece tp = b.getPiece(t); // defender
+				if (tp != null)
+					continue;
+
+				int tmpM = Move.packMove(i, t);
+				b.move(tmpM, depth);
+				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
+				b.undo();
+				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
+
+		// Save worthwhile attack (vm > best)
+		// (if vm < best, the player will play
+		// some other move)
 
 				if (vm > best)
 					best = vm;
@@ -1300,7 +1366,7 @@ public class AI implements Runnable
 				if (alpha >= beta)
 					return vm;
 			} // dir
-			} // flee
+
 		} // data
 		} // bi
 

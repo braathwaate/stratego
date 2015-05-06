@@ -1939,7 +1939,7 @@ public class TestingBoard extends Board
 				continue;
 
 				if (p.getRank().toInt() > attackerRank
-					|| stealthValue(p) > values[1-color][attackerRank - 1])
+					|| stealthValue(p) > values[1-color][attackerRank])
 				continue;
 
 			if (stepsTarget != 0 && destTmp[i] < stepsDefender
