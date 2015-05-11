@@ -681,6 +681,7 @@ public class Board
 			return;
 
 		assert getPiece(i) == chased : "chased not at i?";
+
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
 		int open = 0;
@@ -689,7 +690,27 @@ public class Board
 			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
+
+		// If an adjacent square is open, assume that the chased piece
+		// is not cornered.  This assumption is usually valid,
+		// unless the move to the open square is prevented by
+		// the Two Squares rule or guarded by another enemy piece.
+
 			if (p == null) {
+				UndoMove um3 = getLastMove(3);
+				UndoMove um5 = getLastMove(5);
+
+		// oversimplication of a Two Squares check
+
+				if (um3 != null
+					&& um5 != null
+					&& um3.getMove() == um5.getMove())
+					continue;
+
+		// TBD: check if the open square is guarded
+
+		// assume the move to the open square is a decent flee move
+
 				open++;
 				continue;
 			}
@@ -711,8 +732,21 @@ public class Board
 
 		if (unknownProtector != null) {
 
-		// if the chased piece is cornered, nothing can be
-		// determined about the protection
+		// If the chased piece is cornered, nothing should be
+		// determined about the protection.  This is where
+		// the AI deviates from worst case analysis, because
+		// it guesses that cornered pieces are not protected.
+		//
+		// Of course, the piece could have a protector as
+		// well as being cornered, but there is a good chance
+		// that the piece does not have a protector and
+		// this is a chance that the AI must take if it wants
+		// to win material.
+		//
+		// Even if the last move was a move to adjacent to
+		// the chased piece and the piece is cornered, the
+		// approaching protector is probably bluffing.  Or
+		// at least the AI thinks so.
 
 			if (open == 0)
 				return;

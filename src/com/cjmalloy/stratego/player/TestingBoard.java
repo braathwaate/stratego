@@ -175,6 +175,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_FOUR = 100;
 	private static final int VALUE_FIVE = 50;
 	private static final int VALUE_SIX = 30;
+	private static final int VALUE_EIGHT = 35;
 	private static final int VALUE_NINE = 15;
 	private static final int [] startValues = {
 		0,
@@ -185,7 +186,7 @@ public class TestingBoard extends Board
 		VALUE_FIVE,	// 5 Captain
 		VALUE_SIX,	// 6 Lieutenant
 		20,	// 7 Sergeant
-		35,	// 8 Miner
+		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
 		VALUE_NINE-5,	// Spy
 		0,	// Bomb (valued by code)
@@ -1609,18 +1610,28 @@ public class TestingBoard extends Board
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
 				|| valueStealth[1-p.getColor()][j-1] <= values[p.getColor()][Rank.UNKNOWN.toInt()]) {
 				int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
-		// Invincible pieces cannot always chase at high priority,
+		// Prior to version 9.6 it was thought that
+		// invincible pieces cannot always chase at high priority,
 		// otherwise the AI will use these pieces in an
-		// ad infinitim chase.  So half of the time it chases
+		// ad infinitum chase.  So half of the time it chased
 		// at lower priority.
 		//
-		// The sole exception is when the *chased* rank is invincible,
+		// The sole exception was when the *chased* rank is invincible,
 		// because until the opponent invincible rank is captured or
 		// cornered, it will just likely
 		// chase the players pieces around the board ad inifinitim
 		// until they are captured.  So the AI must continually chase
 		// the invincible rank with invincible pieces until it is
 		// cornered in order for the game to continue.
+		//
+		// However, because the target square is diagonal to
+		// the chased piece, once the invincible chase piece
+		// reaches its destination, it will *not* continue the
+		// chase, unless the the chased piece flees.  And it is
+		// important to always chase at high priority because
+		// if the AI plays some other moves, it gives the opponent
+		// time to react, such as bringing in a defensive
+		// invincible piece.
 		//
 		// The goal is to corner the chased piece
 		// rather than approach it and push it
@@ -1633,10 +1644,10 @@ public class TestingBoard extends Board
 		// but the goal of this programmer is to avoid them).
 
 				int priority;
-				if (isInvincible(p) || rnd.nextInt(2) == 0)
+				// if (isInvincible(p) || rnd.nextInt(2) == 0)
 					priority = DEST_PRIORITY_CHASE_HIGH;
-				else
-					priority = DEST_PRIORITY_CHASE;
+				// else
+				//	priority = DEST_PRIORITY_CHASE;
 
 				genPlanA(1, destTmp2, 1-p.getColor(), j, priority);
 				genPlanB(1, destTmp2, 1-p.getColor(), j, priority);
@@ -3284,7 +3295,7 @@ public class TestingBoard extends Board
 				for (int d : dir) {
 					Piece tp = getPiece(i+d);
 					if (tp == null
-						|| tp.getColor() == Settings.bottomColor)
+						|| tp.getColor() != Settings.topColor)
 						continue;
 					if (tp.isKnown()) {
 						if (tp.getRank().toInt() < r) 
@@ -3401,15 +3412,15 @@ public class TestingBoard extends Board
 		return sumValues[color] - sumValues[1-color];
 	}
 
-	// Sixes, Sevens and Nines (and excess Eights) are expendable
-	public boolean isExpendable(Piece p)
-	{
-		return pieceValue(p) <= VALUE_SIX;
-	}
-
+	// Sixes, Sevens and Nines (and excess known Eights) are expendable
 	public boolean isExpendable(int c, int r)
 	{
-		return values[c][r] <= VALUE_SIX;
+		return pieceValue(c, r) <= VALUE_EIGHT;
+	}
+
+	public boolean isExpendable(Piece p)
+	{
+		return isExpendable(p.getColor(), p.getRank().toInt());
 	}
 
 	public void setNeededRank(int color, int rank)
@@ -4453,10 +4464,26 @@ public class TestingBoard extends Board
 		// the AI piece must be invincible, so the outcome
 		// is unknown only if it attacks an unmoved piece
 		// which could be a bomb (see winFight()).
-		// Thus it gains only the stealth value of an Unknown.
+		//
+		// As defined, an invincible piece wins against any
+		// opponent piece.  If the opponent is unmoved, the
+		// risk is that it completely loses by hitting a bomb,
+		// gaining only in the discovery of a bomb.
+		//
+		// But by correctly guessing the setup locations of the
+		// bombs and marking them suspected, the remaining unknowns
+		// must be WINS.  So when an invincible piece attacks
+		// an unknown unmoved piece, it gains the value of an unknown
+		// and loses only 50% of its value.
+		//
+		// An important example is when an AI invincible piece gets
+		// trapped in a sea of unmoved unknowns.  It is far
+		// better rewarded to slam into the unmoved unknowns than
+		// face (almost) certain capture by the chaser.
 
 				assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
-				tpvalue = valueStealth[1-fpcolor][Rank.UNKNOWN.toInt()-1];
+				tpvalue = values[1-fpcolor][Rank.UNKNOWN.toInt()];
+				fpvalue /= 2;
 			}
 
 		// If the AI attacks an unknown unmoved piece, reduce
@@ -4500,50 +4527,45 @@ public class TestingBoard extends Board
 		// by Blue One.  An addition bonus on the right
 		// is that there is only one more possible unknown 
 		// attack before freedom is assured.
-
 		//    B1
 		// ?? ?? R4 ?? ??
 		// ?? ?? B2    ??
 
-		// One solution is to allow the ai piece
-		// to survive, but greatly reduce its value.
+		// TBD: to solve this, check all adjacent squares
+		// to the "to" square for known enemy pieces and
+		// adjust vm appropriately.
 
-		// Another idea is to allow the ai piece
-		// to survive if the value of the move is positive.
-		// (this needs to be checked)
-
-		// If the ai piece does not survive, it is prone
+		// If the AI piece does not survive, it is prone
 		// to the following blunder.  In the position below,
 		// Red Four may attack the unknown piece because
 		// if Red Four does not survive, then the ai
 		// cannot see the easy recapture.
-
 		// R4
-		// ??
+		// B?
 		// B3
 
-		// Note: tpvalue and fpvalue contains stealth
+		// However, because the AI piece always loses its actual
+		// value, the recapture is redundant.  vm is always
+		// negative in this case.
 
-				if (vm < 0) {
+		// Indeed, it is rare that vm is positive.  The only
+		// case is a known AI Scout attack, because the
+		// value of a known AI Scout is very low and may
+		// be higher than the stealth of the unknown that it
+		// attacks.
 
-		// Note that an attack on an unknown
-		// creates a known Unknown.
-						if (isPossibleBomb(tp))
-							tp.setSuspectedRank(Rank.BOMB);
-						else 
-							makeWinner(tp, fprank);
-						makeKnown(tp);
-						setPiece(tp, Move.unpackTo(m));
+		// AI piece is removed and opponent piece becomes known.
+		// Note that an attack on an unknown creates a known Unknown.
+
+				if (isPossibleBomb(tp))
+					tp.setSuspectedRank(Rank.BOMB);
+				else 
+					makeWinner(tp, fprank);
+				makeKnown(tp);
+					setPiece(tp, Move.unpackTo(m));
+
 
 				} else {
-					makeKnown(fp);
-					fp.moves++;
-					setPiece(fp, Move.unpackTo(m)); // won
-					fp.setIndex(Move.unpackTo(m));
-				}
-
-
-					} else {
 
 		// AI IS DEFENDER (tp)
 
@@ -4634,22 +4656,19 @@ public class TestingBoard extends Board
 		// is bluffing and perhaps one of the other two unknowns
 		// is the actual One. What would you do?
 		//
-		// Note: If a piece approaches a known AI piece, then
-		// it usually has a suspected rank, and is not handled here.
-		// But if a known AI piece approaches an opponent unknown,
-		// then the opponent attack is handled by the formula
-		// below because tp.moves != 0.
-		//
-		// If an unknown opponent piece approaches an unknown AI
-		// piece, what is the probability that it will attack the
-		// AI piece?  The opponent piece only sees the apparent value
-		// of the AI piece.
-						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
+		// Note: If a piece approaches a known or unknown AI piece,
+		// then it usually has a suspected rank, and is not handled
+		// here.  But if a known or unknown AI piece approaches
+		// an opponent unknown, then the opponent attack is
+		// handled by the formula below because tp.moves != 0.
+		// This is also heavily used when the AI evaluates
+		// the risk of an unknown opponent piece approaching
+		// its pieces.
 
+						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
 
-		// Outcome is the negation as if ai
-		// were the attacker.
+		// Outcome is the negation as if ai were the attacker.
 		//
 		// But note that the resulting value
 		// of AI PIECE X OPP PIECE !=
@@ -4670,6 +4689,7 @@ public class TestingBoard extends Board
 		// increases linearly with the number adjacent unknowns.
 		// While we don't know *which* unknown is the lower rank,
 		// several adjacent unknowns is worse than just one.
+		// TBD: replace this with setup analysis
 
 					int index = tp.getIndex();
 					int count = 0;
@@ -4683,6 +4703,19 @@ public class TestingBoard extends Board
 					fpvalue = fpvalue * 3 / (3 + count);
 
 					vm += tpvalue - fpvalue;
+
+		// vm is usually quite positive.  But in an endgame when
+		// the opponent has no expendable pieces, it becomes
+		// negative, encouraging AI pieces to approach opponent
+		// pieces because the AI believes that the opponent
+		// will not risk losing its remaining pieces in unknown
+		// encounters.
+
+		// But the AI still should not risk its valuable pieces
+		// in this manner.  For example, the last AI Eight should
+		// be discouraged from approaching an unknown opponent piece.
+
+					vm = Math.min(vm, valueBluff(fp, tp, Move.unpackTo(m)));
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -5205,7 +5238,7 @@ public class TestingBoard extends Board
 
 		// Bluffing using valuable pieces is (slightly) discouraged.
 
-		if (pieceValue(aiPiece) > VALUE_FIVE)
+		if (!isExpendable(aiPiece))
 			return pieceValue(aiPiece)/10;
 
 		// A suspected Four (that chased a Five) could well be a Five.
@@ -5235,9 +5268,6 @@ public class TestingBoard extends Board
 	{
 		if (p.isKnown())
 			return 0;
-
-		if (p.aiValue() != 0)
-			return p.aiValue() / 9;
 
 		Rank rank = p.getRank();
 		int r;
@@ -5640,23 +5670,22 @@ public class TestingBoard extends Board
 		// because the ai sets it when the piece value is obvious.
 		int v = p.aiValue();
 
-		if (v == 0) {
-			Rank actualRank = p.getRank();
-			Rank apparentRank;
+		Rank actualRank = p.getRank();
+		Rank apparentRank;
 
-			// apparent rank is the known rank of a piece or
-			// if unknown, its suspected rank, if any,
-			// and otherwise RANK.UNKNOWN.
-			if (p.isKnown()
-				|| p.isSuspectedRank()
-				|| !apparent)
-				apparentRank = actualRank;
-			else
-				apparentRank = Rank.UNKNOWN;
+		// apparent rank is the known rank of a piece or
+		// if unknown, its suspected rank, if any,
+		// and otherwise RANK.UNKNOWN.
+		if (p.isKnown()
+			|| p.isSuspectedRank()
+			|| !apparent)
+			apparentRank = actualRank;
+		else
+			apparentRank = Rank.UNKNOWN;
 
-			v = values[p.getColor()][apparentRank.toInt()];
+		v += values[p.getColor()][apparentRank.toInt()];
 
-			if (!p.isKnown() && v != 0) {
+		if (!p.isKnown() && v != 0) {
 
 		// The addition of stealthValue based on actual
 		// value to unknown value makes AI unknowns
@@ -5690,7 +5719,7 @@ public class TestingBoard extends Board
 		// when the opponent had no idea that
 		// it could take a valuable unknown.
 
-				v += valueStealth[p.getColor()][actualRank.toInt()-1];
+			v += valueStealth[p.getColor()][actualRank.toInt()-1];
 
 		// Suspected ranks have much less value than known ranks
 		// because of uncertainty.  The value of a suspected rank
@@ -5744,16 +5773,15 @@ public class TestingBoard extends Board
 		// win the AI piece.
 		//
 
-				if (p.isSuspectedRank())
-					v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
+			if (p.isSuspectedRank())
+				v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
 
 		// see targetUnknownBlockers
 		// TBD: must be a better way
 		//		if (p.isBlocker())
 		//			v += 10;
 
-			} // piece not known
-		} // v == 0
+		} // piece not known
 
 		else {
 			// The piece is a known Unknown.
@@ -5818,7 +5846,7 @@ public class TestingBoard extends Board
 			&& tp.getColor() == Settings.topColor
 			&& fp.getMaybeEight()
 			&& (flag[Settings.topColor].isKnown()
-				|| fprank == Rank.UNKNOWN)) {
+				|| !fp.isSuspectedRank())) {
 			if (tp.isKnown() || tp.aiValue() != 0) {
 				return Rank.WINS;	// maybe not
 			} else
@@ -6321,12 +6349,13 @@ public class TestingBoard extends Board
 			|| i == 119);
 	}
 
+	int pieceValue(int c, int r)
+	{
+		return values[c][r] + valueStealth[c][r-1];
+	}
 	int pieceValue(Piece p)
 	{
-		int v = p.aiValue();
-		if (v != 0)
-			return v;
-		return values[p.getColor()][p.getRank().toInt()];
+		return p.aiValue() + pieceValue(p.getColor(), p.getRank().toInt());
 	}
 
         // Check if a move is an obvious loser
