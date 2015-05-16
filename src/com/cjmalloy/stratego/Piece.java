@@ -32,6 +32,7 @@ public class Piece implements Comparable<Piece>
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
 	
+	public int movesOrig = 0;	// times piece has moved
 	public int moves = 0;	// times piece has moved
 
 	// a known piece can be not shown
@@ -63,6 +64,7 @@ public class Piece implements Comparable<Piece>
 		uniqueID = p.uniqueID;
 		color = p.color;
 		moves = p.moves;
+		movesOrig = p.moves;
 		rank = p.rank;
 		actingRankFleeLow = p.actingRankFleeLow;
 		actingRankFleeHigh = p.actingRankFleeHigh;
@@ -75,6 +77,7 @@ public class Piece implements Comparable<Piece>
 	public void clear()
 	{
 		moves = 0;
+		movesOrig = 0;
 		actingRankChase = Rank.NIL;
 		actingRankFleeLow = Rank.NIL;
 		actingRankFleeHigh = Rank.NIL;

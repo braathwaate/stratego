@@ -698,13 +698,13 @@ public class Board
 
 			if (p == null) {
 				UndoMove um3 = getLastMove(3);
-				UndoMove um5 = getLastMove(5);
+				UndoMove um7 = getLastMove(7);
 
 		// oversimplication of a Two Squares check
 
 				if (um3 != null
-					&& um5 != null
-					&& um3.getMove() == um5.getMove())
+					&& um7 != null
+					&& um3.getMove() == um7.getMove())
 					continue;
 
 		// TBD: check if the open square is guarded

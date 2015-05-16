@@ -1050,15 +1050,23 @@ public class TestingBoard extends Board
 	// with good prospect), because if the opponent One
 	// is the unknown defender, the player still "wins",
 	// because then its other pieces become invincible.
-
+	//
 	// Note that the AI stealth values are used because the
 	// opponent stealth values are lower (explained elsewhere).
+	// They are reduced to 80% because the AI really doesn't want
+	// to trade its Three (200 pts) just to discover the opponent One 
+	// (213 pts stealth), but it certainly would trade the Three
+	// to discover the opponent One and gain a minor piece (or more) in
+	// the trade.  The important point is that the trade makes
+	// the unknown AI Two invincible, giving it a good shot at
+	// gaining back a Three.
+
 	void genInvincibleRank()
 	{
 		for (int c = RED; c <= BLUE; c++) {
 		int lowUnknownRank = 1;
 		for (int rank = 2; rank<9;rank++) {
-			if (valueStealth[Settings.topColor][lowUnknownRank-1] > values[1-c][rank])
+			if (valueStealth[Settings.topColor][lowUnknownRank-1] * 8 / 10 > values[1-c][rank])
 				invincibleRank[1-c][rank-1] = true;
 				
 			if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
@@ -4066,7 +4074,12 @@ public class TestingBoard extends Board
 
 					} else {
 						makeWinner(tp, fprank);
-						makeKnown(tp);
+
+		// known Unknowns are created only by attacks on AI
+		// pieces (see aiValue())
+
+						if (fpcolor == Settings.bottomColor)
+							makeKnown(tp);
 						vm -= fpvalue;
 					}
 					setPiece(tp, Move.unpackTo(m));
@@ -4216,24 +4229,25 @@ public class TestingBoard extends Board
 								apparentValue(tp));
 						}
 
-		// If the bluff is effective, the AI does not lose
-		// its apparent piece value, but is discouraged from
-		// bluffing using its valuable pieces to bluff
+					} else {
 
-					} else if (depth != 0
-						&& !isInvincible(fp)
-						&& isEffectiveBluff(tp, fp, m))
-						vm = Math.max(vm, valueBluff(fp, tp, Move.unpackTo(m)));
-
-					else  {
-
-		// unconditional win
 						vm += apparentWinValue(fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
 							actualValue(tp),
 							apparentValue(tp));
+
+		// If the bluff is effective, the AI does not lose
+		// its apparent piece value, but is discouraged from
+		// bluffing using its valuable pieces to bluff
+
+						if (depth != 0
+							&& !isInvincible(fp)
+							&& isEffectiveBluff(tp, fp, m))
+							vm = Math.min(vm, valueBluff(fp, tp, Move.unpackTo(m)));
+
+
 					}
 				}
 
@@ -4554,14 +4568,15 @@ public class TestingBoard extends Board
 		// be higher than the stealth of the unknown that it
 		// attacks.
 
-		// AI piece is removed and opponent piece becomes known.
-		// Note that an attack on an unknown creates a known Unknown.
+		// AI piece is removed.
+		// Note that an attack on an unknown does not
+		// create a known Unknown (see aiValue())
 
 				if (isPossibleBomb(tp))
 					tp.setSuspectedRank(Rank.BOMB);
 				else 
 					makeWinner(tp, fprank);
-				makeKnown(tp);
+					// makeKnown(tp);
 					setPiece(tp, Move.unpackTo(m));
 
 
@@ -4715,7 +4730,8 @@ public class TestingBoard extends Board
 		// in this manner.  For example, the last AI Eight should
 		// be discouraged from approaching an unknown opponent piece.
 
-					vm = Math.min(vm, valueBluff(fp, tp, Move.unpackTo(m)));
+
+					vm = Math.max(vm, valueBluff(fp, tp, Move.unpackTo(m)));
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -5246,6 +5262,7 @@ public class TestingBoard extends Board
 		// lose its piece.
 
 		if (rank == Rank.FOUR
+			&& !oppPiece.isKnown()
 			&& oppPiece.isSuspectedRank()
 			&& !oppPiece.isRankLess())
 			return pieceValue(aiPiece)/2;
@@ -5612,19 +5629,11 @@ public class TestingBoard extends Board
 		// lower value).
 		//
 		// The other problem with using depth is that the
-		// transposition would have to index by depth, because
+		// transposition table would have to index by depth, because
 		// it would cause the same position to be evaluated
 		// differently at different depths.
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
-
-		// The risk is greatly reduced if the attacker
-		// is not the last moved piece, because it is
-		// an indicator that the attacker is not dead set
-		// on attacking.
-
-		if (fp != lastMovedPiece)
-			risk /= 2;
 
 		// This program has a big unsolved problem with
 		// the horizon effect, particularly when the Spy
@@ -5636,19 +5645,25 @@ public class TestingBoard extends Board
 		// in depth to to prevent the AI from leaving pieces hanging.
 		//
 		// TBD: This is a temporary hack given low search depth.
-		// The hack causes the AI not to react until the
-		// approaching attacker is very close (2 spaces away).
+		// The hack causes the AI not to react if the
+		// approaching attacker has moved more than twice
+		// during tree evaluation; the idea is that the attacker
+		// is too far away to be a threat.
 		//
 		// Note: this code addresses suspected or known opponent
 		// pieces attacking unknown AI pieces.  If the opponent
 		// piece is unknown, it is handled in UNK, but move
-		// generation is limited to 1 space of separation in AI.java,
+		// generation of unknown pieces is limited (pruned off)
+		// to 1 space of separation in AI.java,
 		// so the horizon effect is limited as well.
+		//
+		// Note that this rule still means that if the AI
+		// approaches an opponent piece that is far away,
+		// it is still a threat.  That is why opponent moves,
+		// not distance, is used.
 
-		else if (fprank != Rank.NINE 
-			&& !unknownScoutFarMove
-			&& Grid.steps(tp.getIndex(), lastMove.getTo()) > 2)
-				return apparentV;
+		if (tp.moves - tp.movesOrig > 2)
+			return apparentV;
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
 	}
@@ -5685,8 +5700,6 @@ public class TestingBoard extends Board
 
 		v += values[p.getColor()][apparentRank.toInt()];
 
-		if (!p.isKnown() && v != 0) {
-
 		// The addition of stealthValue based on actual
 		// value to unknown value makes AI unknowns
 		// vary in value.
@@ -5719,6 +5732,7 @@ public class TestingBoard extends Board
 		// when the opponent had no idea that
 		// it could take a valuable unknown.
 
+		if (!p.isKnown()) {
 			v += valueStealth[p.getColor()][actualRank.toInt()-1];
 
 		// Suspected ranks have much less value than known ranks
@@ -5772,22 +5786,29 @@ public class TestingBoard extends Board
 		// (WIN) even if the flag has adjacent pieces that can
 		// win the AI piece.
 		//
+		// Until version 9.6, a losing AI attack on a suspected
+		// rank created a known Unknown.  This caused
+		// the AI to make a piece known before attacking it with
+		// the lower piece to gain the higher known value rather
+		// than the reduced suspected value. This is a waste of
+		// material, and occurred often when an Eight was going to
+		// take a flag bomb, because by another piece slamming
+		// into it first, it became more valuable.
+		//
+		// Yet the value of an Unknown that successfully
+		// attacked an AI piece must be that value.
+		// For example,
+		// B? R5 R3
+		// B?xR5 gains the value of the Five, or 50 points.  R3xB?(4)
+		// must be worth 100 points, not the suspected value
+		// of 20 points.
+		//
+		// The dilemma is solved by making an Unknown known only
+		// if it is attacked by an opponent piece but leaving it
+		// unknown when attacked by an AI piece.
 
 			if (p.isSuspectedRank())
 				v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
-
-		// see targetUnknownBlockers
-		// TBD: must be a better way
-		//		if (p.isBlocker())
-		//			v += 10;
-
-		} // piece not known
-
-		else {
-			// The piece is a known Unknown.
-			// A known Unknown perhaps is more certain, but
-			// still is only a guess.
-			// Best guess is the value is the same as a known.
 		}
 
 		return v;
@@ -6289,8 +6310,8 @@ public class TestingBoard extends Board
 
 		// Example
 		// 4x4 : -100
-		// 3x4 : -50
-		// 2x4 : -44
+		// 3x4 : -25
+		// 2x4 : -11
 		// Thus, if the AI must capture the suspected Four
 		// it will use the lowest known rank (Two).
 		// However, if the AI ranks are unknown, stealth
@@ -6299,8 +6320,8 @@ public class TestingBoard extends Board
 		//
 		// Example
 		// 5x5 : -50
-		// 4x5 : -25
-		// 3x5 : -22
+		// 4x5 : -12
+		// 3x5 : -5
 
 		// TBD: This needs further tuning.
 		// e.g. a suspected rank of Four
@@ -6328,7 +6349,7 @@ public class TestingBoard extends Board
 		int diff = 1 + tprank.toInt() - fprank.toInt();
 		diff = diff * diff;
 
-		return pieceValue(fp) / diff;
+		return pieceValue(tp) / diff;
 	}
 
 	// 
