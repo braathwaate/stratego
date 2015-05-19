@@ -239,7 +239,7 @@ public class Piece implements Comparable<Piece>
 
 	public void setSuspectedRank(Rank r)
 	{
-		setRank(r);
+		rank = r;
 		flags |= IS_SUSPECTED;
 	}
 
