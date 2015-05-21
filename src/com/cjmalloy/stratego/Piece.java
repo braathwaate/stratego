@@ -89,6 +89,9 @@ public class Piece implements Comparable<Piece>
 	public void setRank(Rank r)
 	{
 		rank = r;
+		flags &= ~IS_SUSPECTED;
+		flags &= ~MAYBE_EIGHT;
+		flags &= ~IS_LESS;
 	}
 
 	public void makeKnown()

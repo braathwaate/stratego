@@ -580,7 +580,6 @@ public class TestingBoard extends Board
 		// will not subject its unknown low ranked pieces to attack.
 		// But if the opponent has an invincible unknown rank,
 		// an unknown opponent piece might approach an unknown AI piece
-		// as part of an effort to capture a known AI piece,
 		// because it only risks discovery rather than complete
 		// loss of its piece.
 
@@ -1939,6 +1938,12 @@ public class TestingBoard extends Board
 	// pieces optimally.  This code is a pale effort to improve defensive
 	// measures past the search horizon.
 
+	// If stepsTarget != 0, find the closest piece capable
+	// of defending.
+
+	// If stepsTarget == 0, just find the highest ranked piece capable
+	// of defending.
+
 	private Piece getDefender(int color, int destTmp[], Rank attacker, int stepsTarget)
 	{
 		// TBD: Note that if the attacker is unknown
@@ -1964,6 +1969,7 @@ public class TestingBoard extends Board
 
 			if (stepsTarget != 0 && destTmp[i] < stepsDefender
 				|| (stepsTarget == 0
+					&& destTmp[i] != DEST_VALUE_NIL
 					&& (pDefender == null
 					|| p.getRank().toInt() > pDefender.getRank().toInt()))) {
 				stepsDefender = destTmp[i];
@@ -3459,7 +3465,7 @@ public class TestingBoard extends Board
 
 			if (fpcolor == Settings.topColor
 				&& r > dangerousKnownRank)
-				vm += -VALUE_MOVED;
+				vm += -VALUE_MOVED*2;
 
 			if (!neededRank[fpcolor][r])
 
@@ -5813,10 +5819,10 @@ public class TestingBoard extends Board
 		// Unknown eights trying to get at the bombs are
 		// especially vulnerable.
 
-			else if ((fp.getActingRankChase() == Rank.UNKNOWN
+			else if (tprank.toInt() < dangerousUnknownRank
+				&& (fp.getActingRankChase() == Rank.UNKNOWN
 					|| riskExpendable)
-				&& (flag[Settings.bottomColor] == null
-					|| Grid.steps(fp.getIndex(), flag[Settings.bottomColor].getIndex()) > 2)) {
+				&& !isNearOpponentFlag(fp)) {
 					if (tprank.toInt() < lowestUnknownExpendableRank)
 						return Rank.LOSES;	// maybe not
 					else if (tprank.toInt() == lowestUnknownExpendableRank)
@@ -5853,9 +5859,9 @@ public class TestingBoard extends Board
 				return Rank.WINS;	// maybe not, could be EVEN
 		}
 
-		else if (tp.getActingRankChase() == Rank.UNKNOWN
-			&& (flag[Settings.bottomColor] == null
-				|| Grid.steps(tp.getIndex(), flag[Settings.bottomColor].getIndex()) > 2)) {
+		else if (fprank.toInt() < dangerousUnknownRank
+			&& tp.getActingRankChase() == Rank.UNKNOWN
+			&& !isNearOpponentFlag(tp)) {
 				if (fprank.toInt() < lowestUnknownExpendableRank)
 					return Rank.WINS;	// maybe not
 				else if (fprank.toInt() == lowestUnknownExpendableRank)
@@ -5903,22 +5909,22 @@ public class TestingBoard extends Board
 	protected boolean isFleeing(Piece fp, Piece tp)
 	{
 		assert fp.getColor() == Settings.topColor : "fp must be top color";
-		Rank fprank = fp.getRank();
-		Rank fleeRankHigh = tp.getActingRankFleeHigh();
-		Rank fleeRankLow = tp.getActingRankFleeLow();
-		if (fleeRankHigh != Rank.NIL
-			&& fleeRankHigh != Rank.UNKNOWN
-			&& fleeRankHigh.toInt() >= fprank.toInt()
-			&& (valueStealth[tp.getColor()][lowestUnknownNotSuspectedRank-1] * 5 / 4 < values[fp.getColor()][fleeRankHigh.toInt()]
-				|| fprank.toInt() >= 5))
-			return true;
+		// fleeRankLow is always lower than fleeRankHigh.
+		// So checking fleeRankHigh usually determines the strength
+		// of the piece.  But if fleeRankHigh is unknown,
+		// and fleeRankLow is a numeric rank (i.e. the piece
+		// fled from both an unknown and some other rank),
+		// then check fleeRankLow.
 
-		else if (fleeRankLow != Rank.NIL
-			&& fleeRankLow != Rank.UNKNOWN
-			&& (fleeRankLow.toInt() == fprank.toInt()
-				|| fleeRankLow.toInt() + 1 == fprank.toInt())
-			&& fleeRankLow.toInt() >= 5)
-			return true;
+		Rank fleeRank = tp.getActingRankFleeHigh();
+		if (fleeRank == Rank.UNKNOWN)
+			fleeRank = tp.getActingRankFleeLow();
+		if (fleeRank == Rank.UNKNOWN
+			|| fleeRank == Rank.NIL)
+			return false;
+
+		int fprank = fp.getRank().toInt();
+		int fleerank = fleeRank.toInt();
 
 		// The AI considers all unknown opponent pieces
 		// to be expendable (5-9) in a completely unknown encounter.
@@ -5929,16 +5935,24 @@ public class TestingBoard extends Board
 		// should be a win or even.
 		//
 		// However, if the opponent piece flees from the AI unknown,
-		// it may mean that the piece is strong, and the
+		// it obtains a fleeRankHigh of Unknown.
+		// This may mean that the piece is strong, and the
 		// AI should allow one of its weaker pieces to discover
 		// its true identity.
 
-		else if (!fp.isKnown()
-			&& fprank.toInt() < dangerousUnknownRank
-			&& fprank.toInt() <= lowestUnknownExpendableRank
-			&& fleeRankLow != Rank.UNKNOWN
-			&& (fleeRankLow == Rank.NIL
-				|| fleeRankLow.toInt() >= fprank.toInt()))
+		if (fleerank >= fprank
+			&& ((fprank < dangerousUnknownRank
+				&& valueStealth[tp.getColor()][lowestUnknownNotSuspectedRank-1] * 5 / 4 < values[fp.getColor()][fleerank])
+				|| fprank >= 5))
+			return true;
+
+		// If the opponent piece fled from an AI piece 5 and up,
+		// the risk of loss of an AI piece of the same rank
+		// or even one rank higher is zero.
+
+		else if ((fleerank == fprank
+				|| fleerank + 1 == fprank)
+			&& fleerank >= 5)
 			return true;
 
 		return false;
@@ -6234,6 +6248,14 @@ public class TestingBoard extends Board
 
                 return false;
         }
+
+	boolean isNearOpponentFlag(Piece p)
+	{
+		assert p.getColor() == Settings.bottomColor : "Opponent piece required";
+		return flag[Settings.bottomColor] != null &&
+			Grid.steps(p.getIndex(), flag[Settings.bottomColor].getIndex()) <= 2;
+	}
+
 
 }
 

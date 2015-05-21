@@ -858,7 +858,8 @@ public class Board
 		// to Red than the neighboring piece was also a valuable
 		// target.  (This is definitely advanced game play).
 
-			if (chaser.getApparentRank().toInt() >= 5)
+			if (chaser.getApparentRank().toInt() >= 5
+				&& !chased.isKnown())
 				return;
 
 		// strong unknown protector confirmed
@@ -942,7 +943,8 @@ public class Board
 
 			if (arank == Rank.NIL || arank.toInt() > r)
 				unknownProtector.setActingRankChaseLess(rank);
-		}
+
+		} // unknown protector
 
 		// Set direct chase rank
 
@@ -1007,12 +1009,18 @@ public class Board
 
 		Rank arank = chased.getActingRankChase();
 
-		// An unknown chase rank, once set, is never changed again.
-		// This prevents being duped by random bluffing, where a high
-		// rank piece chases all pieces, low ranks
-		// as well as unknowns.  The AI believes
+		// An unknown chase rank, once set, is never changed to
+		// a rank lower than Six.  This prevents being duped
+		// by random bluffing, where a high rank piece chases
+		// all pieces, low ranks as well as unknowns.  The AI believes
 		// that unknown pieces that chase AI unknowns are probably
 		// high ranked pieces and can be attacked by a Five or less.
+		//
+		// So if an opponent piece chases an AI unknown and then
+		// chases a Five, it retains the chase rank of unknown,
+		// because a Five chase rank would indicate a suspected rank
+		// of Four, but a Four is less inclined to chase unknown
+		// pieces, so that would be unlikely.
 		//
 		// Prior to version 9.3, chasing an unknown always
 		// set the chase rank to UNKNOWN.
@@ -1049,7 +1057,8 @@ public class Board
 		// There is no way around this.  Bluffing makes assignment
 		// of suspected ranks a challenge.
 
-		if (arank == Rank.UNKNOWN)
+		if (arank == Rank.UNKNOWN
+			&& chaser.getApparentRank().toInt() <= 5)
 		 	return;
 
 		if (arank == Rank.NIL 
@@ -1466,9 +1475,9 @@ public class Board
 			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
-			if (p == null)
-				continue;
-			if (p.getRank() != Rank.UNKNOWN)
+			if (p == null
+				|| p.getColor() != Settings.bottomColor
+				|| p.isKnown())
 				continue;
 
 		// If the opponent still has any unknown Eights,
