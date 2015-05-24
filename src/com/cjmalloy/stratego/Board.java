@@ -920,10 +920,19 @@ public class Board
 
 		// Only a Spy can protect a piece attacked by a One.
 
+			Rank arank = unknownProtector.getActingRankChase();
 			Rank rank;
 			if (r == 0) {
 				if (attackerRank != 1)
 					return;
+
+		// If the protector already has a chase rank,
+		// don't let it bluff as a Spy.  This is evidence
+		// of a bluffing opponent.
+
+				if (arank != Rank.NIL)
+					return;
+
 				rank = Rank.SPY;
 			} else
 				rank = Rank.toRank(r);
@@ -937,7 +946,6 @@ public class Board
 		// that the opponent would risk the Two in a high stakes
 		// bluff, protected by some other piece.
 		// 
-			Rank arank = unknownProtector.getActingRankChase();
 			if (arank == Rank.SPY)
 				rank = Rank.SPY;
 
@@ -1090,10 +1098,6 @@ public class Board
 			}
 		}
 
-		// Indirect chase rank now depends on unassigned
-		// suspected ranks because of bluffing.
-		genSuspectedRank();
-
 		// add in the tray pieces to trayRank
 		for (int i=0;i<getTraySize();i++) {
 			Piece p = getTrayPiece(i);
@@ -1111,6 +1115,10 @@ public class Board
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().toInt()-1]++;
 		}
+
+		// Indirect chase rank now depends on unassigned
+		// suspected ranks because of bluffing.
+		genSuspectedRank();
 
 		for ( int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))

@@ -40,7 +40,13 @@ public class TestingBoard extends Board
 	private static final int DEST_PRIORITY_DEFEND_FLAG = 10;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_BOMBS = 6;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 4;
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 1;
+
+	// DEST_PRIORITY_ATTACK_FLAG should be higher than
+	// DEST_PRIORITY_CHASE, because an Eight could be
+	// an expendable piece and can chase other opponent pieces,
+	// but it is better for the eight to attack the flag structure.
+
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 2;
 	private static final int DEST_PRIORITY_FLEE = 3;
 	private static final int DEST_PRIORITY_CHASE_HIGH = 2;
 	private static final int DEST_PRIORITY_CHASE = 1;
@@ -84,7 +90,6 @@ public class TestingBoard extends Board
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
 	protected UndoMove lastMove;
-	protected Piece lastMovedPiece;
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -394,25 +399,30 @@ public class TestingBoard extends Board
 		// Invincibility means that a rank can attack unknown pieces
 		// with the prospect of a win or even exchange.
 		//
-		// The Spy can never be invincible, because that means
-		// that the last unknown piece would be a Spy, which at
-		// best would be an even exchange, and the Spy would
-		// be known by default.
+		// Even the Spy can be invincible, if other opponent
+		// pieces are suspected but not known.  (If all the
+		// other opponent pieces were known, then the Spy
+		// would be known by default).
+		//
 		// TBD: if there is one unknown piece remaining
 		// and the others are suspected, then the unknown piece
-		// should be suspected as well.
+		// should be suspected as well, but currently is is
+		// unknown.
+		//
+		// Invincible AI Eights, Nines or the Spy in an
+		// unknown exchange are EVEN (see winFight())
 
 		for (int c = RED; c <= BLUE; c++) {
 			int rank;
 			for (rank = 1;rank<15;rank++)
 				invincibleRank[1-c][rank-1] = false;
 
-			for (rank = 1;rank<10;rank++) {
+			for (rank = 1;rank <= 10;rank++) {
+				invincibleRankInt[1-c] = rank;
 				invincibleRank[1-c][rank-1] = true;
 				if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
 					break;
 			}
-			invincibleRankInt[1-c] = rank;
 
 			for (rank = 1;rank<9;rank++)
 				if (rankAtLarge(1-c, rank) != 0)
@@ -707,11 +717,13 @@ public class TestingBoard extends Board
 				continue;
 			if (!isExpendable(p))
 				continue;
-			if (p.isKnown() || p.hasMoved())
+			if (!p.isKnown() && p.hasMoved())
+				count+=2;
+			else if (p.isKnown())
 				count++;
 		}
 
-		if (count >= 2)
+		if (count >= 4)
 			return;
 
 		// if there are not any high rank pieces in motion
@@ -2878,8 +2890,8 @@ public class TestingBoard extends Board
 				&& !(j == to && p.getColor() == color)
 
 		// If the caller is invincible or the Spy,
-		// then the maze continues through moved pieces.
-		// The hope is that the moved pieces
+		// then the maze continues through non-invincible moved pieces.
+		// The hope is that the lesser moved pieces
 		// will eventually move.  This should not cause
 		// stacking problems when there are few invincible
 		// pieces.  This tries to address the situation where
@@ -2890,6 +2902,7 @@ public class TestingBoard extends Board
 
 				&& (guard == Rank.NIL
 					|| !(p.hasMoved()
+						&& !isInvincible(p)
 						&& guarded == GUARDED_MOVED)))
 				continue;
 
@@ -3088,18 +3101,6 @@ public class TestingBoard extends Board
                         suspectedRank[p.getColor()][rank.toInt()-1]++;
         }
 
-	//
-	// suspectedRank is based on ActingRankChase.
-	// If the piece has chased another piece,
-	// the ai guesses that the chaser is a lower rank
-	// If there are no lower ranks, then
-	// the chaser may be of the same rank (or perhaps higher, if
-	// bluffing)
-	//
-	public void genSuspectedRank()
-	{
-		super.genSuspectedRank();
-
 	// chase rank is permanently set only if a chase piece
 	// is unprotected (see Board).  However, if a piece with
 	// protection approaches an AI piece, the piece should
@@ -3131,14 +3132,20 @@ public class TestingBoard extends Board
 	// unknown rank.  More likely it is a higher piece
 	// bluffing as a lower piece so that it can attack the unknown
 	// piece.  (See Board.java: no permanent chase rank set).
-
-		{
+	public void genTempSuspectedRank()
+	{
 		int r = 10;
 		lastMove = getLastMove(1);
-		lastMovedPiece = null;
-		if (lastMove != null) {
-			int i = lastMove.getTo();
-			lastMovedPiece = getPiece(i);
+		if (lastMove == null)
+			return;
+
+		Piece lastMovedPiece = null;
+		int i = lastMove.getTo();
+		lastMovedPiece = getPiece(i);
+		if (lastMovedPiece == null)
+			return;
+		if (lastMovedPiece.getColor() != lastMove.getPiece().getColor())
+			return;
 
 		// Even if the approaching piece already has a lower
 		// suspected rank, override it if it approaches an AI piece.
@@ -3148,31 +3155,30 @@ public class TestingBoard extends Board
 		// TBD: Bluffing is why suspected rank analysis of the
 		// setup is required, so this override needs to be revisited.
 
-			if (lastMovedPiece != null
-				&& !lastMovedPiece.isKnown()
-				&& lastMovedPiece.getActingRankChase() != Rank.UNKNOWN) {
-				for (int d : dir) {
-					Piece tp = getPiece(i+d);
-					if (tp == null
-						|| tp.getColor() != Settings.topColor)
-						continue;
-					if (tp.isKnown()) {
-						if (tp.getRank().toInt() < r) 
-							r = tp.getRank().toInt();
-					} else {
-						r = 10;
-						break;
-					}
+		if (!lastMovedPiece.isKnown()
+			&& lastMovedPiece.getActingRankChase() != Rank.UNKNOWN) {
+			for (int d : dir) {
+				Piece tp = getPiece(i+d);
+				if (tp == null
+					|| tp.getColor() != Settings.topColor)
+					continue;
+				if (tp.isKnown()) {
+					if (tp.getRank().toInt() < r) 
+						r = tp.getRank().toInt();
+				} else {
+					r = 10;
+					break;
 				}
+			}
 
 		// Note that the AI considers the chase piece not bluffing
 		// when it calls setSuspectedRank().  This gives it more
 		// latitude to flee past unknown enemy rank, IF the
 		// chase piece happpens to become invincible.
 		
-				if (r != 10 && r <= lastMovedPiece.getRank().toInt())
-					setSuspectedRank(lastMovedPiece, getChaseRank(lastMovedPiece, r, false), false);
-			}
+			if (r != 10 && r <= lastMovedPiece.getRank().toInt())
+				setSuspectedRank(lastMovedPiece, getChaseRank(lastMovedPiece, r, false), false);
+		}
 
 		// set actingRankFlee temporarily on any AI pieces approached
 		// by an opponent piece.  When the AI evaluates any
@@ -3180,17 +3186,27 @@ public class TestingBoard extends Board
 		// the opponent will realize that the approached piece
 		// is weak.
 
-			if (lastMovedPiece != null)
-				for (int d : dir) {
-					Piece tp = getPiece(i+d);
-					if (tp == null)
-						continue;
-					if (tp.getColor() == Settings.topColor)
-						tp.setActingRankFlee(lastMovedPiece.getRank());
-				}
-					
-		} // lastMove != null
+		for (int d : dir) {
+			Piece tp = getPiece(i+d);
+			if (tp == null)
+				continue;
+			if (tp.getColor() == Settings.topColor)
+				tp.setActingRankFlee(lastMovedPiece.getRank());
 		}
+	}
+
+	//
+	// suspectedRank is based on ActingRankChase.
+	// If the piece has chased another piece,
+	// the ai guesses that the chaser is a lower rank
+	// If there are no lower ranks, then
+	// the chaser may be of the same rank (or perhaps higher, if
+	// bluffing)
+	//
+	public void genSuspectedRank()
+	{
+		super.genSuspectedRank();
+		genTempSuspectedRank();
 
 		for (int c = RED; c <= BLUE; c++) {
 			int lowerRanks = 0;
@@ -3456,7 +3472,9 @@ public class TestingBoard extends Board
 
 		int r = fprank.toInt()-1;
 
-		if (!fp.isKnown() && fp.moves == 0) {
+		if (!fp.isKnown()
+			&& fp.moves == 0
+			&& fp != activeRank[fpcolor][r]) {
 
 		// If the opponent has a known invincible rank,
 		// it will be hellbent on obliterating all
@@ -4348,7 +4366,7 @@ public class TestingBoard extends Board
 		// better rewarded to slam into the unmoved unknowns than
 		// face (almost) certain capture by the chaser.
 
-				assert !tp.hasMoved() : fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
+				assert !tp.hasMoved() : "AI " + fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 				tpvalue = values[1-fpcolor][Rank.UNKNOWN.toInt()];
 				fpvalue /= 2;
 			}
@@ -5085,6 +5103,8 @@ public class TestingBoard extends Board
 
 	protected int valueBluff(Piece oppPiece, Piece aiPiece, int to)
 	{
+		final int VALUE_BLUFF = 2;
+
 		// If the defender is near the flag,
 		// the defender has to call the bluff
 		// so bluffing isn't very effective
@@ -5103,7 +5123,7 @@ public class TestingBoard extends Board
 
 		Rank rank = oppPiece.getRank();
 		if (aiPiece.getRank() == Rank.SPY && rank == Rank.ONE)
-			return 0;
+			return VALUE_BLUFF;
 
 		// Bluffing using valuable pieces is (slightly) discouraged.
 
@@ -5120,7 +5140,7 @@ public class TestingBoard extends Board
 			&& !oppPiece.isRankLess())
 			return pieceValue(aiPiece)/2;
 
-		return 0;
+		return VALUE_BLUFF;
 	}
 
 	public int getValue()
@@ -6147,7 +6167,9 @@ public class TestingBoard extends Board
 		// worthless bombs.
 
 		if (tprank == Rank.BOMB || tprank == Rank.FLAG) {
-			if (fprank == Rank.EIGHT)
+			if (fprank == Rank.EIGHT
+				|| !fp.isKnown()
+				|| isExpendable(fp))
 				return 0;
 			// TBD: this is probably too conservative,
 			// especially if fp is expendable

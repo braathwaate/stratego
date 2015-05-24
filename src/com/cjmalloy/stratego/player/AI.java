@@ -2034,11 +2034,11 @@ public class AI implements Runnable
 	//
 	// Depth value reduction
 	//   known
-	// 2 : 5%
-	// 4 : 10%
-	// 6 : 15%
-	// 8 : 20%
-	// 10+ : 25%
+	// 2 : 10%
+	// 4 : 20%
+	// 6 : 30%
+	// 8 : 40%
+	// 10+ : 50%
 	//
 	// The depth value reduction must be small so that
 	// the AI does not leave pieces hanging to delay
@@ -2049,12 +2049,11 @@ public class AI implements Runnable
 
 	int depthValueReduction(int depth)
 	{
-		// vm = vm * (20 - Math.min(depth, 10)/2) / 20;
 		UndoMove um = b.getLastMove();
 		if (um == null)
 			return 0;
 
-		return -(b.getValue() - um.value) * (Math.min(depth, 10)/2) / 20;
+		return -(b.getValue() - um.value) * (Math.min(depth, 5)/2) / 20;
 	}
 
 
