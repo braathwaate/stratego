@@ -3436,33 +3436,30 @@ public class TestingBoard extends Board
 			assert newRank != Rank.UNKNOWN : "Piece " + p.getRank() + " " + p.isSuspectedRank() + " " + p.getActingRankChase() + " " + p.isKnown() + " should not have won (invincible)" + rankWon + " at " + p.getIndex() + " because lowestUnknownNotSuspectedRank is " + lowestUnknownNotSuspectedRank;
 			p.setSuspectedRank(newRank);
 		}
-
-		if (rankWon.toInt() <= 8)
-			p.setMaybeEight(false);
-
 	}
 
 	public void move(int m, int depth)
 	{
-		Piece fp = getPiece(Move.unpackFrom(m));
+		int from = Move.unpackFrom(m);
+		int to = Move.unpackTo(m);
+		Piece fp = getPiece(from);
 		boolean unknownScoutFarMove = 
-			!fp.isKnown() && !Grid.isAdjacent(m);
-		Piece tp = getPiece(Move.unpackTo(m));
+			!fp.isKnown() && !Grid.isAdjacent(from, to);
+		Piece tp = getPiece(to);
 		moveHistory(fp, tp, m);
 
 		if (depth == 0) {
-			assert boardHistory[0].hash == hashTest[0] : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
-			assert boardHistory[1].hash == hashTest[1] : "bug: hash changed before move "  + Move.unpackFrom(m) + " to " + Move.unpackTo(m);
+			assert boardHistory[0].hash == hashTest[0] : "bug: hash changed before move "  + from + " to " + to;
+			assert boardHistory[1].hash == hashTest[1] : "bug: hash changed before move "  + from + " to " + to;
 		}
 
-		setPiece(null, Move.unpackFrom(m));
+		setPiece(null, from);
 		int vm = 0;
 
 		// Moving an unknown scout reveals its rank.
 
 		if (unknownScoutFarMove) {
 			fp.setRank(Rank.NINE);
-			fp.setMaybeEight(false);
 		}
 
 		Rank fprank = fp.getRank();
@@ -3496,20 +3493,20 @@ public class TestingBoard extends Board
 		// intact to prevent the opponent from guessing the
 		// real structure.
 
-				vm += -VALUE_MOVED -values[fpcolor][r]/100 -unmovedValue[Move.unpackFrom(m)];
+				vm += -VALUE_MOVED -values[fpcolor][r]/100 -unmovedValue[from];
+		}
+
+		if (unknownScoutFarMove) {
+			vm -= stealthValue(fp);
+			makeKnown(fp);
 		}
 
 		if (tp == null) { // move to open square
 
-			vm += planValue(fp, Move.unpackFrom(m), Move.unpackTo(m), depth);
-			if (unknownScoutFarMove) {
-				vm -= stealthValue(fp);
-				makeKnown(fp);
-			}
-
-			fp.setIndex(Move.unpackTo(m));
+			vm += planValue(fp, from, to, depth);
+			fp.setIndex(to);
 			fp.moves++;
-			setPiece(fp, Move.unpackTo(m));
+			setPiece(fp, to);
 
 		} else { // attack
 
@@ -3518,7 +3515,7 @@ public class TestingBoard extends Board
 		// perhaps with different hash because of
 		// change in "known" status and perhaps rank).
 
-			setPiece(null, Move.unpackTo(m));
+			setPiece(null, to);
 
 			Rank tprank = tp.getRank();
 			boolean tpknown = tp.isKnown();
@@ -3553,7 +3550,7 @@ public class TestingBoard extends Board
 		// the discovery in some way.
 
 		//	if (tp.moves == 0 && isExpendable(fp))
-		//		vm += unmovedValue[Move.unpackTo(m)];
+		//		vm += unmovedValue[to];
 
 			int result = winFight(fp, tp);
 
@@ -3747,7 +3744,7 @@ public class TestingBoard extends Board
 				if (depth != 0
 					&& !isInvincible(fp)
 					&& isEffectiveBluff(tp, fp, m))
-					vm = Math.min(vm, valueBluff(fp, tp, Move.unpackTo(m)));
+					vm = Math.min(vm, valueBluff(fp, tp, to));
 
 				else if (depth != 0
 					&& (!isInvincible(tp)
@@ -3755,7 +3752,7 @@ public class TestingBoard extends Board
 							&& hasSpy(Settings.topColor)))
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(fp, tp, m)) {
-					vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, Move.unpackTo(m)));
+					vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
 				}
 
 		// Consider the following example.
@@ -3839,7 +3836,7 @@ public class TestingBoard extends Board
 						|| (fprank == Rank.ONE
 							&& hasSpy(Settings.bottomColor)))) {
 					for (int d : dir) {
-						Piece p = getPiece(Move.unpackTo(m) + d);
+						Piece p = getPiece(to + d);
 						if (p == null
 							|| p.getColor() != 1-fpcolor)
 							continue;
@@ -3915,7 +3912,7 @@ public class TestingBoard extends Board
 							&& hasSpy(fpcolor)))
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(fp, tp, m)) {
-					vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, Move.unpackTo(m)));
+					vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -3951,7 +3948,7 @@ public class TestingBoard extends Board
 							makeKnown(tp);
 						vm -= fpvalue;
 					}
-					setPiece(tp, Move.unpackTo(m));
+					setPiece(tp, to);
 				}
 
 				// vm = 0; // fubar
@@ -4015,7 +4012,8 @@ public class TestingBoard extends Board
 
 					if (depth != 0
 						&& isEffectiveBluff(fp, tp, m))
-						vm = Math.max(vm, valueBluff(tp, fp, Move.unpackTo(m)));
+						vm = Math.max(vm, valueBluff(tp, fp, to));
+					makeKnown(fp);
 				}
 
 		// If the target is not moved nor known and the attacker
@@ -4083,13 +4081,21 @@ public class TestingBoard extends Board
 		// -- R1 --
 		// Red Three is unknown and unmoved.  Blue Two cannot
 		// go right because of Two Squares.  It is forced to
-		// take Red Three.  This is why VALUE_MOVED is returned.
-		// This is not enough to to make the AI piece move,
-		// but high enough that it discourages the AI from
-		// pinning an opponent piece in this manner.
+		// take Red Three.
+		//
+		// Prior to version 9.6, VALUE_MOVE was returned.  But
+		// if an invincible opponent piece was near a slew of unmoved
+		// pieces, qs() accumulated VALUE_MOVE and so the AI
+		// assumed that the opponent would attack the slew of
+		// unmoved pieces, and so the AI would leave moved pieces
+		// hanging as well.  So in version 9.6, the AI simply checks
+		// to see if the opponent piece is attacked.  If not,
+		// an attack on an unmoved AI piece is zero.
 
-						if (risk == 1)
-							vm = VALUE_MOVED;
+						if (lastMove != null
+							&& !Grid.isAdjacent(from, lastMove.getTo())
+							&& risk == 1)
+							vm = 0;
 						else {
 							vm -= fpvalue * (10 - risk) / 10;
 
@@ -4117,23 +4123,21 @@ public class TestingBoard extends Board
 						if (depth != 0
 							&& !isInvincible(fp)
 							&& isEffectiveBluff(tp, fp, m))
-							vm = Math.min(vm, valueBluff(fp, tp, Move.unpackTo(m)));
+							vm = Math.min(vm, valueBluff(fp, tp, to));
 
 
 					}
+
+					if (!fp.isKnown()) {
+						makeWinner(fp, tprank);
+						makeKnown(fp, tprank);
+					}
 				}
 
-				if (!fp.isKnown()) {
-					makeWinner(fp, tprank);
-
-		// call makeWinner() before makeKnown()
-
-					makeKnown(fp);
-				} // fp not known
 
 				fp.moves++;
-				setPiece(fp, Move.unpackTo(m)); // won
-				fp.setIndex(Move.unpackTo(m));
+				setPiece(fp, to); // won
+				fp.setIndex(to);
 				//vm = 0; // fubar
 				break;
 
@@ -4276,7 +4280,7 @@ public class TestingBoard extends Board
 
 		if (npieces[Settings.bottomColor] >= 32
 			&& fprank == Rank.SIX
-			&& !isBombStructure(Move.unpackTo(m))) {
+			&& !isBombStructure(to)) {
 			int index = tp.getIndex();
 			int count = 0;
 			for (int d : dir) {
@@ -4448,7 +4452,7 @@ public class TestingBoard extends Board
 				else 
 					makeWinner(tp, fprank);
 					// makeKnown(tp);
-					setPiece(tp, Move.unpackTo(m));
+					setPiece(tp, to);
 
 
 				} else {
@@ -4602,7 +4606,7 @@ public class TestingBoard extends Board
 		// be discouraged from approaching an unknown opponent piece.
 
 
-					vm = Math.max(vm, valueBluff(fp, tp, Move.unpackTo(m)));
+					vm = Math.max(vm, valueBluff(fp, tp, to));
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -4621,16 +4625,13 @@ public class TestingBoard extends Board
 
 					if (!isPossibleBomb(tp) || fp.getActingRankChase() == Rank.UNKNOWN) {
 						makeWinner(fp, tprank);
-		// do not add in makeKnown() because fpvalue
-		// contains stealth and was already added
-		// in unknownValue()
-						makeKnown(fp);
+						makeKnown(fp, tprank);
 
 						fp.moves++;
-						setPiece(fp, Move.unpackTo(m)); // won
-						fp.setIndex(Move.unpackTo(m));
+						setPiece(fp, to); // won
+						fp.setIndex(to);
 					} else
-						setPiece(tp, Move.unpackTo(m));
+						setPiece(tp, to);
 				}
 				//vm = 0; // fubar
 				break;
@@ -5174,6 +5175,17 @@ public class TestingBoard extends Board
 			p.setKnown(true);
 	}
 
+	// makeKnown clears MAYBE_EIGHT, so call makeKnown
+	// only if the AI piece is an Eight or less.
+	// This also means that the AI will not sacrifice a Nine
+	// just to make a suspected rank known (which increases
+	// its value five-fold).
+	private void makeKnown(Piece opp, Rank airank)
+	{
+		if (airank.toInt() <= 8)
+			makeKnown(opp);
+	}
+
 	// If the opponent has an invincible win rank,
 	// then it is impossible to defend the flag,
 	// so do not try, because it just leads to successive piece loss
@@ -5380,9 +5392,11 @@ public class TestingBoard extends Board
 		// moved, meaning it stayed put, then attack is
 		// almost certain.
 
-		UndoMove prev = getLastMove(2);
-		if (prev != null && prev.getPiece() != tp)
-			return 9;
+		if (!isPossibleBomb(tp)) {
+			UndoMove prev = getLastMove(2);
+			if (prev != null && prev.getPiece() != tp)
+				return 9;
+		}
 
 		if (r <= 4)
 			return r;
