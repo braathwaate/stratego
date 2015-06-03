@@ -819,7 +819,7 @@ public class Board
 		// -- B? R5
 		// B? -- -- 
 
-			if (!chased.isKnown()) {
+			if (!chased.isKnown() && m.getPiece() == chased) {
 				assert chaser.isKnown() : "unknown chaser?";
 				Rank fleeRank = chased.getActingRankFleeLow();
 				Rank chaserRank = chaser.getApparentRank();
@@ -1002,8 +1002,37 @@ public class Board
 		if (m.getPiece() != chased)
 			return;
 
+		// Prior to version 9.6, if a chase piece had an unknown
+		// protector, it did not acquire a chase rank, because
+		// the strong piece could be either the chase piece or
+		// or the protector:
+		//	|| unknownProtector != null
+		// Then in TestingBoard, the chase piece acquired a
+		// temporary suspected rank so that the AI would treat
+		// the chase piece as a strong piece.
+		//
+		// In version 9.6, this code was removed, because
+		// of this example:
+		// B? B? R2
+		// -- -- -- B?
+		// Red Two has been approached by unknown Blue, and
+		// so the chaser acquired a temporary suspected rank of One.
+		// This lead Red Two to believe that it was invincible,
+		// so moved down.  But on the next move, it was no
+		// longer invincible, and was trapped!
+		//
+		// The problem could have been solved by only resetting
+		// Piece.moves to prevent Red Two from becoming invincible.
+		// This code change was made as well, but it is
+		// thought that setting a permanent chase rank is better,
+		// to encourage the AI to try to identify
+		// the chase piece by attacking it with a piece of
+		// expendable rank.  Then, if it is unable to do so
+		// within the allotted number of moves, the chase rank
+		// matures, and from then on the AI believes that the
+		// chase piece was the actual chaser.
+		
 		if (chased.isKnown()
-			|| unknownProtector != null
 			|| (knownProtector != null
 				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
 			return;
@@ -1072,8 +1101,11 @@ public class Board
 		if (arank == Rank.NIL 
 			|| (chaser.getApparentRank() == Rank.UNKNOWN
 				&& arank.toInt() >= 5)
-			|| arank.toInt() > chaser.getApparentRank().toInt())
+			|| arank.toInt() > chaser.getApparentRank().toInt()) {
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
+			assert chased.hasMoved() : "Chase piece must have moved";
+			chased.moves = 1;
+		}
 	}
 
 	// Chase acting rank is set implicitly if
@@ -1427,16 +1459,6 @@ public class Board
 					}
 		}
 
-		// If the piece hasn't moved, then maybe its a bomb
-		// COMMENTED OUT: Version 9.3
-		// The AI just cannot willy nilly suspect any unmoved
-		// piece to be a bomb!  Suspected bombs must be chosen
-		// very carefully because the AI pieces generally do
-		// not fear suspected bombs.  Not sure what this code
-		// was trying to accomplish.
-		// if (p.moves == 0)
-		//	return Rank.BOMB;
-
 		return newRank;
 	}
 
@@ -1716,6 +1738,20 @@ public class Board
 
 		// is a capture?
 		if (getPiece(to) != null)
+			return false;
+
+		// was a capture?
+		// For example,
+		// -- R6 -- --
+		// xx B5 R4 xx
+		// xx -- -- xx
+		// -- -- B3 --
+		// Blue Three moves up to attack Red Four.  R4xB5.
+		// Blue Three moves left.  Return false to allow
+		// Red Four to return to its initial square.
+		// (Otherwise Red Four would not take Blue Five
+		// and flee upwards instead).
+		if (m2.tp != null)
 			return false;
 
 		// not the same piece?

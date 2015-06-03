@@ -369,7 +369,7 @@ public class AI implements Runnable
 			};
 			if (p.getColor() == 1 - fpcolor) {
 				int mo = LOSES;
-				if (!p.isKnown())
+				if (b.isNineTarget(p))
 					mo = ATTACK;
 				addMove(moveList.get(mo), i, t);
 			}
