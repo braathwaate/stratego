@@ -4164,8 +4164,8 @@ public class TestingBoard extends Board
 
 		// could be bomb
 
-					if (!tp.isKnown()
-						&& isPossibleBomb(tp)
+					if ((tprank == Rank.BOMB
+						|| isPossibleBomb(tp))
 						&& (fp.isKnown() || fp.isSuspectedRank())
 						&& fprank != Rank.EIGHT) {
 						int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
@@ -5648,7 +5648,7 @@ public class TestingBoard extends Board
 		// it is still a threat.  That is why opponent moves,
 		// not distance, is used.
 
-		if (tp.moves - tp.movesOrig > 2)
+		if (fp.moves - fp.movesOrig > 2)
 			return apparentV;
 
 		return (apparentV * (10 - risk) + actualV * risk) / 10;
@@ -5801,8 +5801,16 @@ public class TestingBoard extends Board
 		// the stealth value of the opponent piece has already
 		// been collected, so if the AI attacks it again,
 		// it does not collect it twice.
+		//
+		// Note: if all the movable pieces have been moved,
+		// the rest must be bombs or the flag, so the
+		// AI sets the rank of the unmoved pieces to Bomb,
+		// and makes them known and suspected.  So suspected
+		// Bombs and the Flag have the same value as known ranks.
 
-		if (p.isSuspectedRank())
+		if (p.isSuspectedRank()
+			&& actualRank != Rank.BOMB
+			&& actualRank != Rank.FLAG)
 			v = Math.max(values[p.getColor()][Rank.UNKNOWN.toInt()], v / 5);
 
 		return v;

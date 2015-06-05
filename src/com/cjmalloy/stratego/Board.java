@@ -1101,7 +1101,16 @@ public class Board
 		if (arank == Rank.NIL 
 			|| (chaser.getApparentRank() == Rank.UNKNOWN
 				&& arank.toInt() >= 5)
-			|| arank.toInt() > chaser.getApparentRank().toInt()) {
+			|| arank.toInt() > chaser.getApparentRank().toInt()
+
+		// If an unknown piece has IS_LESS set (because it protected
+		// a piece) and then chases an AI piece,  clear IS_LESS
+		// (actual chases are better indicators of actual rank
+		// than protectors because of bluffing when an opponent
+		// piece is trapped.
+
+			|| chased.isRankLess()) {
+
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
 			assert chased.hasMoved() : "Chase piece must have moved";
 			chased.moves = 1;
