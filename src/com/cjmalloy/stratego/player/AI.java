@@ -2078,23 +2078,23 @@ public class AI implements Runnable
 		if (p.hasMoved())
 			s += 'M';
 		else
-			s += ' ';
+			s += '.';
 		if (p.isKnown())
 			s += 'K';
 		else
-			s += ' ';
+			s += '.';
 		if (p.isSuspectedRank())
 			s += 'S';
 		else
-			s += ' ';
+			s += '.';
 		if (p.isRankLess())
 			s += 'L';
 		else
-			s += ' ';
-		if (p.isBlocker())
-			s += 'B';
+			s += '.';
+		if (p.getMaybeEight())
+			s += '8';
 		else
-			s += ' ';
+			s += '.';
 		return s;
 	}
 

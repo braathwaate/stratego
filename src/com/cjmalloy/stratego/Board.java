@@ -37,6 +37,11 @@ public class Board
 	public static final int BLUE = 1;
 	public static int bturn = RED;
 	public static final Spot IN_TRAY = new Spot(-1, -1);
+
+	// number of moves unknown piece must make before
+	// AI begins to believe suspected rank is actual rank
+
+	public static final int SUSPECTED_RANK_AGING_DELAY = 15;
 	
 	public Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
@@ -630,6 +635,173 @@ public class Board
 		}
 	}
 
+	// Set direct chase rank
+
+	// Set direct chase rank to the piece that just moved.
+	// Do not set direct chase rank to any other piece.
+	//
+	// For example:
+	// B? -- R3
+	// Red Three approaches Unknown Blue.  Blue makes some
+	// other move.  So after Blue makes some other move,
+	// Unknown Blue should not acquire a chase rank because
+	// Unknown Blue did not approach Red Three.
+	//
+	// Why would Blue make some other move?  It would appear
+	// that Blue should take Red Three if Blue is lower ranked,
+	// flee if Blue is higher ranked, or stay put, attack, or
+	// flee if even ranked?
+	//
+	// But there are reasons why Blue may not move.
+	// 1. Unknown Blue is cornered.
+	//    (this case is handled above when open == 0)
+	// 2. Unknown Blue will lose the piece anyway because fleeing
+	//    would lead Red Three to fork a more valuable piece.
+	// 3. Unknown Blue is currently forked with another piece.
+	// 4. Blue is a human player and just missed the fact
+	//    that its piece is under attack.
+	// 5. It is protected.
+	//
+	// Case #3 occurs frequently.  For example,
+	// B? --
+	// -- R3
+	// B4
+	// If Red Three forks unknown Blue and Blue Four, Blue Four
+	// flees, unknown Blue should not acquire a chase rank.
+	//
+	// TBD: An opponent piece approaches a player piece
+	// that is protected by a low piece.
+	// The opponent piece is also protected, so it does not gain
+	// a chase rank.  But what if the opponent protector then moves?
+	// In this case, the opponent piece should acquire a chase
+	// rank, because it will likely attack the player
+	// piece if it become unprotected.
+	// To solve this, we need to add an actingRankApproach
+	// and rely on this instead of last move.
+
+	void setDirectChaseRank(Piece chaser, Piece chased)
+	{
+		Move m = getLastMove();
+		if (m.getPiece() != chased)
+			return;
+
+		// Prior to version 9.6, if a chase piece had a
+		// protector, it did not acquire a chase rank, because
+		// the strong piece could be either the chase piece or
+		// or the protector:
+		//	|| unknownProtector != null
+		//	|| (knownProtector != null
+		//		&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
+		//
+		// Then in TestingBoard, the chase piece acquired a
+		// temporary suspected rank so that the AI would treat
+		// the chase piece as a strong piece.
+		//
+		// In version 9.6, this code was removed, because
+		// of this example:
+		// B? B? R2
+		// -- -- -- B?
+		// Red Two has been approached by unknown Blue, and
+		// so the chaser acquired a temporary suspected rank of One.
+		// This lead Red Two to believe that it was invincible,
+		// so moved down.  But on the next move, it was no
+		// longer invincible, and was trapped!
+		//
+		// The problem could have been solved by only resetting
+		// Piece.moves to prevent Red Two from becoming invincible.
+		// This code change was made as well, but it is
+		// thought that setting a permanent chase rank is better,
+		// to encourage the AI to try to identify
+		// the chase piece by attacking it with a piece of
+		// expendable rank.  Then, if it is unable to do so
+		// within the allotted number of moves, the chase rank
+		// matures, and from then on the AI believes that the
+		// chase piece was the actual chaser.
+		
+		if (chased.isKnown())
+			return;
+
+		// If an unknown piece has been fleeing,
+		// and gets trapped in some way, it may just give up.
+		// So do not assign a chase rank equal to the flee rank.
+
+		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
+			return;
+
+		Rank arank = chased.getActingRankChase();
+
+		// An unknown chase rank, once set, is never changed to
+		// a rank lower than Six.  This prevents being duped
+		// by random bluffing, where a high rank piece chases
+		// all pieces, low ranks as well as unknowns.  The AI believes
+		// that unknown pieces that chase AI unknowns are probably
+		// high ranked pieces and can be attacked by a Five or less.
+		//
+		// So if an opponent piece chases an AI unknown and then
+		// chases a Five, it retains the chase rank of unknown,
+		// because a Five chase rank would indicate a suspected rank
+		// of Four, but a Four is less inclined to chase unknown
+		// pieces, so that would be unlikely.
+		//
+		// Prior to version 9.3, chasing an unknown always
+		// set the chase rank to UNKNOWN.
+		// The problem was that once the AI successfully
+		// trapped a low suspected rank that was forced to move
+		// pass AI unknowns, it lost its suspected rank
+		// and acquired the UNKNOWN rank.
+		// This led the AI to approach the now unknown opponent
+		// piece and thus lose its piece.
+		//
+		// In version 9.3, if a piece has a chase rank
+		// of 4 or lower, the low rank is retained if the piece
+		// chases an unknown.  The side-effect is that the AI is duped
+		// by an opponent piece that chases a low ranked AI piece
+		// and then chases an unknown.  This bluff results in
+		// the AI wasting a piece trying to discover the true rank
+		// of the bluffing piece.  If the AI piece is not able
+		// to attack the bluffing piece, it can also lead to the
+		// AI miscalculation of other suspected ranks on the board,
+		// leading to a loss elsewhere.
+		//
+		// Note that if a piece has a chase rank of Five
+		// (suspected rank of Four) and it then approaches an
+		// unknown, the chase rank changes to UNKNOWN, which
+		// usually results in a suspected rank of Five.
+		// Thus, if the piece is actually a trapped Four,
+		// the AI could approach it with a Five and lose
+		// (but it probably won't approach, because 5x5 is even).
+		// But much more often the piece is a Five, so that
+		// chasing an Unknown is a sure sign that the piece
+		// is not a Four but a Five, so the chance of a small loss
+		// (4x5) is a necessary evil.
+		//
+		// There is no way around this.  Bluffing makes assignment
+		// of suspected ranks a challenge.
+
+		if (arank == Rank.UNKNOWN
+			&& chaser.getApparentRank().toInt() <= 5)
+		 	return;
+
+		if (arank == Rank.NIL 
+			|| (chaser.getApparentRank() == Rank.UNKNOWN
+				&& arank.toInt() >= 5)
+			|| arank.toInt() > chaser.getApparentRank().toInt()
+
+		// If an unknown piece has IS_LESS set (because it protected
+		// a piece) and then chases an AI piece,  clear IS_LESS
+		// (actual chases are better indicators of actual rank
+		// than protectors because of bluffing when an opponent
+		// piece is trapped.
+
+			|| chased.isRankLess()) {
+
+			chased.setActingRankChaseEqual(chaser.getApparentRank());
+			assert chased.hasMoved() : "Chase piece must have moved";
+			chased.moves = 1;
+		}
+	}
+
+
 	// Return true if the chase piece is obviously protected.
 	//
 	// Examples:
@@ -681,6 +853,11 @@ public class Board
 
 		if (!chaser.isKnown() && !chased.isKnown())
 			return;
+
+		// In version 9.6, direct chase rank no longer
+		// depends on protecting pieces
+
+		setDirectChaseRank(chaser, chased);
 
 		assert getPiece(i) == chased : "chased not at i?";
 
@@ -954,167 +1131,6 @@ public class Board
 
 		} // unknown protector
 
-		// Set direct chase rank
-
-		// Set direct chase rank to the piece that just moved.
-		// Do not set direct chase rank to any other piece.
-		//
-		// For example:
-		// B? -- R3
-		// Red Three approaches Unknown Blue.  Blue makes some
-		// other move.  So after Blue makes some other move,
-		// Unknown Blue should not acquire a chase rank because
-		// Unknown Blue did not approach Red Three.
-		//
-		// Why would Blue make some other move?  It would appear
-		// that Blue should take Red Three if Blue is lower ranked,
-		// flee if Blue is higher ranked, or stay put, attack, or
-		// flee if even ranked?
-		//
-		// But there are reasons why Blue may not move.
-		// 1. Unknown Blue is cornered.
-		//    (this case is handled above when open == 0)
-		// 2. Unknown Blue will lose the piece anyway because fleeing
-		//    would lead Red Three to fork a more valuable piece.
-		// 3. Unknown Blue is currently forked with another piece.
-		// 4. Blue is a human player and just missed the fact
-		//    that its piece is under attack.
-		// 5. It is protected.
-		//
-		// Case #3 occurs frequently.  For example,
-		// B? --
-		// -- R3
-		// B4
-		// If Red Three forks unknown Blue and Blue Four, Blue Four
-		// flees, unknown Blue should not acquire a chase rank.
-		//
-		// TBD: An opponent piece approaches a player piece
-		// that is protected by a low piece.
-		// The opponent piece is also protected, so it does not gain
-		// a chase rank.  But what if the opponent protector then moves?
-		// In this case, the opponent piece should acquire a chase
-		// rank, because it will likely attack the player
-		// piece if it become unprotected.
-		// To solve this, we need to add an actingRankApproach
-		// and rely on this instead of last move.
-
-		Move m = getLastMove();
-		if (m.getPiece() != chased)
-			return;
-
-		// Prior to version 9.6, if a chase piece had an unknown
-		// protector, it did not acquire a chase rank, because
-		// the strong piece could be either the chase piece or
-		// or the protector:
-		//	|| unknownProtector != null
-		// Then in TestingBoard, the chase piece acquired a
-		// temporary suspected rank so that the AI would treat
-		// the chase piece as a strong piece.
-		//
-		// In version 9.6, this code was removed, because
-		// of this example:
-		// B? B? R2
-		// -- -- -- B?
-		// Red Two has been approached by unknown Blue, and
-		// so the chaser acquired a temporary suspected rank of One.
-		// This lead Red Two to believe that it was invincible,
-		// so moved down.  But on the next move, it was no
-		// longer invincible, and was trapped!
-		//
-		// The problem could have been solved by only resetting
-		// Piece.moves to prevent Red Two from becoming invincible.
-		// This code change was made as well, but it is
-		// thought that setting a permanent chase rank is better,
-		// to encourage the AI to try to identify
-		// the chase piece by attacking it with a piece of
-		// expendable rank.  Then, if it is unable to do so
-		// within the allotted number of moves, the chase rank
-		// matures, and from then on the AI believes that the
-		// chase piece was the actual chaser.
-		
-		if (chased.isKnown()
-			|| (knownProtector != null
-				&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
-			return;
-
-		// If an unknown piece has been fleeing,
-		// and gets trapped in some way, it may just give up.
-		// So do not assign a chase rank equal to the flee rank.
-
-		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
-			return;
-
-		Rank arank = chased.getActingRankChase();
-
-		// An unknown chase rank, once set, is never changed to
-		// a rank lower than Six.  This prevents being duped
-		// by random bluffing, where a high rank piece chases
-		// all pieces, low ranks as well as unknowns.  The AI believes
-		// that unknown pieces that chase AI unknowns are probably
-		// high ranked pieces and can be attacked by a Five or less.
-		//
-		// So if an opponent piece chases an AI unknown and then
-		// chases a Five, it retains the chase rank of unknown,
-		// because a Five chase rank would indicate a suspected rank
-		// of Four, but a Four is less inclined to chase unknown
-		// pieces, so that would be unlikely.
-		//
-		// Prior to version 9.3, chasing an unknown always
-		// set the chase rank to UNKNOWN.
-		// The problem was that once the AI successfully
-		// trapped a low suspected rank that was forced to move
-		// pass AI unknowns, it lost its suspected rank
-		// and acquired the UNKNOWN rank.
-		// This led the AI to approach the now unknown opponent
-		// piece and thus lose its piece.
-		//
-		// In version 9.3, if a piece has a chase rank
-		// of 4 or lower, the low rank is retained if the piece
-		// chases an unknown.  The side-effect is that the AI is duped
-		// by an opponent piece that chases a low ranked AI piece
-		// and then chases an unknown.  This bluff results in
-		// the AI wasting a piece trying to discover the true rank
-		// of the bluffing piece.  If the AI piece is not able
-		// to attack the bluffing piece, it can also lead to the
-		// AI miscalculation of other suspected ranks on the board,
-		// leading to a loss elsewhere.
-		//
-		// Note that if a piece has a chase rank of Five
-		// (suspected rank of Four) and it then approaches an
-		// unknown, the chase rank changes to UNKNOWN, which
-		// usually results in a suspected rank of Five.
-		// Thus, if the piece is actually a trapped Four,
-		// the AI could approach it with a Five and lose
-		// (but it probably won't approach, because 5x5 is even).
-		// But much more often the piece is a Five, so that
-		// chasing an Unknown is a sure sign that the piece
-		// is not a Four but a Five, so the chance of a small loss
-		// (4x5) is a necessary evil.
-		//
-		// There is no way around this.  Bluffing makes assignment
-		// of suspected ranks a challenge.
-
-		if (arank == Rank.UNKNOWN
-			&& chaser.getApparentRank().toInt() <= 5)
-		 	return;
-
-		if (arank == Rank.NIL 
-			|| (chaser.getApparentRank() == Rank.UNKNOWN
-				&& arank.toInt() >= 5)
-			|| arank.toInt() > chaser.getApparentRank().toInt()
-
-		// If an unknown piece has IS_LESS set (because it protected
-		// a piece) and then chases an AI piece,  clear IS_LESS
-		// (actual chases are better indicators of actual rank
-		// than protectors because of bluffing when an opponent
-		// piece is trapped.
-
-			|| chased.isRankLess()) {
-
-			chased.setActingRankChaseEqual(chaser.getApparentRank());
-			assert chased.hasMoved() : "Chase piece must have moved";
-			chased.moves = 1;
-		}
 	}
 
 	// Chase acting rank is set implicitly if
@@ -1548,7 +1564,7 @@ public class Board
 
 			if (rank == Rank.SPY) {
 				if (hasSpy(p.getColor()))
-					setSuspectedRank(p, Rank.SPY, p.moves < 15);
+					setSuspectedRank(p, Rank.SPY, p.moves < SUSPECTED_RANK_AGING_DELAY);
 
 			} else
 				setSuspectedRank(p, getChaseRank(p, rank.toInt(), p.isRankLess()), p.moves < 15);
