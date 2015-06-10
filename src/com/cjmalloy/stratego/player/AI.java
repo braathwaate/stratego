@@ -2053,7 +2053,7 @@ public class AI implements Runnable
 		if (um == null)
 			return 0;
 
-		return -(b.getValue() - um.value) * (Math.min(depth, 5)/2) / 20;
+		return -(b.getValue() - um.value) * Math.min(depth, 10) / 20;
 	}
 
 

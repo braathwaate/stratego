@@ -169,7 +169,7 @@ public class TestingBoard extends Board
 	// • If the AI is winning, an AI piece is worth less than
 	//	the opponents piece of the same rank.  If the AI is losing,
 	//	its pieces are worth more.
-	// • An unbombed flag is worth about a known Four.  (It is not
+	// • An unbombed flag is worth about a known Three.  (It is not
 	//	the highest value because of the opponent never really
 	//	knows for sure the location of the flag.  See the code
 	//	for more information).
@@ -499,16 +499,6 @@ public class TestingBoard extends Board
 
 			if (hasSpy(1-c))
 				values[c][1] = values[c][1]*9/10;
-
-		// Find the unknown rank with the minimum value
-
-			unknownRank[c] = Rank.UNKNOWN.toInt();
-			assert values[c][unknownRank[c]] == 0 : "Unknown has value?";
-			for (rank = 1; rank <= 10; rank++)
-				if (unknownRankAtLarge(c, rank) != 0
-					&& (unknownRank[c] == Rank.UNKNOWN.toInt()
-						|| pieceValue(c,rank) < pieceValue(c,unknownRank[c])))
-					unknownRank[c] = rank;
 
 		// Demote the value of the spy if there is
 		// no opponent marshal left at large.
@@ -999,7 +989,7 @@ public class TestingBoard extends Board
 		// unknown pieces.
 
 				else if (isInvincible(c, r))
-					v = Math.min(v, values[1-c][unknownRank[1-c]]);
+					v = 0;
 				else if (unknownDefenders > 3)
 					v -= v/3;
 				v = v * 2 / 10;
@@ -1017,6 +1007,17 @@ public class TestingBoard extends Board
 		// then all the remaining pieces are at risk.
 		valueStealth[c][Rank.BOMB.toInt()-1] =
 			(6 - unknownRankAtLarge(c, Rank.BOMB))*10;
+
+		// Find the unknown rank with the minimum piece value
+		// (value + stealth)
+
+			unknownRank[c] = Rank.UNKNOWN.toInt();
+			assert values[c][unknownRank[c]] == 0 : "Unknown has value?";
+			for (int rank = 1; rank <= 10; rank++)
+				if (unknownRankAtLarge(c, rank) != 0
+					&& (unknownRank[c] == Rank.UNKNOWN.toInt()
+						|| pieceValue(c,rank) < pieceValue(c,unknownRank[c])))
+					unknownRank[c] = rank;
 
 		} // color
 	}
@@ -2227,8 +2228,8 @@ public class TestingBoard extends Board
 
 		if (!bombed) {
 
-		// A non-bombed flag is worth about a known Four.
-		// So this is like having a known Four that cannot
+		// A non-bombed flag is worth about a known Three.
+		// So this is like having a known Three that cannot
 		// move, so the ai can only act defensively.
 		// But it should not risk a Three to save the flag
 		// because loss of superior rank during the endgame
@@ -3758,8 +3759,7 @@ public class TestingBoard extends Board
 							fprank,
 							unknownScoutFarMove,
 							tp,
-							actualValue(tp),
-							apparentValue(tp))
+							actualValue(tp))
 							- values[Settings.bottomColor][tprank.toInt()];
 						if (!fp.isKnown())
 							vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
@@ -3974,7 +3974,7 @@ public class TestingBoard extends Board
 				if (fpcolor == Settings.topColor)
 					vm += stealthValue(tp);
 				else {
-					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp), valueStealth[1-fpcolor][unknownRank[1-fpcolor]]);
+					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
 					vm += riskOfLoss(tp, fp);
 				}
 		
@@ -4209,8 +4209,7 @@ public class TestingBoard extends Board
 								fprank,
 								unknownScoutFarMove,
 								tp,
-								actualValue(tp),
-								apparentValue(tp));
+								actualValue(tp));
 						}
 
 					} else {
@@ -4219,8 +4218,7 @@ public class TestingBoard extends Board
 							fprank,
 							unknownScoutFarMove,
 							tp,
-							actualValue(tp),
-							apparentValue(tp));
+							actualValue(tp));
 
 		// If the bluff is effective, the AI does not lose
 		// its apparent piece value, but is discouraged from
@@ -4234,9 +4232,7 @@ public class TestingBoard extends Board
 
 					}
 
-					if (!fp.isKnown()) {
-						makeWinner(fp, tprank, false);
-					}
+					makeWinner(fp, tprank, false);
 				}
 
 
@@ -4658,7 +4654,7 @@ public class TestingBoard extends Board
 		// its pieces.
 
 						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.toInt() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
-						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp), apparentValue(tp));
+						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank.toInt(), false), false, tp, actualValue(tp));
 
 		// Outcome is the negation as if ai were the attacker.
 		//
@@ -4782,42 +4778,8 @@ public class TestingBoard extends Board
 		assert tp.getRank() == Rank.UNKNOWN : "target piece is known? (" + tp.getRank() + ")";
 		assert lowestUnknownExpendableRank != 0 : "unknownValue: unknown rank should be known.";
 
-		int r = fp.getRank().toInt();
-
-		// As the opponent uses up its expendable ranks,
-		// it becomes more likely that the unknown piece
-		// has higher stealth value.  Recall that the AI Five
-		// receives the stealth of a Three.  If all the
-		// opponent Fives are gone, then an AI Six is no
-		// different from an AI Five, and hence should receive
-		// the same stealth value as an AI Five.
-
-		if (r >= 5 && lowestUnknownExpendableRank >= r)
-			r = 5;
-
-		// unknownValue() should be more positive than a LOSS.
-		// For example, if an AI piece has a choice between
-		// a suspected Five and an unknown piece, it should attack
-		// the unknown piece.  So if the piece is a Six or higher,
-		// it gains the stealth value of a Four.
-
-		else if (r > 6)
-			r = 6;
-
-		// Once all the expendable ranks are gone,
-		// the AI can expect to receive more stealth value
-		// in an unknown exchange.
-
-		if (lowestUnknownExpendableRank < 5)
-			r = Math.min(r, lowestUnknownExpendableRank);
-
 		int tpvalue = 0;
-		if (r == 1)
-			tpvalue = valueStealth[tp.getColor()][0];
-		else if (r == 2)
-			tpvalue = valueStealth[tp.getColor()][0]+10;
-		else
-			tpvalue = valueStealth[tp.getColor()][r-3];
+		int r = fp.getRank().toInt();
 
 		// Note: Acting Rank Chase is an
 		// unreliable predictor of actual rank.
@@ -4858,6 +4820,55 @@ public class TestingBoard extends Board
 			&& chaseRank != Rank.UNKNOWN
 			&& fleeRank == Rank.UNKNOWN)
 			tpvalue += 15;
+
+		// Once all the expendable ranks are gone,
+		// the AI can expect to receive more stealth value
+		// in an unknown exchange.
+
+		if (lowestUnknownExpendableRank < 5)
+			r = Math.min(r, lowestUnknownExpendableRank);
+
+		// As the opponent uses up its expendable ranks,
+		// it becomes more likely that the unknown piece
+		// has higher stealth value.  Recall that the AI Five
+		// receives the stealth of a Three.  If all the
+		// opponent Fives are gone, then an AI Six is no
+		// different from an AI Five, and hence should receive
+		// the same stealth value as an AI Five.
+
+		else if (r >= 5 && lowestUnknownExpendableRank >= r)
+			r = 5;
+
+		// unknownValue() should be more positive than a LOSS.
+		// For example, if an AI piece has a choice between
+		// a suspected Five and an unknown piece, it should attack
+		// the unknown piece.  If an AI piece Six or higher
+		// attacks a suspected Five, it LOSES but gains the
+		// stealth of a Five.  If it attacks an unknown, 
+		// the result is UNK and it gains the stealth value of a Four.
+
+		else if (r > 6) {
+
+		// If the unknown piece has a chase rank, it probably
+		// isn't a Four.  But then the AI piece (7-9) also has
+		// a higher (but slim) probability of winning.  This
+		// is splitting hairs, but useful to discourage known
+		// low value AI pieces from chasing unknown weak opponent pieces
+		// that probably would win.  tpvalue must be between
+		// Five stealth (10) and Four stealth (15).
+
+			if (chaseRank == Rank.UNKNOWN)
+				tpvalue -= (r - 6);
+
+			r = 6;
+		}
+
+		if (r == 1)
+			tpvalue += valueStealth[tp.getColor()][0];
+		else if (r == 2)
+			tpvalue += valueStealth[tp.getColor()][0]+10;
+		else
+			tpvalue += valueStealth[tp.getColor()][r-3];
 
 		// In an effort to prevent draws,
 		// unknowns are worth more the more they move.
@@ -5308,18 +5319,27 @@ public class TestingBoard extends Board
 	}
 
 
-	private int stealthValue(Piece p)
+	private int stealthValue(int c, int r)
 	{
-		if (p.isKnown())
-			return 0;
+		return valueStealth[c][r-1];
+	}
 
-		Rank rank = p.getRank();
+	private int stealthValue(int c, Rank rank)
+	{
 		int r;
 		if (rank == Rank.UNKNOWN)
 			r = lowestUnknownExpendableRank;
 		else
 			r = rank.toInt();
-		return valueStealth[p.getColor()][r-1];
+		return stealthValue(c, r);
+	}
+
+	private int stealthValue(Piece p)
+	{
+		if (p.isKnown())
+			return 0;
+
+		return stealthValue(p.getColor(), p.getRank());
 	}
 
 	// If the opponent has an invincible win rank,
@@ -5371,11 +5391,22 @@ public class TestingBoard extends Board
 		// unknown miner from taking a worthless bomb.
 		// This is calculated in WINS.
 
-		// The ai is willing to sacrifice a Four in order to
-		// protect its own flag bombs.
+		// The ai is willing to sacrifice a Three in order to
+		// protect its own flag bombs.  Thus an unknown Two
+		// approaching the flag can easily win an AI Three.
+
+		// TBD:  More suspected rank analysis is needed to
+		// determine if approaching pieces are Eights.  Most
+		// opponents will send expendable pieces or Eights
+		// to areas with a suspected bomb structure, rather than
+		// low ranked pieces.  The AI needs to examine
+		// its known pieces, and track the movement of approaching
+		// pieces.  If an approacher is headed towards a Bomb,
+		// it is probably an Eight.
+
 		int more = 10;
 		if (color == Settings.topColor)
-			more = values[color][Rank.FOUR.toInt()];
+			more = values[color][Rank.THREE.toInt()];
 
 		return values[1-color][8]
 			+ valueStealth[1-color][Rank.EIGHT.toInt()-1]
@@ -5563,22 +5594,22 @@ public class TestingBoard extends Board
 
 	}
 
-	int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV, int apparentV)
+	int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV)
 	{
 		assert fp.getColor() == Settings.bottomColor : "apparentWinValue only for opponent attacker";
 
 		// if the target is known, attacker
 		// sees the actual value of the piece
+
 		if (tp.isKnown())
 			return actualV;
 
 		// tp is unknown
 
-		// attacker sees the apparent value of the piece,
-		// and the defender sees the risk of loss,
-		// which does not exceed the actual value of the piece.
-		// Both need to be considered in assigning a value to an
-		// attack on an unknown piece.
+		// Opponent does not know the actual value of the piece.
+		// So what is the chance that the opponent will actually
+		// attack?  This risk times the actual value of the
+		// piece is the win value.
 		//
 		// In the example below, AI Blue Spy and Blue Four
 		// and unmoved and unknown.  Red Three is known.
@@ -5593,9 +5624,8 @@ public class TestingBoard extends Board
 		// x -- R3
 		//
 		// But Red Three does not *see* the actual value of Blue Spy.
-		// It only sees the apparent value but the ai has to assign
-		// some risk (low) that Red Three will attack
-		// its unknown unmoved Blue Spy.
+		// But there is still some risk (very low) that Red Three
+		// will attack its unknown unmoved Blue Spy.
 		//
 		// In the following example, AI Blue Spy is unknown,
 		// Red Three and Blue Two are known.   Blue Two should not
@@ -5604,10 +5634,7 @@ public class TestingBoard extends Board
 		// -- ?B
 		// B2 
 		//
-		// If the apparent value was assigned to Blue Spy
-		// Blue Two would approach Red Three, because it would
-		// gain a Three minus the apparent value of Blue Spy
-		// (small).
+		// TBD: how is this handled?
 		//
 		// These two examples further suggest that the assignment
 		// value is somewhere between actual and apparent value.
@@ -5686,9 +5713,9 @@ public class TestingBoard extends Board
 		// not distance, is used.
 
 		if (fp.moves - fp.movesOrig > 2)
-			return apparentV;
+			return 0;
 
-		return (apparentV * (10 - risk) + actualV * risk) / 10;
+		return actualV * risk / 10;
 	}
 
 	public int apparentValue(Piece p)
@@ -6125,7 +6152,7 @@ public class TestingBoard extends Board
 	// An expendable Eight is usually worth less than a Seven.
 	// The question is how much less.  It depends on the endgame.  If bombs
 	// are still very important, expendable Eights may be worth
-	// more than a Seven.  But usually an engame is all about
+	// more than a Seven.  But usually an endgame is all about
 	// lower ranks winning, so Sevens are worth more.
 	//
 	// If an Eight is worth 5 points less,
