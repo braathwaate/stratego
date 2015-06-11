@@ -989,7 +989,7 @@ public class TestingBoard extends Board
 		// unknown pieces.
 
 				else if (isInvincible(c, r))
-					v = 0;
+					v = 10;	// less than minimum piece val
 				else if (unknownDefenders > 3)
 					v -= v/3;
 				v = v * 2 / 10;
@@ -4080,7 +4080,7 @@ public class TestingBoard extends Board
 				vm -= stealthValue(fp);
 
 				if (fpcolor == Settings.topColor) {
-					vm += apparentValue(tp);
+					vm += actualValue(tp);
 
 		// If a piece has a suspected rank but has not yet moved,
 		// and an AI piece (except Eight) attacks it,
@@ -5713,45 +5713,29 @@ public class TestingBoard extends Board
 		// not distance, is used.
 
 		if (fp.moves - fp.movesOrig > 2)
-			return 0;
+			return 2;	// bluffing value
 
 		return actualV * risk / 10;
 	}
 
-	public int apparentValue(Piece p)
-	{
-		return aiValue(p, true);
-	}
+	// TBD: combine with pieceValue()
 
 	public int actualValue(Piece p)
 	{
-		return aiValue(p, false);
-	}
-
-	private int aiValue(Piece p, boolean apparent)
-	{
-		// Piece value (bomb, flag) overrides calculated value.
-		// Piece value does not depend on being known
+		// Piece aiValue does not depend on being known
 		// because the ai sets it when the piece value is obvious.
+
 		int v = p.aiValue();
 
-		Rank actualRank = p.getRank();
-		int apparentRank;
+		Rank rank = p.getRank();
+		int r = rank.toInt();
+		if (rank == Rank.UNKNOWN)
+			r = unknownRank[p.getColor()];
 
-		// apparent rank is the known rank of a piece or
-		// if unknown, its suspected rank, if any,
-		// and otherwise RANK.UNKNOWN.
-		if (p.isKnown()
-			|| p.isSuspectedRank()
-			|| (!apparent && actualRank != Rank.UNKNOWN))
-			apparentRank = actualRank.toInt();
-		else
-			apparentRank = unknownRank[p.getColor()];
-
-		v += values[p.getColor()][apparentRank];
+		v += values[p.getColor()][r];
 
 		if (!p.isKnown())
-			v += valueStealth[p.getColor()][apparentRank-1];
+			v += valueStealth[p.getColor()][r-1];
 
 		// Suspected ranks have much less value than known ranks
 		// because of uncertainty.  The value of a suspected rank
@@ -5839,10 +5823,26 @@ public class TestingBoard extends Board
 		// AI sets the rank of the unmoved pieces to Bomb,
 		// and makes them known and suspected.  So suspected
 		// Bombs and the Flag have the same value as known ranks.
+		//
+		// Note that a suspected Spy also is currently assigned
+		// a fixed value (i.e. it does not increase in value
+		// with aging).  This is because the AI is confident
+		// in its assignment of suspected rank to the Spy,
+		// because it is unlikely (although possible) that
+		// the opponent would bluff with protecting its Two.
+		// This makes the discovery of a suspected Spy immediate
+		// fodder for chase and attack.
+		//
+		// TBD: the confidence in suspected rank increases as
+		// expendable pieces are reduced.
+		// And in general, suspected rank assignment needs to
+		// be improved, and afterwards this code needs to
+		// be revisited.
 
 		if (p.isSuspectedRank()
-			&& actualRank != Rank.BOMB
-			&& actualRank != Rank.FLAG) {
+			&& rank != Rank.SPY
+			&& rank != Rank.BOMB
+			&& rank != Rank.FLAG) {
 			if (p.moves < SUSPECTED_RANK_AGING_DELAY)
 				v /= 5;
 			else if (p.moves < SUSPECTED_RANK_AGING_DELAY * 3)
