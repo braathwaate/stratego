@@ -2370,6 +2370,11 @@ public class TestingBoard extends Board
 		if (eightsAtLarge == 0)
 			return;
 
+		// Eights begin to attack bomb structures as the
+		// number of possible structures diminish
+		boolean eightAttack = (maybe_count <= 3
+			|| maybe_count - open_count <= eightsAtLarge);
+
 		// It doesn't matter if the piece really is a bomb or not.
 		boolean found = true;
 		int layer = 1;
@@ -2392,7 +2397,7 @@ public class TestingBoard extends Board
 		// works for both AI and opponent bomb patterns.
 		//
 			if (color == Settings.bottomColor) {
-				if (maybe_count <= 3)
+				if (eightAttack)
 					p.setSuspectedRank(Rank.BOMB);
 				if (maybe_count == 1)
 					p.makeKnown();
@@ -2417,8 +2422,7 @@ public class TestingBoard extends Board
 		// this code is only for opponent bombs
 		if (color == Settings.bottomColor
 			&& found
-			&& (maybe_count <= 3
-				|| maybe_count - open_count <= eightsAtLarge))
+			&& eightAttack)
 			for (int j = layer; b[j] != 0; j++)
 				destBomb(b[j],
 					maybe_count - open_count <= eightsAtLarge);
@@ -3309,7 +3313,7 @@ public class TestingBoard extends Board
 	// Sixes, Sevens and Nines (and excess known Eights) are expendable
 	public boolean isExpendable(int c, int r)
 	{
-		return pieceValue(c, r) <= VALUE_EIGHT;
+		return pieceValue(c, r) <= pieceValue(c, 6);
 	}
 
 	public boolean isExpendable(Piece p)
@@ -3970,13 +3974,8 @@ public class TestingBoard extends Board
 
 			case Rank.LOSES :
 
-		// call apparentWinValue() before makeKnown()
-				if (fpcolor == Settings.topColor)
+				if (fpcolor == Settings.topColor) {
 					vm += stealthValue(tp);
-				else {
-					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
-					vm += riskOfLoss(tp, fp);
-				}
 		
 		// TBD: If the target piece has a suspected rank, then
 		// the ai is just guessing that it loses, so
@@ -4001,13 +4000,13 @@ public class TestingBoard extends Board
 		// a lower ranked piece.  The value
 		// of an unknown protector piece is irrelevant.
 		//
-				if (depth != 0
-					&& (!isInvincible(tp)
-						|| (tprank == Rank.ONE
-							&& hasSpy(fpcolor)))
-					&& !unknownScoutFarMove
-					&& isEffectiveBluff(fp, tp, m)) {
-					vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
+					if (depth != 0
+						&& (!isInvincible(tp)
+							|| (tprank == Rank.ONE
+								&& hasSpy(fpcolor)))
+						&& !unknownScoutFarMove
+						&& isEffectiveBluff(fp, tp, m)) {
+						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
 
 		// What should happen to the piece?
 		// If the bluff is effective, the opponent
@@ -4016,11 +4015,11 @@ public class TestingBoard extends Board
 		// AI piece would replace it.
 		// TBD: for now, both pieces disappear
 
-					// makeWinner(fp, tprank);
-					// makeKnown(fp);
-					// setPiece(fp, m.getTo());
-				} else {
-					if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
+						// makeWinner(fp, tprank);
+						// makeKnown(fp);
+						// setPiece(fp, m.getTo());
+					} else {
+						if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
 		// Set fpvalue, because the opponent expects that the
 		// unknown piece is a movable piece like any other piece.
 		// Thus LOSES returns an expected value.  This is
@@ -4029,14 +4028,25 @@ public class TestingBoard extends Board
 		// and so the opponent always gains fpvalue, and therefore
 		// may not be deterred in passing, even if it has stealth.
 
-						vm -= values[fpcolor][unknownRank[fpcolor]];
+							vm -= values[fpcolor][unknownRank[fpcolor]];
 		// makeWinner/makeKnown is not called because the opponent
 		// knows that the attacker is bluffing.
 
-					} else {
-						makeWinner(tp, fprank, true);
-						vm -= fpvalue;
+						} else {
+							makeWinner(tp, fprank, true);
+							vm -= fpvalue;
+						}
+						setPiece(tp, to);
 					}
+				} else {
+
+		// fp is opponent, so opponent loses but gains the stealth
+		// value of the AI piece and the AI piece becomes known.
+
+					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
+					vm += riskOfLoss(tp, fp);
+					tp.makeKnown();
+					vm -= fpvalue;
 					setPiece(tp, to);
 				}
 
