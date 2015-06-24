@@ -24,6 +24,7 @@ public class Piece implements Comparable<Piece>
 	private int uniqueID = 0;
 	private int color = 0;
 
+	private Rank actualRank = null;
 	private Rank rank = null;
 
 	private int value = 0;
@@ -66,6 +67,7 @@ public class Piece implements Comparable<Piece>
 		moves = p.moves;
 		movesOrig = p.moves;
 		rank = p.rank;
+		actualRank = p.actualRank;
 		actingRankFleeLow = p.actingRankFleeLow;
 		actingRankFleeHigh = p.actingRankFleeHigh;
 		actingRankChase = p.actingRankChase;
@@ -91,6 +93,33 @@ public class Piece implements Comparable<Piece>
 		rank = r;
 	}
 
+	// When the AI is playing an external agent, opponent rank in
+	// the Piece object must be UNKNOWN, so that the rank can be
+	// updated with suspected rank.  obfuscateRank saves the setup
+	// rank and revealRank() restores it when the piece becomes
+	// known.
+
+	public void obfuscateRank()
+	{
+		actualRank = rank;
+		rank = Rank.UNKNOWN;
+	}
+
+	public void revealRank()
+	{
+		if (rank == Rank.UNKNOWN)
+			rank = actualRank;
+		makeKnown();
+	}
+
+	public Rank getRank()
+	{
+		if (rank == Rank.UNKNOWN)
+			return actualRank;
+		else
+			return rank;
+	}
+
 	public void makeKnown()
 	{
 		flags |= IS_KNOWN;
@@ -104,13 +133,15 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getApparentRank() 
 	{
-		if (!isKnown())
-			return Rank.UNKNOWN;
-		else
-			return rank;
+		return rank;
+
+		// if ((flags & (IS_KNOWN | IS_SUSPECTED)) != 0)
+		// 	return rank;
+
+		// return Rank.UNKNOWN;
 	}
 	
-	public Rank getRank() 
+	public Rank getPieceRank() 
 	{
 		return rank;
 	}

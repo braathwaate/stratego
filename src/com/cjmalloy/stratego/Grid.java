@@ -263,37 +263,4 @@ public class Grid
 		}
 		return dir;
 	}
-
-	// search for closest relevant piece to Piece p
-	public Piece closestPiece(Piece p, int offset, boolean isBombed)
-	{
-		int tx = Grid.getX(p.getIndex() + offset);
-		int ty = Grid.getY(p.getIndex() + offset);
-	
-		int minsteps = 99;
-		Piece found = null;
-		for (int y = 0; y < 10; y++)
-		for (int x = 0; x < 10; x++) {
-			Piece fp = getPiece(x,y);
-			if (fp == null
-				|| !fp.hasMoved()
-				||  fp.getColor() == p.getColor())
-				continue;
-
-			// when looking for the closest relevant piece
-			// to a bomb, only look for eights and unknowns
-			if (isBombed
-				&& fp.getApparentRank() != Rank.UNKNOWN
-				&& fp.getApparentRank() != Rank.EIGHT)
-				continue;
-
-			int steps = Math.abs(ty - y) + Math.abs(tx - x);
-			if (steps < minsteps) {
-				minsteps = steps;
-				found = fp;
-			}
-		}
-
-		return found;
-	}
 }

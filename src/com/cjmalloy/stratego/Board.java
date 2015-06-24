@@ -187,6 +187,8 @@ public class Board
 			
 		if (getPiece(s) == null)
 		{
+			if (p.getColor() == Settings.bottomColor)
+			 	p.obfuscateRank();
 			setPiece(p, s);
 			tray.remove(p);
 			setup[Grid.getIndex(s.getX(), s.getY())] = p;
@@ -205,8 +207,8 @@ public class Board
 			moveHistory(fp, tp, m.getMove());
 
 			fp.setShown(true);
-			fp.makeKnown();
-			tp.makeKnown();
+			fp.revealRank();
+			tp.revealRank();
 			fp.setMoved();
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
@@ -897,9 +899,9 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-			if (p.isKnown() || p.isSuspectedRank()) {
+			if (p.getApparentRank() != Rank.UNKNOWN) {
 				if (knownProtector == null
-					|| knownProtector.getRank().toInt() > p.getRank().toInt())
+					|| knownProtector.getPieceRank().toInt() > p.getPieceRank().toInt())
 				knownProtector = p;
 
 			} else if (unknownProtector != null) {
@@ -1092,7 +1094,7 @@ public class Board
 		// known piece is protector
 
 			if (knownProtector != null
-				&& knownProtector.getApparentRank().toInt() <= r)
+				&& knownProtector.getPieceRank().toInt() <= r)
 				return;
 
 		// Only a Spy can protect a piece attacked by a One.
@@ -1489,38 +1491,7 @@ public class Board
 
 	protected void setSuspectedRank(Piece p, Rank rank, boolean maybeBluffing)
 	{
-		// TBD: Necessary architectural change
-
-		// When the AI is playing an external agent, opponent rank in
-		// the Piece object are UNKNOWN, but when playing locally,
-		// the rank is preassigned.  Suspected rank overwrites
-		// UNKNOWN, but not preassigned ranks.  So when the AI
-		// is playing locally, Board Pieces do not have any suspected
-		// ranks.
-
-		// This works fine if chase rank generation is independent.
-		// But as suspected ranking has become more reliable,
-		// chase ranking now depends on suspected ranks.
-		// For example,
-		// | -- R? --
-		// | B? B2 --
-		// | -- B? --
-		// ----------
-		// Unknown Blue to the left of Blue Two has not moved
-		// and appears to be an isolated Bomb.  Unknown Blue
-		// below Blue Two which has moved and shadowed Blue Two
-		// appears to be the Spy, and this should become its chase
-		// rank and subsequently its suspected rank.  But to make
-		// this decision, Red has to use its knowledge that the
-		// left unknown Blue is probably a Bomb.  Otherwise it
-		// appears to Red that Blue Two has two unknown protectors
-		// and either could be Blue Spy.
-		//
-		// So to fix this, the Piece object should always have UNKNOWN
-		// opponent ranks, and the actual assigned ranks should
-		// be retained elsewhere, probably in setup[]
-
-		if (p.getRank() == Rank.UNKNOWN || p.isSuspectedRank())
+		if (p.getPieceRank() == Rank.UNKNOWN || p.isSuspectedRank())
 			p.setSuspectedRank(rank);
 
 		if (!maybeBluffing)

@@ -28,11 +28,6 @@ public abstract class Engine
 		return board.getPiece(x, y);
 	}
 	
-	public void setBoardPiece(Piece p, Spot s)
-	{
-		board.setPiece(p, s);
-	}
-	
 	public Piece getTrayPiece(int i)
 	{
 		return board.getTrayPiece(i);

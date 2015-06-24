@@ -149,8 +149,8 @@ public class AITest extends View
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
-			// p.setRank(Rank.NINE);	// all moves valid for 9
 			p.setRank(Rank.UNKNOWN);
+			p.obfuscateRank();
 			p.setShown(false);
 		}
 		if (wview != null)
@@ -262,7 +262,6 @@ public class AITest extends View
 		int p[] = Move(x,y,direction, multiplier);
 
 		Piece attacker = engine.getBoardPiece(x,y);
-		// board.setBoardPiece(null, new Spot(x, y));
 		if (attacker == null)
 			throw new Exception("BasicAI.InterpretResult - Couldn't find a piece to move at (" + x +"," + y+")");
 
