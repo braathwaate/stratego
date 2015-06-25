@@ -105,19 +105,30 @@ public class Piece implements Comparable<Piece>
 		rank = Rank.UNKNOWN;
 	}
 
+	public boolean isRevealed()
+	{
+		return actualRank != null;
+	}
+
 	public void revealRank()
 	{
-		if (rank == Rank.UNKNOWN)
+		if (actualRank != null)
 			rank = actualRank;
 		makeKnown();
 	}
 
 	public Rank getRank()
 	{
-		if (rank == Rank.UNKNOWN)
+		if (actualRank != null)
 			return actualRank;
 		else
 			return rank;
+	}
+
+	public void revealRank(Rank r)
+	{
+		actualRank = r;
+		rank = r;
 	}
 
 	public void makeKnown()
@@ -211,8 +222,7 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankChase()
 	{
-		if (isKnown())
-			return rank;
+		assert !isKnown() : "actingRankChase: piece must be unknown";
 		return actingRankChase;
 	}
 
@@ -235,15 +245,13 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankFleeLow()
 	{
-		if (isKnown())
-			return rank;
+		assert !isKnown() : "actingRankFleeLow: piece must be unknown";
 		return actingRankFleeLow;
 	}
 
 	public Rank getActingRankFleeHigh()
 	{
-		if (isKnown())
-			return rank;
+		assert !isKnown() : "actingRankFleeHigh: piece must be unknown";
 		return actingRankFleeHigh;
 	}
 

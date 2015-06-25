@@ -149,7 +149,7 @@ public class AITest extends View
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
-			p.setRank(Rank.UNKNOWN);
+			p.setRank(null);	// clear ai setup pieces
 			p.obfuscateRank();
 			p.setShown(false);
 		}
@@ -276,25 +276,21 @@ public class AITest extends View
 			for ( i = 0; i < rank.length; i++)
 				if (rankchar[i] == attackerrank)
 					break;
-			assert attacker.getRank() == Rank.UNKNOWN
-				|| attacker.isSuspectedRank()
+			assert !attacker.isRevealed()
 				|| attacker.getRank() == rank[i]
 					: "Rank " + attacker.getRank() + " != " + rank[i] + " " + x + " " + y + " " + attackerrank;
-			if (attacker.getRank() == Rank.UNKNOWN
-				|| attacker.isSuspectedRank())
-				attacker.setRank(rank[i]);
+			if (!attacker.isRevealed())
+				attacker.revealRank(rank[i]);
 
 			char defenderrank = result.elementAt(outIndex+2).charAt(0); //ranks are 1 char long
 			for ( i = 0; i < rank.length; i++)
 				if (rankchar[i] == defenderrank)
 					break;
-			assert defender.getRank() == Rank.UNKNOWN
-				|| defender.isSuspectedRank()
+			assert !defender.isRevealed()
 				|| defender.getRank() == rank[i]
 				: "Rank " + defender.getRank() + " != " + rank[i] + " " + x + " " + y + " " + defenderrank;
-			if (defender.getRank() == Rank.UNKNOWN
-				|| defender.isSuspectedRank())
-				defender.setRank(rank[i]);
+			if (!defender.isRevealed())
+				defender.revealRank(rank[i]);
 			
 		}
 

@@ -1288,10 +1288,7 @@ public class Board
 						continue;
 				}
 
-		// If the chaser is a lower or equal rank to the chased piece,
-		// there is nothing more that can be determined.
-		//
-		// However, if the chased piece is Unknown, 
+		// If the chased piece is Unknown,
 		// then there is more that can be determined in this case
 		// if the chaser is not invincible, because if the chaser
 		// believes that the Unknown is a low ranked piece, then
@@ -1325,10 +1322,29 @@ public class Board
 					Move m = getLastMove();
 					if (m.getPiece() == chaser)
 						continue;
+
+		// If the chaser is a lower or equal rank to the chased piece,
+		// the chaser needs no protection.
+		// Set the direct chase rank (when ranks are equal
+		// and the the chaser is unknown and suspected)
+
 				} else if (chaserRank.toInt() <= chasedRank.toInt()
 					|| chaserRank == Rank.FLAG
-					|| chaserRank == Rank.BOMB)
-					continue;
+					|| chaserRank == Rank.BOMB) {
+					if (chased.isKnown()) {
+
+						setDirectChaseRank(chased, chaser);
+						continue;
+					}
+
+		// chased piece is an unknown piece, but it has a rank
+		// (i.e. not UNKNOWN, because that was tested for above)
+		// But the chaser doesn't know the rank, so the chaser
+		// could be assuming that it is a lower ranked piece,
+		// and perhaps relying on a lower rank protector.
+		// So continue on to isProtectedChase().
+
+				}
 
 		// Now this is the tricky part.
 		// The roles of chaser and chased are swapped
@@ -1572,8 +1588,51 @@ public class Board
 				setSuspectedRank(p, getChaseRank(p, rank.toInt(), p.isRankLess()), p.moves < 15);
 
 		} // for
+
+                // The ai considers all isolated unmoved pieces to be bombs.
+                //
+                // So one way to fool the AI is to make the flag
+                // isolated on the front rank (by moving all pieces that
+                // surround it) and then the AI will not attack it until
+                // it is the last piece remaining.  I doubt that few
+                // opponents will ever realize this without reading this code.
+                //
+                possibleBomb();
 	}
 
+	// Scan the board for isolated unmoved pieces (possible bombs).
+	// If the piece is Unknown and unmoved
+	// (and if the AI does not already suspect
+	// the piece to be something else, usually a Flag),
+	// reset the piece rank to Bomb so that the AI pieces
+	// will not want to attack it.
+	private void possibleBomb()
+	{
+		for (int i = 78; i <= 120; i++) {
+			if (!Grid.isValid(i))
+				continue;
+			Piece tp = getPiece(i);
+			if (tp != null
+				&& tp.getPieceRank() == Rank.UNKNOWN
+				&& !tp.hasMoved()) {
+				boolean found = false;
+				for ( int d : dir ) {
+					int j = i + d;
+					if (!Grid.isValid(j))
+						continue;
+					Piece p = getPiece(j);
+					if (p != null && !p.hasMoved()) {
+						found = true;
+						break;
+					}
+				}
+				if (!found) {
+		// transform the piece into a suspected bomb.
+					tp.setSuspectedRank(Rank.BOMB);
+				}
+			}
+		}
+	}
 	// ********* end of suspected ranks
 
 	public boolean move(Move m)
