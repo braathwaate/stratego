@@ -52,6 +52,7 @@ public class Piece implements Comparable<Piece>
 	{
 		uniqueID = Grid.UniqueID.get();
 		color = c;
+		actualRank = r;
 		rank = r;
 	}
 
@@ -91,38 +92,54 @@ public class Piece implements Comparable<Piece>
 	public void setRank(Rank r)
 	{
 		rank = r;
+		flags &= ~IS_SUSPECTED;
 	}
 
 	// When the AI is playing an external agent, opponent rank in
 	// the Piece object must be UNKNOWN, so that the rank can be
-	// updated with suspected rank.  obfuscateRank saves the setup
+	// updated with suspected rank.  saveActualRank() saves the setup
 	// rank and revealRank() restores it when the piece becomes
 	// known.
 
-	public void obfuscateRank()
+	public void saveActualRank()
 	{
 		actualRank = rank;
-		rank = Rank.UNKNOWN;
 	}
 
 	public boolean isRevealed()
 	{
-		return actualRank != null;
+		return actualRank != Rank.UNKNOWN;
 	}
 
 	public void revealRank()
 	{
-		if (actualRank != null)
+		if (actualRank != Rank.UNKNOWN)
 			rank = actualRank;
 		makeKnown();
 	}
 
+	// actualRank is the actual piece rank (if available)
+	public Rank getActualRank()
+	{
+		return actualRank;
+	}
+
+	// rank is the piece rank as seen or suspected by the AI
 	public Rank getRank()
 	{
-		if (actualRank != null)
-			return actualRank;
-		else
+		return rank;
+	}
+
+	// display rank is the rank displayed on the gui.  If a human
+	// opponent is playing, it is the actual rank of the opponent
+	// pieces.  But if the AI is playing remotely, and does not
+	// know the opponent pieces, it is the seen or suspected rank.
+	public Rank getDisplayRank()
+	{
+		if (actualRank == Rank.UNKNOWN)
 			return rank;
+		else
+			return actualRank;
 	}
 
 	public void revealRank(Rank r)
@@ -150,11 +167,6 @@ public class Piece implements Comparable<Piece>
 		// 	return rank;
 
 		// return Rank.UNKNOWN;
-	}
-	
-	public Rank getPieceRank() 
-	{
-		return rank;
 	}
 	
 	public int getID() 

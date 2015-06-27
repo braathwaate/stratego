@@ -188,7 +188,7 @@ public class Board
 		if (getPiece(s) == null)
 		{
 			if (p.getColor() == Settings.bottomColor)
-			 	p.obfuscateRank();
+			 	p.setRank(Rank.UNKNOWN);
 			setPiece(p, s);
 			tray.remove(p);
 			setup[Grid.getIndex(s.getX(), s.getY())] = p;
@@ -253,7 +253,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (getPiece(i, j) != null)
-			if (getPiece(i, j).getRank().equals(Rank.FLAG))
+			if (getPiece(i, j).getActualRank().equals(Rank.FLAG))
 			{
 				flagColor = grid.getPiece(i,j).getColor();
 				flags++;
@@ -269,8 +269,8 @@ public class Board
 			{
 				if (getPiece(i, j) != null)
 				if (getPiece(i, j).getColor() == k)
-				if (!getPiece(i, j).getRank().equals(Rank.FLAG))
-				if (!getPiece(i, j).getRank().equals(Rank.BOMB))
+				if (!getPiece(i, j).getActualRank().equals(Rank.FLAG))
+				if (!getPiece(i, j).getActualRank().equals(Rank.BOMB))
 				if (getPiece(i+1, j) == null ||
 					getPiece(i+1, j).getColor() == (k+1)%2||
 					getPiece(i, j+1) == null ||
@@ -901,7 +901,7 @@ public class Board
 
 			if (p.getApparentRank() != Rank.UNKNOWN) {
 				if (knownProtector == null
-					|| knownProtector.getPieceRank().toInt() > p.getPieceRank().toInt())
+					|| knownProtector.getRank().toInt() > p.getRank().toInt())
 				knownProtector = p;
 
 			} else if (unknownProtector != null) {
@@ -1094,7 +1094,7 @@ public class Board
 		// known piece is protector
 
 			if (knownProtector != null
-				&& knownProtector.getPieceRank().toInt() <= r)
+				&& knownProtector.getRank().toInt() <= r)
 				return;
 
 		// Only a Spy can protect a piece attacked by a One.
@@ -1507,7 +1507,10 @@ public class Board
 
 	protected void setSuspectedRank(Piece p, Rank rank, boolean maybeBluffing)
 	{
-		if (p.getPieceRank() == Rank.UNKNOWN || p.isSuspectedRank())
+		if (rank == Rank.UNKNOWN)
+			return;
+
+		if (p.getRank() == Rank.UNKNOWN || p.isSuspectedRank())
 			p.setSuspectedRank(rank);
 
 		if (!maybeBluffing)
@@ -1560,6 +1563,10 @@ public class Board
 		// tree if a Seven or lower ranked piece attacks the unknown)
 			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0)
 				p.setMaybeEight(true);
+			else
+				p.setMaybeEight(false);
+
+			p.setRank(Rank.UNKNOWN);
 
 			Rank rank = p.getActingRankChase();
 			if (rank == Rank.NIL || rank == Rank.UNKNOWN)
@@ -1613,7 +1620,7 @@ public class Board
 				continue;
 			Piece tp = getPiece(i);
 			if (tp != null
-				&& tp.getPieceRank() == Rank.UNKNOWN
+				&& tp.getRank() == Rank.UNKNOWN
 				&& !tp.hasMoved()) {
 				boolean found = false;
 				for ( int d : dir ) {
@@ -1888,6 +1895,10 @@ public class Board
 		if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
 			return false;
 
+		UndoMove oppmove1 = getLastMove(1);
+		if (oppmove1 == null)
+			return false;
+
 		// fleeing is OK, even if back to the same square
 		// for example,
 		// -------
@@ -1897,14 +1908,9 @@ public class Board
 		// Red Five moves down and Blue Four moves right.
 		// It is OK for Red Five to return to its original
 		// square.
-		Piece op = getPiece(from - (to - from));
-		if (op != null && op.getColor() ==
-			1 - getPiece(from).getColor())
+		if (from - (to - from) == oppmove1.getTo())
 			return false;
 
-		UndoMove oppmove1 = getLastMove(1);
-		if (oppmove1 == null)
-			return false;
 		int oppFrom1 = oppmove1.getFrom();
 
 		// This rule checks if the player move is forced.  If the
@@ -2198,7 +2204,7 @@ public class Board
 		if (isTwoSquares(m.getMove()))
 			return false;
 
-		switch (fp.getRank())
+		switch (fp.getActualRank())
 		{
 		case FLAG:
 		case BOMB:
@@ -2212,8 +2218,8 @@ public class Board
 			if (Math.abs(m.getFromX() - m.getToX()) == 1)
 				return true;
 
-		if (fp.getRank().equals(Rank.NINE)
-			|| fp.getRank().equals(Rank.UNKNOWN))
+		if (fp.getActualRank().equals(Rank.NINE)
+			|| fp.getActualRank().equals(Rank.UNKNOWN))
 			return validScoutMove(m.getFromX(), m.getFromY(), m.getToX(), m.getToY(), fp);
 
 		return false;

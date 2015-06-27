@@ -107,7 +107,7 @@ public class PieceButton extends JButton implements MouseListener,
 			if ((piece.isShown()==false && 
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
-				|| piece.getRank() == Rank.UNKNOWN)
+				|| piece.getDisplayRank() == Rank.UNKNOWN)
 			{
 				if (piece.getColor()%2 == 0) {
 					if (piece.hasMoved())
@@ -126,16 +126,16 @@ public class PieceButton extends JButton implements MouseListener,
 				if (piece.getColor()%2 == 0)
 				{
 					if (piece.isHighLight())
-						setIcon(skin.redASkins[piece.getRank().ordinal()]);
+						setIcon(skin.redASkins[piece.getDisplayRank().ordinal()]);
 					else
-						setIcon(skin.redSkins[piece.getRank().ordinal()]);
+						setIcon(skin.redSkins[piece.getDisplayRank().ordinal()]);
 				}
 				else
 				{
 					if (piece.isHighLight())
-						setIcon(skin.blueASkins[piece.getRank().ordinal()]);
+						setIcon(skin.blueASkins[piece.getDisplayRank().ordinal()]);
 					else
-						setIcon(skin.blueSkins[piece.getRank().ordinal()]);
+						setIcon(skin.blueSkins[piece.getDisplayRank().ordinal()]);
 				}
 			}
 		}
@@ -152,7 +152,7 @@ public class PieceButton extends JButton implements MouseListener,
 			if ((piece.isShown()==false && 
 				piece.getColor()%2!=Settings.bottomColor && 
 				!Settings.bShowAll)
-				|| piece.getRank() == Rank.UNKNOWN)
+				|| piece.getDisplayRank() == Rank.UNKNOWN)
 			{
 				if (piece.getColor()%2 == 0) {
 					if (piece.hasMoved())
@@ -171,21 +171,21 @@ public class PieceButton extends JButton implements MouseListener,
 				if (piece.getColor()%2 == 0)
 				{
 					if (piece.isHighLight())
-						pc = skin.redASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redASkins[piece.getDisplayRank().ordinal()].getImage();
 					else if (piece.hasMoved())
-						pc = skin.redAASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redAASkins[piece.getDisplayRank().ordinal()].getImage();
 					else
-						pc = skin.redSkins[piece.getRank().ordinal()].getImage();
+						pc = skin.redSkins[piece.getDisplayRank().ordinal()].getImage();
 				}
 				else
 				{
 					if (piece.isHighLight())
-						pc = skin.blueASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueASkins[piece.getDisplayRank().ordinal()].getImage();
 					else if (piece.hasMoved())
-						pc = skin.blueAASkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueAASkins[piece.getDisplayRank().ordinal()].getImage();
 					else
 
-						pc = skin.blueSkins[piece.getRank().ordinal()].getImage();
+						pc = skin.blueSkins[piece.getDisplayRank().ordinal()].getImage();
 				}
 			}
 
@@ -218,7 +218,7 @@ public class PieceButton extends JButton implements MouseListener,
 			resized = false;
 			
 			if (piece != null &&
-					(piece.getRank() == Rank.UNKNOWN || skin.scaledSkins[piece.getRank().ordinal()] != null))
+					(piece.getDisplayRank() == Rank.UNKNOWN || skin.scaledSkins[piece.getDisplayRank().ordinal()] != null))
 			{
 				refreshIcon();
 			}
@@ -235,9 +235,9 @@ public class PieceButton extends JButton implements MouseListener,
 			mouseDown = true;
 			mouseFrom = spot;
 			mousePiece = piece;
-			if (piece != null && skin.scaledSkins[piece.getRank().ordinal()] != null)
+			if (piece != null && skin.scaledSkins[piece.getDisplayRank().ordinal()] != null)
 			{
-				dragIcon = piece.getRank().ordinal();
+				dragIcon = piece.getDisplayRank().ordinal();
 			}
 		}
 	}

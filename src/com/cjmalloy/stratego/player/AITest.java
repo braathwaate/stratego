@@ -149,8 +149,8 @@ public class AITest extends View
 		for (int y = 6; y < 10; y++) 
 		for (int x = 0; x < 10; x++)  {
 			Piece p = engine.getBoardPiece(x, y);
-			p.setRank(null);	// clear ai setup pieces
-			p.obfuscateRank();
+			p.setRank(Rank.UNKNOWN);	// clear ai setup rank
+			p.saveActualRank();
 			p.setShown(false);
 		}
 		if (wview != null)
