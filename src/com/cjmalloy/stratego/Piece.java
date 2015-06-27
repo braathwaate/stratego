@@ -159,16 +159,6 @@ public class Piece implements Comparable<Piece>
 		return color;
 	}
 
-	public Rank getApparentRank() 
-	{
-		return rank;
-
-		// if ((flags & (IS_KNOWN | IS_SUSPECTED)) != 0)
-		// 	return rank;
-
-		// return Rank.UNKNOWN;
-	}
-	
 	public int getID() 
 	{
 		return uniqueID;

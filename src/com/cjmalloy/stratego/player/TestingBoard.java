@@ -6302,8 +6302,10 @@ public class TestingBoard extends Board
 		// also handled sent to LOSES. See winFight()).
 		//
 		// An Eight is allowed to approach suspected bombs and attack.
-		// But for other ranks, this is a bit aggressive, because
-		// because the suspected bomb could be a lower ranked piece.
+		// But for valuable ranks, this is a bit aggressive, because
+		// because the suspected bomb could be a lower ranked piece,
+		// and then the AI could unwittingly lose a valuable rank
+		// and consequently the game.
 
 		// Should the Eight be allowed to pass or attack a
 		// suspected worthless bomb?  The prior code
@@ -6324,9 +6326,15 @@ public class TestingBoard extends Board
 				|| !fp.isKnown()
 				|| isExpendable(fp))
 				return 0;
-			// TBD: this is probably too conservative,
-			// especially if fp is expendable
-			return pieceValue(fp)*7/10;
+
+		// How risky is it for a known valuable piece to approach
+		// a suspected bomb?  There is always some risk, but
+		// a reward could make it a worthwhile gamble.
+		// The AI is willing to risk a Four (but not a One
+		// Two or Three) if it can capture an expendable piece.
+		// The AI would risk a Three to capture a Five.
+	
+			return pieceValue(fp)/7;
 		}
 
 		// If the opponent has a dangerous unknown rank,

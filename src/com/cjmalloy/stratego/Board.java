@@ -477,8 +477,8 @@ public class Board
 			Piece p = getPiece(j);
 			if (p != null
 				&& p.getColor() == chasePiece.getColor()
-				&& (p.getApparentRank() == Rank.UNKNOWN
-					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
+				&& (p.getRank() == Rank.UNKNOWN
+					|| p.getRank().toInt() < chasedPiece.getRank().toInt())) {
 				return true;
 			}
 		}
@@ -525,7 +525,7 @@ public class Board
 			if (chasePiece != null
 				&& chasePiece.getColor() != fp.getColor()) {
 				// chase confirmed
-				Rank rank = chasePiece.getApparentRank();
+				Rank rank = chasePiece.getRank();
 				if (rank == Rank.BOMB)
 					continue;
 
@@ -535,7 +535,7 @@ public class Board
 		// is unknown or of equal or lower rank than a piece
 		// under attack elsewhere on the board.
 
-				chaserank = fp.getApparentRank().toInt();
+				chaserank = fp.getRank().toInt();
 
 		// if the chase piece is protected,
 		// nothing can be guessed about the rank
@@ -596,7 +596,7 @@ public class Board
 			if (op == null
 				|| op.getColor() == fp.getColor())
 				continue;
-			Rank rank = op.getApparentRank();
+			Rank rank = op.getRank();
 			if (rank.toInt() <  chaserank)
 				chaserank = rank.toInt();
 		}
@@ -627,7 +627,7 @@ public class Board
 					|| tp != null)	// TBD: test rank
 					continue;
 
-				Rank rank = op.getApparentRank();
+				Rank rank = op.getRank();
 				if (rank == Rank.BOMB
 					|| rank.toInt() >= chaserank)	// new in version 9.5
 					continue;
@@ -693,7 +693,7 @@ public class Board
 		// or the protector:
 		//	|| unknownProtector != null
 		//	|| (knownProtector != null
-		//		&& knownProtector.getApparentRank().toInt() < chaser.getApparentRank().toInt()))
+		//		&& knownProtector.getRank().toInt() < chaser.getRank().toInt()))
 		//
 		// Then in TestingBoard, the chase piece acquired a
 		// temporary suspected rank so that the AI would treat
@@ -727,7 +727,7 @@ public class Board
 		// and gets trapped in some way, it may just give up.
 		// So do not assign a chase rank equal to the flee rank.
 
-		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
+		if (chased.getActingRankFleeLow() == chaser.getRank())
 			return;
 
 		Rank arank = chased.getActingRankChase();
@@ -781,13 +781,13 @@ public class Board
 		// of suspected ranks a challenge.
 
 		if (arank == Rank.UNKNOWN
-			&& chaser.getApparentRank().toInt() <= 5)
+			&& chaser.getRank().toInt() <= 5)
 		 	return;
 
 		if (arank == Rank.NIL 
-			|| (chaser.getApparentRank() == Rank.UNKNOWN
+			|| (chaser.getRank() == Rank.UNKNOWN
 				&& arank.toInt() >= 5)
-			|| arank.toInt() > chaser.getApparentRank().toInt()
+			|| arank.toInt() > chaser.getRank().toInt()
 
 		// If an unknown piece has IS_LESS set (because it protected
 		// a piece) and then chases an AI piece,  clear IS_LESS
@@ -797,7 +797,7 @@ public class Board
 
 			|| chased.isRankLess()) {
 
-			chased.setActingRankChaseEqual(chaser.getApparentRank());
+			chased.setActingRankChaseEqual(chaser.getRank());
 			assert chased.hasMoved() : "Chase piece must have moved";
 			chased.moves = 1;
 		}
@@ -899,7 +899,7 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-			if (p.getApparentRank() != Rank.UNKNOWN) {
+			if (p.getRank() != Rank.UNKNOWN) {
 				if (knownProtector == null
 					|| knownProtector.getRank().toInt() > p.getRank().toInt())
 				knownProtector = p;
@@ -1001,7 +1001,7 @@ public class Board
 			if (!chased.isKnown() && m.getPiece() == chased) {
 				assert chaser.isKnown() : "unknown chaser?";
 				Rank fleeRank = chased.getActingRankFleeLow();
-				Rank chaserRank = chaser.getApparentRank();
+				Rank chaserRank = chaser.getRank();
 				if (fleeRank != chaserRank) {
 
 		// If the chased piece already has an acting rank chase,
@@ -1037,13 +1037,13 @@ public class Board
 		// to Red than the neighboring piece was also a valuable
 		// target.  (This is definitely advanced game play).
 
-			if (chaser.getApparentRank().toInt() >= 5
+			if (chaser.getRank().toInt() >= 5
 				&& !chased.isKnown())
 				return;
 
 		// strong unknown protector confirmed
 
-			int r = chased.getApparentRank().toInt();
+			int r = chased.getRank().toInt();
 
 		// One cannot be protected.
 			if (r == 1)
@@ -1052,8 +1052,8 @@ public class Board
 			int attackerRank = 0;
 
 			if (chaser.isKnown()) {
-				attackerRank = chaser.getApparentRank().toInt();
-				assert attackerRank < r : "known chaser " + attackerRank + "  must chase unknown or lower rank, not " + chased.getApparentRank();
+				attackerRank = chaser.getRank().toInt();
+				assert attackerRank < r : "known chaser " + attackerRank + "  must chase unknown or lower rank, not " + chased.getRank();
 				r = attackerRank - 1;
 			} else {
 
@@ -1191,8 +1191,8 @@ public class Board
 	
 			if (chased == null
 				|| chased.getColor() == turn
-				|| chased.getApparentRank() == Rank.FLAG
-				|| chased.getApparentRank() == Rank.BOMB)
+				|| chased.getRank() == Rank.FLAG
+				|| chased.getRank() == Rank.BOMB)
 				continue;
 
 		// Then find a chaser piece of the same color
@@ -1284,7 +1284,7 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-					if (chaser.getApparentRank().toInt() >= 5)
+					if (chaser.getRank().toInt() >= 5)
 						continue;
 				}
 
@@ -1315,8 +1315,8 @@ public class Board
 		// is a superior piece, and so the AI assumes that its
 		// protector is even more superior.
 
-				Rank chasedRank = chased.getApparentRank();
-				Rank chaserRank = chaser.getApparentRank();
+				Rank chasedRank = chased.getRank();
+				Rank chaserRank = chaser.getRank();
 
 				if (chasedRank == Rank.UNKNOWN) {
 					Move m = getLastMove();
