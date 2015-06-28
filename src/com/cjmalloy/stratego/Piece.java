@@ -142,6 +142,17 @@ public class Piece implements Comparable<Piece>
 			return actualRank;
 	}
 
+	// getApparentRank() returns unknown if the ai piece is unknown,
+	// and otherwise the suspected rank.  This is the rank that
+	// each side sees.
+	public Rank getApparentRank()
+	{
+		if (!isKnown() && color == Settings.topColor)
+			return Rank.UNKNOWN;
+		else
+			return rank;
+	}
+
 	public void revealRank(Rank r)
 	{
 		actualRank = r;
