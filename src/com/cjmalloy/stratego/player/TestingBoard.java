@@ -173,13 +173,22 @@ public class TestingBoard extends Board
 	//	knows for sure the location of the flag.  See the code
 	//	for more information).
 	// 
+	// Note that known Sevens and Nines have very little value,
+	// and the AI should sacrifice these pieces by approaching
+	// unknown opponent pieces, because the possibility of gaining
+	// almost any discovery exceeds their value.  If the AI is
+	// winning (and therefore its pieces are reduced in value)
+	// a known Seven (or Nine) should sacrifice itself
+	// to discover a Four (15 stealth)
+	// but not a Five (10 stealth).  
 
 	private static final int VALUE_THREE = 200;
 	private static final int VALUE_FOUR = 100;
 	private static final int VALUE_FIVE = 50;
-	private static final int VALUE_SIX = 30;
-	private static final int VALUE_EIGHT = 35;
-	private static final int VALUE_NINE = 15;
+	private static final int VALUE_SIX = 25;
+	private static final int VALUE_SEVEN = 16;
+	private static final int VALUE_EIGHT = 30;
+	private static final int VALUE_NINE = 12;
 	private static final int [] startValues = {
 		0,
 		800,	// 1 Marshal
@@ -188,7 +197,7 @@ public class TestingBoard extends Board
 		VALUE_FOUR,	// 4 Major
 		VALUE_FIVE,	// 5 Captain
 		VALUE_SIX,	// 6 Lieutenant
-		20,	// 7 Sergeant
+		VALUE_SEVEN,	// 7 Sergeant
 		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
 		VALUE_NINE-5,	// Spy
@@ -2387,14 +2396,21 @@ public class TestingBoard extends Board
 				nb++;
 			}
 
-		// If there is a corner bomb structure (2 bombs) and
-		// a 3 bomb structure, choose the 3 bomb structure,
-		// because often the corner bomb structure is a ruse because
-		// it is difficult to defend.
+		// Note: If there is a corner bomb structure (2 bombs) and
+		// a 3 bomb structure, the 3 bomb structure normally
+		// contains the flag because often the corner bomb
+		// structure is a ruse because it is difficult to defend.
+		// However, the corner bomb structure could be inside
+		// the classic layered corner bomb structure.  In this case,
+		// the corner bomb structure probably has the flag.
+		// TBD:  So the AI needs to look at the defense of movable
+		// pieces near the structures.  If the opponent is leaving
+		// a structure undefended, it likely is a ruse.
 
-			if ((nb < size && !(nb == 2 && size == 3))
-				 || (size == 2 && nb == 3))
+			if (nb < size) {
+				size = nb;
 				bestGuess = i;
+			}
 		
 
 		// Unmoved pieces that remain in structures that could
@@ -3786,7 +3802,7 @@ public class TestingBoard extends Board
 				} else {	// AI is attacker
 
 					assert !tp.isKnown() : "defender is known?"; 
-					vm += stealthValue(Settings.bottomColor, tprank.toInt());
+					vm += stealthValue(tp);
 
 		// Often an unmoved piece acquires a chase rank
 		// because it protected a piece.  However, the piece
@@ -4861,7 +4877,7 @@ public class TestingBoard extends Board
 		// the same stealth value as an AI Five.
 
 		else if (r >= 5 && lowestUnknownExpendableRank >= r)
-			r = 5;
+			r = 5;	// results in Three stealth
 
 		// unknownValue() should be more positive than LOSES.
 		// For example, if an AI piece has a choice between
@@ -4873,7 +4889,7 @@ public class TestingBoard extends Board
 
 		else if (r > 6) {
 
-		// If the unknown piece has a chase rank, it probably
+		// If the unknown piece has an unknown chase rank, it probably
 		// isn't a Four.  But then the AI piece (7-9) also has
 		// a higher (but slim) probability of winning.  This
 		// is splitting hairs, but useful to discourage known
@@ -4884,7 +4900,7 @@ public class TestingBoard extends Board
 			if (chaseRank == Rank.UNKNOWN)
 				tpvalue -= (r - 6);
 
-			r = 6;
+			r = 6;	// results in Four stealth
 		}
 
 		if (r == 1)
@@ -6151,13 +6167,16 @@ public class TestingBoard extends Board
 				&& valueStealth[tp.getColor()][lowestUnknownNotSuspectedRank-1] * 5 / 4 > values[fp.getColor()][fleeRank.toInt()]))
 			fleeRank = tp.getActingRankFleeLow();
 
+		int fleerank = fleeRank.toInt();
+		if (fleerank == fprank)
+			return true;
+
 		if (fleeRank == Rank.UNKNOWN
 			|| fleeRank == Rank.NIL
 			|| (fprank <= 4
 				&& valueStealth[tp.getColor()][lowestUnknownNotSuspectedRank-1] * 5 / 4 > values[fp.getColor()][fleeRank.toInt()]))
 			return false;
 
-		int fleerank = fleeRank.toInt();
 		if (fleerank >= fprank)
 			return true;
 

@@ -1890,10 +1890,23 @@ public class Board
 		// So Version 9.6 removed the 9.5 code and replaced it
 		// with the 9.3 test for three squares.
 
-		// test for three squares (which is allowed)
+		// Test for three squares (which is allowed)
+
+		// Version 9.6 allowed the move if the third square
+		// was occupied by an opponent piece, because then
+		// the chased piece can avoid a two squares ending
+		// by attacking the opponent piece.
+		//
+		// Version 9.7 commented that line of code out:
+		//	|| p.getColor() == 1 - m2.getPiece().getColor()
+		// because the opponent piece *could* be a bomb.
+		// Alternatively, the code could be qualified by
+		//	&& p.getRank() != Rank.BOMB))
+
 		Piece p = getPiece(to + to - from);
-		if (p == null || p.getColor() == 1 - m2.getPiece().getColor())
+		if (p == null)
 			return false;
+
 
 		UndoMove oppmove1 = getLastMove(1);
 		if (oppmove1 == null)
