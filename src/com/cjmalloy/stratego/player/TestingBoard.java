@@ -90,6 +90,18 @@ public class TestingBoard extends Board
 	protected Random rnd = new Random();
 	protected UndoMove lastMove;
 	protected int[] unknownRank = new int[2];
+	protected static final int forayMap[] = {
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
+		0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
+		0, 0, 1, 1, 1, 1, 1, 1, 0, 0
+	};
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -1970,7 +1982,6 @@ public class TestingBoard extends Board
 		int stepsDefender = 99;
 		Piece pDefender = null;
 		int stepsAttacker = 99;
-		Piece pAttacker = null;
 
 		for (int i = 12; i < 120; i++) {
 			if (!Grid.isValid(i))
@@ -1982,8 +1993,18 @@ public class TestingBoard extends Board
 			if (p.getColor() == 1 - color) {
 				if (destTmp[i] < stepsAttacker) {
 					stepsAttacker = destTmp[i];
-					pAttacker = p;
 				}
+				continue;
+			}
+
+		// The Spy is the better piece to protect the flag area
+		// against a One.  (A One can be used, but after 1x1,
+		// the flag area is unprotected).
+
+			if (attacker == Rank.ONE
+				&& p.getRank() == Rank.SPY) {
+				stepsDefender = destTmp[i];
+				pDefender = p;
 				continue;
 			}
 
@@ -3503,11 +3524,11 @@ public class TestingBoard extends Board
 		boolean fpknown = fp.isKnown();
 		boolean fpsuspected = fp.isSuspectedRank();
 
-		int r = fprank.toInt()-1;
+		int rank = fprank.toInt();
 
 		if (!fp.isKnown()
 			&& fp.moves == 0
-			&& fp != activeRank[fpcolor][r]) {
+			&& fp != activeRank[fpcolor][rank-1]) {
 
 		// If the opponent has a known invincible rank,
 		// it will be hellbent on obliterating all
@@ -3515,10 +3536,10 @@ public class TestingBoard extends Board
 		// so movement of additional pieces is heavily discouraged.
 
 			if (fpcolor == Settings.topColor
-				&& r > dangerousKnownRank)
+				&& rank > dangerousKnownRank)
 				vm += -VALUE_MOVED*2;
 
-			if (!neededRank[fpcolor][r])
+			if (!neededRank[fpcolor][rank-1])
 
 		// Moving an unmoved piece needlessly is bad play
 		// because these pieces can become targets for
@@ -3529,7 +3550,7 @@ public class TestingBoard extends Board
 		// intact to prevent the opponent from guessing the
 		// real structure.
 
-				vm += -VALUE_MOVED -values[fpcolor][r]/100 -unmovedValue[from];
+				vm += -VALUE_MOVED -values[fpcolor][rank]/100 -unmovedValue[from];
 		}
 
 		if (unknownScoutFarMove) {
@@ -4366,95 +4387,6 @@ public class TestingBoard extends Board
 
 					assert tprank == Rank.UNKNOWN: "Known ranks are handled in WINS/LOSES/EVEN";
 
-		// One exception to the rule that the AI piece loses its value
-		// in an unknown exchange is at the start of the game when
-		// few of the pieces can move and most of the expendable
-		// pieces are still unknown.  This condition is slightly
-		// favorable to a kamikaze foray by a Six, because 
-		// winning a random encounter is greater than 50%
-		// even against an unmoved piece.
-		//
-		// A Six has to win only one such encounter.
-		// Because the opponent often places
-		// its higher ranks in the front line and bombs in the
-		// rear row, odds are improved for a foray into the front row.
-		//
-		// The probability is hard to prove theoretically
-		// (because it depends on opponent setup) so
-		// one must run a series of games to prove that this
-		// is a valid rule.  One can also reason this intuitively
-		// as follows.
-		//
-		// A Six loses against 14 pieces (Bombs, 4s and 5s).
-		// Note that even if it wins only one piece and loses the
-		// next, it will also have won the stealth value of the
-		// attacker.  The probability of winning one piece is
-		// about 60%.
-
-		if (npieces[Settings.bottomColor] >= 32
-			&& fprank == Rank.SIX
-			&& !isBombStructure(to)) {
-			int index = tp.getIndex();
-			int count = 0;
-			for (int d : dir) {
-				int i = index + d;
-				if (!Grid.isValid(i)) {
-					count++;
-					continue;
-				}
-				Piece p = getPiece(i);
-				if (p == null || p == fp)
-					continue;
-
-		// If the AI piece is known,
-		// and a protector piece has moved
-		// towards the unmoved unknown piece,
-		// it which nullifies the AI attack
-
-				if (p.getRank() == Rank.UNKNOWN) {
-					if (p.hasMoved() && !fp.isKnown()) {
-						count = 0;
-							break;
-						}
-						count++;
-					}
-				}
-
-		// There must be at least 2 unknown neighbors,
-		// othewise the isolated piece is probably a bomb.
-
-				if (count >= 2) {
-					int div = 2;
-
-		// If the AI piece is known, a moved piece
-		// that the opponent allows to be taken is
-		// probably a lower rank, so it is better to
-		// attack unmoved pieces.
-
-		// TBD: Should the AI piece head for the rear rank or
-		// the front rank?  The front rank will likely have
-		// Fours but the rear rank will likely have Eights
-		// and possibly the Spy, One or Two, but much more
-		// bombs.
-
-					if (fp.isKnown() && tp.moves == 0)
-						div++;
-
-		// If the AI piece approached and the opponent
-		// neglected to attack, it is more likely that
-		// the opponent piece is weak (or a bomb).
-		// (This is always true throughout the duration of
-		// the game, but as the game progresses, the
-		// bomb density grows which cancels the advantage
-		// of attack).
-
-					if (isFleeing(fp, tp))
-						div++;
-
-					fpvalue = fpvalue / div;
-				}
-			}
-
 			int tpvalue;
 			if (fprank.toInt() > lowestUnknownNotSuspectedRank)
 				tpvalue = unknownValue(fp, tp);
@@ -4582,12 +4514,14 @@ public class TestingBoard extends Board
 
 		// AI piece is removed.
 
-				if (isPossibleBomb(tp))
+				if (isPossibleBomb(tp)) {
 					tp.setSuspectedRank(Rank.BOMB);
-				else 
-					makeWinner(tp, fprank, true);
 					setPiece(tp, to);
-
+				} else {
+					makeWinner(tp, fprank, true);
+					if (tp.getRank() != fprank)	// could be even
+						setPiece(tp, to);
+				}
 
 				} else {
 
@@ -4750,21 +4684,23 @@ public class TestingBoard extends Board
 		// However, if the AI piece has moved
 		// or if the attacker has an chase rank of Unknown
 		// (proving that it is hellbent on attacking),
-		// assume worst case for AI: AI loses.
+		// assume worst case for AI: AI loses (or is even)
 		// Otherwise the AI guesses that the defender
-		// will remain and the attacker
-		// loses its piece.  This closely matches
-		// what the attacker is likely
+		// will remain and the attacker loses its piece.
+		// This closely matches what the attacker is likely
 		// thinking, because the unmoved piece could be a bomb.
 
 					if (!isPossibleBomb(tp) || fp.getActingRankChase() == Rank.UNKNOWN) {
 						makeWinner(fp, tprank, false);
-
-						fp.moves++;
-						setPiece(fp, to); // won
-						fp.setIndex(to);
-					} else
+						if (fp.getRank() != tprank) {
+							fp.moves++;
+							setPiece(fp, to); // won
+							fp.setIndex(to);
+						}
+					} else {
+						tp.makeKnown();
 						setPiece(tp, to);
+					}
 				}
 				//vm = 0; // fubar
 				break;
@@ -6075,8 +6011,13 @@ public class TestingBoard extends Board
 		// the result is handled in UNK.  This must have
 		// a higher value than LOSES.
 
-		else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
+		else if (fprank != Rank.EIGHT && isPossibleBomb(tp)) {
+			if (fprank == Rank.SIX
+				&& sixForay
+				&& forayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
+				return Rank.WINS;
 			return result;
+		}
 
 		// By definition, invincible rank wins or is even
 		// on attack of unknown moved pieces.
@@ -6459,24 +6400,6 @@ public class TestingBoard extends Board
 		diff = diff * diff;
 
 		return Math.max(minRisk, pieceValue(tp) / diff);
-	}
-
-	// 
-	// isBombStructure() is used when navigating a foray
-	// into the the opponents unmoved pieces.
-	// Note that genDestBombedFlag() sets the suspected rank to Bomb
-	// of only the last structure remaining.
-	// So if there are multiple structures remaining,
-	// an AI piece must still try to avoid them.
-
-	// TBD: this needs to be an array created by possibleFlag()
-
-	boolean isBombStructure(int i)
-	{
-		return (i == 100
-			|| i == 109
-			|| i == 112
-			|| i == 119);
 	}
 
 	int pieceValue(int c, int r)

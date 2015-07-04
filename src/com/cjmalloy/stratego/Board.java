@@ -71,6 +71,7 @@ public class Board
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
 	protected int[] piecesInTray = new int[2];
 	protected int lowestUnknownExpendableRank;
+	protected boolean sixForay = false;
 
 	static {
 		Random rnd = new Random();
@@ -850,12 +851,6 @@ public class Board
 	//
 	public void isProtectedChase(Piece chaser, Piece chased, int i)
 	{
-		// Either the chaser or the chased must be known
-		// in order for protection to be determined.
-
-		if (!chaser.isKnown() && !chased.isKnown())
-			return;
-
 		// In version 9.6, direct chase rank no longer
 		// depends on protecting pieces
 
@@ -1259,10 +1254,12 @@ public class Board
 		// if it approaches an unknown.
 		//
 
-				if (!chased.isKnown()) {
-					if (!chaser.isKnown()) {
-						Rank chaserRank = chaser.getActingRankChase();
-						if (chaserRank == Rank.NIL)
+				Rank chasedRank = chased.getApparentRank();
+				Rank chaserRank = chaser.getApparentRank();
+
+				if (chasedRank == Rank.UNKNOWN) {
+					if (chaserRank == Rank.UNKNOWN) {
+						if (chaser.getActingRankChase() == Rank.NIL)
 							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
 						continue;
 					}
@@ -1284,7 +1281,7 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-					if (chaser.getRank().toInt() >= 5)
+					if (chaserRank.toInt() >= 5)
 						continue;
 				}
 
@@ -1314,9 +1311,6 @@ public class Board
 		// be assumed that the player believes the unknown chased piece
 		// is a superior piece, and so the AI assumes that its
 		// protector is even more superior.
-
-				Rank chasedRank = chased.getApparentRank();
-				Rank chaserRank = chaser.getApparentRank();
 
 				if (chasedRank == Rank.UNKNOWN) {
 					Move m = getLastMove();
@@ -1546,6 +1540,44 @@ public class Board
 			&& rankAtLarge(Settings.topColor, Rank.ONE) == 0)
 			&& unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SPY) > 0)
 			lowestUnknownExpendableRank = 10;
+
+		// One exception to the rule that the AI piece loses its value
+		// in an unknown exchange is at the start of the game when
+		// few of the pieces can move and most of the expendable
+		// pieces are still unknown.  This condition is slightly
+		// favorable to a kamikaze foray by a Six, because 
+		// winning a random encounter is greater than 50%
+		// even against an unmoved piece.
+		//
+		// A Six has to win only one such encounter.
+		// Because the opponent often places
+		// its higher ranks in the front line and bombs in the
+		// rear row, odds are improved for a foray into the front row.
+		//
+		// The probability is hard to prove theoretically
+		// (because it depends on opponent setup) so
+		// one must run a series of games to prove that this
+		// is a valid rule.  One can also reason this intuitively
+		// as follows.
+		//
+		// A Six loses against 14 pieces (Bombs, 4s and 5s).
+		// Note that even if it wins only one piece and loses the
+		// next, it will also have won the stealth value of the
+		// attacker.  The probability of winning one piece is
+		// about 60%.
+
+		sixForay = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
+			) > 15;
+		if (sixForay && lowestUnknownExpendableRank == 5)
+			lowestUnknownExpendableRank = 6;
 
 		for (int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
