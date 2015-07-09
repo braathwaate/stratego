@@ -243,12 +243,24 @@ public class Piece implements Comparable<Piece>
 	{
 		actingRankChase = r;
 		flags &= ~IS_LESS;
+
+		// Reset moves.  Chase rank matures after a certain
+		// number of subsequent moves to give the AI time
+		// to confirm (attack) the suspected rank.
+		if (moves != 0)
+			moves = 1;
 	}
 
 	public void setActingRankChaseLess(Rank r)
 	{
 		actingRankChase = r;
 		flags |= IS_LESS;
+
+		// Reset moves.  Chase rank matures after a certain
+		// number of subsequent moves to give the AI time
+		// to confirm (attack) the suspected rank.
+		if (moves != 0)
+			moves = 1;
 	}
 
 	public boolean isRankLess()

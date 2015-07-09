@@ -799,8 +799,6 @@ public class Board
 			|| chased.isRankLess()) {
 
 			chased.setActingRankChaseEqual(chaser.getApparentRank());
-			assert chased.hasMoved() : "Chase piece must have moved";
-			chased.moves = 1;
 		}
 	}
 

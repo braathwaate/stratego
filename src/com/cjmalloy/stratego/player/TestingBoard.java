@@ -39,16 +39,21 @@ public class TestingBoard extends Board
 {
 	private static final int DEST_PRIORITY_DEFEND_FLAG = 10;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_BOMBS = 6;
-	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 4;
+	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 5;
 
-	// DEST_PRIORITY_ATTACK_FLAG should be higher than
+	// Note: DEST_PRIORITY_FLEE must have unique priority
+	// because it is a special case in planv
+
+	private static final int DEST_PRIORITY_FLEE = 4;
+
+	// Note: DEST_PRIORITY_ATTACK_FLAG should be higher than
 	// DEST_PRIORITY_CHASE, because an Eight could be
 	// an expendable piece and can chase other opponent pieces,
 	// but it is better for the eight to attack the flag structure.
 
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 2;
-	private static final int DEST_PRIORITY_FLEE = 3;
-	private static final int DEST_PRIORITY_CHASE_HIGH = 2;
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 3;
+	private static final int DEST_PRIORITY_CHASE_ATTACK = 3;
+	private static final int DEST_PRIORITY_CHASE_DEFEND = 2;
 	private static final int DEST_PRIORITY_CHASE = 1;
 	private static final int DEST_PRIORITY_LOW = 1;
 
@@ -595,7 +600,7 @@ public class TestingBoard extends Board
 		// has an invincible unknown rank.  This increases
 		// the risk of loss (see riskOfLoss()) when opponent
 		// pieces approach AI pieces.
-		//  Normally, the AI assumes that the opponent
+		// Normally, the AI assumes that the opponent
 		// will not subject its unknown low ranked pieces to attack.
 		// But if the opponent has an invincible unknown rank,
 		// an unknown opponent piece might approach an unknown AI piece
@@ -604,14 +609,16 @@ public class TestingBoard extends Board
 
 		dangerousUnknownRank = 99;
 		dangerousKnownRank = 99;
-		for (int rank = invincibleRankInt[Settings.bottomColor]; rank >= 1; rank--)
-			if ((rank == 1 && !hasSpy(Settings.topColor)
-				|| rank != 1
-					&& rank >= invincibleRankInt[Settings.topColor])) {
-				if (unknownRankAtLarge(Settings.bottomColor, rank) != 0)
+		for (int rank = 1; rank <= invincibleRankInt[Settings.bottomColor]; rank++)
+			if ((rank == 1 && !hasSpy(Settings.topColor))
+				|| rank != 1) {
+				if (unknownRankAtLarge(Settings.bottomColor, rank) != 0
+					&& dangerousUnknownRank == 99)
 					dangerousUnknownRank = rank;
-				else if (rankAtLarge(Settings.bottomColor, rank) != 0)
+				else if (rankAtLarge(Settings.bottomColor, rank) != 0
+					&& dangerousKnownRank == 99)
 					dangerousKnownRank = rank;
+
 			}
 
 		// Destination Value Matrices
@@ -1452,7 +1459,7 @@ public class TestingBoard extends Board
 					Piece chaser = activeRank[1-p.getColor()][j-1];
 					if (chaser != null
 						|| p.moves > 15
-						|| rnd.nextInt(30) == 0) {
+						|| rnd.nextInt(15) == 0) {
 						if (chaser != null && !chaser.isKnown())
 							genPlanA(rnd.nextInt(10), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 						else
@@ -1681,12 +1688,24 @@ public class TestingBoard extends Board
 		// This also avoids mindless chases around the board.
 		// (Mindless chases do often result in material gain,
 		// but the goal of this programmer is to avoid them).
+		//
+		// The One chases at three different priorities.  If the
+		// opponent Spy is gone, it chases at the highest priority,
+		// just like other invincible pieces.  But if the opponent
+		// Spy is still lurking, it chases opponent invincible
+		// pieces as a lower priority as a defense measure.  Other
+		// opponent pieces are chased at low priority, because
+		// the One probably will not be able to capture the piece
+		// if it is protected by an unknown.
 
 				int priority;
-				// if (isInvincible(p) || rnd.nextInt(2) == 0)
-					priority = DEST_PRIORITY_CHASE_HIGH;
-				// else
-				//	priority = DEST_PRIORITY_CHASE;
+				priority = DEST_PRIORITY_CHASE_ATTACK;
+				if (j == 1 && hasUnsuspectedSpy(p.getColor())) {
+					if (isInvincible(p))
+						priority = DEST_PRIORITY_CHASE_DEFEND;
+					else
+						priority = DEST_PRIORITY_CHASE;
+				}
 
 				genPlanA(1, destTmp2, 1-p.getColor(), j, priority);
 				genPlanB(1, destTmp2, 1-p.getColor(), j, priority);
@@ -6246,8 +6265,7 @@ public class TestingBoard extends Board
 		Rank fprank = fp.getRank();
 		if (fprank == Rank.ONE
 			&& fp.isKnown()
-			&& hasSpy(Settings.bottomColor)
-			&& suspectedRankAtLarge(Settings.bottomColor, Rank.SPY) == 0
+			&& hasUnsuspectedSpy(Settings.bottomColor)
 			&& ( !( (dangerousKnownRank != 99 || dangerousUnknownRank != 99)
 				&& tp.getActingRankChase() != Rank.NIL
 				&& !tp.isRankLess())))
@@ -6432,6 +6450,15 @@ public class TestingBoard extends Board
 			Grid.steps(p.getIndex(), flag[Settings.bottomColor].getIndex()) <= 2;
 	}
 
+	// If the opponent has an unsuspected Spy, it is dangerous for
+	// for the One to approach unknown pieces.  But if the Spy is gone
+	// or the AI thinks it knows where it is, then the AI goes on
+	// the ramage with its One.
 
+	boolean hasUnsuspectedSpy(int c)
+	{
+		return hasSpy(c)
+			&& suspectedRankAtLarge(c, Rank.SPY) == 0;
+	}
 }
 
