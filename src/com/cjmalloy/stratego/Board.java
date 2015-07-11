@@ -70,6 +70,7 @@ public class Board
         protected int[][] trayRank = new int[2][15];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
 	protected int[] piecesInTray = new int[2];
+	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int lowestUnknownExpendableRank;
 	protected boolean sixForay = false;
 
@@ -900,8 +901,18 @@ public class Board
 			} else if (unknownProtector != null) {
 				// more than one unknown protector
 				return;
-			} else
-				unknownProtector= p;
+
+		// If the protector fled from the chaser,
+		// it isn't a protector.  For example,
+		// -- -- R4 --
+		// xx B5 -- xx
+		// xx -- B? xx
+		// Red moves down and forks Blue Five and unknown Blue.
+		// Unknown Blue moves left.  Unknown Blue is not a protector.
+
+			} else if (p.getActingRankFleeLow() != chaser.getRank())
+				
+				unknownProtector = p;
 		}
 
 		if (unknownProtector != null) {
@@ -1029,8 +1040,20 @@ public class Board
 		// attack to protect Blue Spy.  It would then be obvious
 		// to Red than the neighboring piece was also a valuable
 		// target.  (This is definitely advanced game play).
+		//
+		// Yet if the opponent moved a piece to protect,
+		// a chase rank should be set.  For example,
+		// -- -- |
+		// -- R5 |
+		// -- B? |
+		// B? -- |
+		// Red Five has approached an unknown.  The lower unknown
+		// Blue moves up to protect the upper unknown, which
+		// is probably a Seven or a Nine.  The lower unknown
+		// should gain a chase rank of Five.
 
-			if (chaser.getApparentRank().toInt() >= 5
+			if (m.getPiece() != unknownProtector
+				&& chaser.getApparentRank().toInt() >= 5
 				&& !chased.isKnown())
 				return;
 
@@ -1084,12 +1107,6 @@ public class Board
 			while (r > 0 && unknownNotSuspectedRankAtLarge(chased.getColor(), r) == 0)
 				r--;
 
-		// known piece is protector
-
-			if (knownProtector != null
-				&& knownProtector.getRank().toInt() <= r)
-				return;
-
 		// Only a Spy can protect a piece attacked by a One.
 
 			Rank arank = unknownProtector.getActingRankChase();
@@ -1108,6 +1125,12 @@ public class Board
 				rank = Rank.SPY;
 			} else
 				rank = Rank.toRank(r);
+
+		// known piece is protector
+
+			if (knownProtector != null
+				&& knownProtector.getRank().toInt() <= rank.toInt())
+				return;
 
 		// Once the AI has indirectly identified the opponent Spy
 		// (by attacking an opponent Two that had a protector)
@@ -1212,6 +1235,15 @@ public class Board
 		// -- RB --
 		// B? -- R?
 		// This assigns the chaser a rank of Unknown.
+		//
+		// A special case is when the known piece is a Five.
+		// For example,
+		// -- R5 --
+		// B? -- R?
+		// The chaser may be a Four or a Five, but it is more often
+		// a Five.  This check is consistent with setDirectChaseRank()
+		// which sets the chase rank to Unknown if a piece chases
+		// a known Five, and then an unknown, or vice versa.
 
 				Piece chased2 = null;
 				for (int d2 : dir) {
@@ -1228,7 +1260,8 @@ public class Board
 
 					if (!chased.isKnown()
 						&& chased2.isKnown()
-						&& chased2.getRank() != Rank.BOMB)
+						&& chased2.getRank() != Rank.BOMB
+						&& chased2.getRank() != Rank.FIVE)
 						break;
 
 		// Unknown chaser can be assigned a chase rank.
@@ -1281,7 +1314,6 @@ public class Board
 
 					if (chaserRank.toInt() >= 5)
 						continue;
-				}
 
 		// If the chased piece is Unknown,
 		// then there is more that can be determined in this case
@@ -1310,7 +1342,6 @@ public class Board
 		// is a superior piece, and so the AI assumes that its
 		// protector is even more superior.
 
-				if (chasedRank == Rank.UNKNOWN) {
 					Move m = getLastMove();
 					if (m.getPiece() == chaser)
 						continue;
@@ -1413,9 +1444,10 @@ public class Board
 
 	// The usual Stratego attack strategy is one rank lower.
 
-	protected Rank getChaseRank(Piece p, int r, boolean rankLess)
+	protected Rank getChaseRank(Piece p, Rank rank, boolean rankLess)
 	{
 		int color = p.getColor();
+		int r = rank.toInt();
 		assert color == Settings.bottomColor : "getChaseRank() only for opponent pieces";
 		int j = r;
 		Rank newRank = Rank.UNKNOWN;
@@ -1435,19 +1467,40 @@ public class Board
 				if (unknownRankAtLarge(color, r) != 0)
 					newRank = Rank.toRank(r);
 		} else {
-			if (r == 6) {
+
+		// If a piece approaches an unknown piece, the approacher is
+		// usually a Five, Six, Seven or Nine.  No suspected rank
+		// is set, and the evaluation function checks the chase rank
+		// for Rank.UNKNOWN and lowestUnknownExpendableRank to determine
+		// the result of an attack, which must be more positive
+		// than if the lowest unknown expendable rank were assigned as
+		// the suspected rank of the piece, because an unknown
+		// *could* be a higher ranked piece.
+		//
+		// Yet in the very special case
+		// when there are no expendable opponent ranks remaining
+		// except for unknown Fives, the AI assumes that the approacher
+		// *is* a Five.
+
+			if (rank == Rank.UNKNOWN) {
+				for (int e: expendableRank)
+					if (unknownRankAtLarge(color, e) != 0)
+						return Rank.UNKNOWN;
+				if (unknownRankAtLarge(color, 5) == 0)
+					return Rank.UNKNOWN;
+
+				j = 5; 	// chaser is probably a Five
+
+			} else if (rank == Rank.SIX) {
 
 		// Sixes are usually chased by Fives, but because 4?x6
 		// is also positive, the chaser could be a Four.
-		// Fours are usually reserved to chase Fives, but if there
-		// are more opponent Fours than AI Fives,
-		// then chasing Sixes becomes worthwhile.
+		// So if an AI Five encounters a suspected Five
+		// that has a Six chase rank, the result is EVEN,
+		// but the risk of loss is higher than if the chase
+		// rank is Unknown.
 
-				if (rankAtLarge(1-color, r-1) >= rankAtLarge(color, r-2))
-
-					j = 5; 	// chaser is probably a Five
-				else
-					j = 4; 	// chaser is probably a Four
+				j = 5; 	// chaser is probably a Five
 			} else {
 
 		// Sevens, Eights and Nines are chased
@@ -1599,7 +1652,7 @@ public class Board
 			p.setRank(Rank.UNKNOWN);
 
 			Rank rank = p.getActingRankChase();
-			if (rank == Rank.NIL || rank == Rank.UNKNOWN)
+			if (rank == Rank.NIL)
 				continue;
 
 		// If the piece both chased and fled from the same rank,
@@ -1622,7 +1675,7 @@ public class Board
 					setSuspectedRank(p, Rank.SPY, p.moves < SUSPECTED_RANK_AGING_DELAY);
 
 			} else
-				setSuspectedRank(p, getChaseRank(p, rank.toInt(), p.isRankLess()), p.moves < 15);
+				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()), p.moves < 15);
 
 		} // for
 
@@ -2030,6 +2083,29 @@ public class Board
 	// pointless back-and-forth moves from three to two, because
 	// the third move results in the same position.)
 	// 
+	// Note: Piece does not need to be adjacent for a chase.
+	// For example,
+	// -- -- R9
+	// -- -- xx
+	// BS -- xx
+	// -- -- --
+	// Red Nine moves left two squares, Blue Spy moves right,
+	// Red Nine moves right, Blue Spy moves left.
+	// Red Nine should be allowed to move right again,
+	// even though this is a repeated position, because
+	// it does not violate the two squares rule and
+	// Red Nine will capture Blue Spy.
+	//
+	// Note: A chase can begin without moving the chase piece.
+	// For example,
+	// -- R9 --
+	// -- R4 --
+	// -- -- --
+	// -- -- xx
+	// -- BS xx
+	// Red Four moves right.  Blue Spy moves left.  Red Nine
+	// can eventually capture Blue Spy by moving to the right.
+
 	public boolean isTwoSquaresChase(int m)
 	{
 		UndoMove m2 = getLastMove(2);
@@ -2053,22 +2129,6 @@ public class Board
 		if (m1.getTo() != m3.getFrom()
 			|| m1.getFrom() != m3.getTo())
 			return false;
-
-		// Commented out in 9.3 because
-		// piece does not need to be adjacent for a chase.
-		// For example,
-		// -- -- R9
-		// -- -- xx
-		// BS -- xx
-		// -- -- --
-		// Red Nine moves left two squares, Blue Spy moves right,
-		// Red Nine moves right, Blue Spy moves left.
-		// Red Nine should be allowed to move right again,
-		// even though this is a repeated position, because
-		// it does not violate the two squares rule and
-		// Red Nine will capture Blue Spy.
-		// if (!Grid.isAdjacent(oppmove.getTo(),  Move.unpackTo(m)))
-		// 	return false;
 
 		// Will the AI eventually be blocked by Two Squares?
 		//
@@ -2106,22 +2166,22 @@ public class Board
 		if (m4 == null)
 			return false;
 
-		UndoMove m6 = getLastMove(6);
-		if (m6 == null)
+		UndoMove m5 = getLastMove(5);
+		if (m5 == null)
 			return false;
 
 		// (1) If the proposed move and the move four plies ago
 		// are equal,
 		// (2) and the current position and the position four plies ago
 		// are equal,
-		// (3) and the current square and to-square six plies ago
+		// (3) and the prior opponent move and move five plies ago
 		// are not equal,
-		// (if they are equal, it  means we are at position D
+		// (if they are equal, it means we are at position D
 		// rather than at position C)
 		// -- then this is a repetitive move
 		if (m == m4.getMove()
 			&& boardHistory[bturn].hash == m4.hash
-			&& Move.unpackFrom(m) != m6.getTo())
+			&& m5 != m1)
 			return false;
 
 		return true;
