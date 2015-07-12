@@ -2108,7 +2108,7 @@ public class Board
 
 	public boolean isTwoSquaresChase(int m)
 	{
-		UndoMove m2 = getLastMove(2);
+		Move m2 = getLastMove(2);
 		if (m2 == null)
 			return false;
 
@@ -2118,11 +2118,11 @@ public class Board
 
 		// If opponent piece does not move between same two squares,
 		// then this move cannot result in a two squares victory.
-		UndoMove m1 = getLastMove(1);
+		Move m1 = getLastMove(1);
 		if (m1 == null)
 		 	return false;
 
-		UndoMove m3 = getLastMove(3);
+		Move m3 = getLastMove(3);
 		if (m3 == null)
 		 	return false;
 
@@ -2166,7 +2166,7 @@ public class Board
 		if (m4 == null)
 			return false;
 
-		UndoMove m5 = getLastMove(5);
+		Move m5 = getLastMove(5);
 		if (m5 == null)
 			return false;
 
@@ -2181,7 +2181,7 @@ public class Board
 		// -- then this is a repetitive move
 		if (m == m4.getMove()
 			&& boardHistory[bturn].hash == m4.hash
-			&& m5 != m1)
+			&& !m5.equals(m1))	// compare Move, not UndoMove
 			return false;
 
 		return true;

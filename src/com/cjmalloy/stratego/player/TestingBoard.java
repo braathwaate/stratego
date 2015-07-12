@@ -1202,6 +1202,15 @@ public class TestingBoard extends Board
 	protected void flee(Piece p)
 	{
 
+	// When the number of pieces is reduced, it is assumed that the risk
+	// risk of entrapment is reduced as well, so the flee code
+	// is skipped, because flee interferes with the AI ability to
+	// chase pieces.  The reduction of the number of pieces is also
+	// accompanied by an increase in evaluation ply as well.
+
+		if (npieces[p.getColor()] < 20)
+			return;
+
 	// The retreat pattern pushes the piece away and towards
 	// its back rank which is usually safer.
 	// This needs to handle the following case:
@@ -2444,14 +2453,6 @@ public class TestingBoard extends Board
 				nb++;
 			}
 
-		// Note: If there is a corner bomb structure (2 bombs) and
-		// a 3 bomb structure, the 3 bomb structure normally
-		// contains the flag because often the corner bomb
-		// structure is a ruse because it is difficult to defend.
-		// However, the corner bomb structure could be inside
-		// the classic layered corner bomb structure.  In this case,
-		// the corner bomb structure probably has the flag.
-
 			boolean exposed = false;
 			for (int j = 1; maybe[start][j] != 0; j++)
 				for (int d : dir) {
@@ -2472,6 +2473,16 @@ public class TestingBoard extends Board
 						nb--;
 					}
 				}
+
+		// Note: If there is a corner bomb structure (2 bombs) and
+		// a 3 bomb structure, the 3 bomb structure normally
+		// contains the flag because often the corner bomb
+		// structure is a ruse because it is difficult to defend.
+		// However, the corner bomb structure could be inside
+		// a layered corner bomb structure.  In this case,
+		// the corner bomb structure probably has the flag.
+		// So the AI looks for a combination of small size and
+		// large number of defenders.
 
 			if (nb < size && exposed) {
 				size = nb;
@@ -2528,8 +2539,9 @@ public class TestingBoard extends Board
 
 		// It doesn't matter if the piece really is a bomb or not.
 		boolean found = true;
+		for (int i = bestGuess; i < maybe_count; i++) {
 		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
-			Piece p = getPiece(maybe[bestGuess][j]);
+			Piece p = getPiece(maybe[i][j]);
 			if (p == null
 				|| (p.isKnown() && p.getRank() != Rank.BOMB)
 				|| p.hasMoved()) {
@@ -2563,7 +2575,14 @@ public class TestingBoard extends Board
 			} else if (p.getRank() == Rank.BOMB
 				&& maybe_count == 1)
 					p.makeKnown();
-		}
+		} // j
+		if (i < maybe_count - 1
+			&& maybe[i][0] + 1 == maybe[i+1][0])
+			continue;
+
+		break;
+		} // i
+
 
 		if (maybe_count == 1) {
 			setFlagValue(flagp);
@@ -4478,7 +4497,7 @@ public class TestingBoard extends Board
 		// five points.
 
 				if (tp.moves == 0)
-					vm -= 3;
+					vm = Math.min(-3, vm - 3);
 
 			} else {
 
