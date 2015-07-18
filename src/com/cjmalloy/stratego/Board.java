@@ -518,7 +518,7 @@ public class Board
 
 		// movement aways
 		int from = Move.unpackFrom(m);
-		int chaserank = 99;
+		Piece delayPiece = null;
 		for (int d : dir) {
 			int chaser = from + d;
 			if (!Grid.isValid(chaser))
@@ -537,7 +537,7 @@ public class Board
 		// is unknown or of equal or lower rank than a piece
 		// under attack elsewhere on the board.
 
-				chaserank = fp.getApparentRank().toInt();
+				delayPiece = fp;
 
 		// if the chase piece is protected,
 		// nothing can be guessed about the rank
@@ -599,14 +599,16 @@ public class Board
 				|| op.getColor() == fp.getColor())
 				continue;
 			Rank rank = op.getApparentRank();
-			if (rank.toInt() <  chaserank)
-				chaserank = rank.toInt();
+			if (delayPiece != null
+				&& rank.toInt() < delayPiece.getApparentRank().toInt())
+				delayPiece = op;
 		}
 
 		// New in version 9.5
 		// If an unknown piece flees or is chased,
 		// delay the setting of implicit flee rank.
-		if (chaserank == Rank.UNKNOWN.toInt())
+		if (delayPiece != null
+			&& delayPiece.getApparentRank() == Rank.UNKNOWN)
 			return;
 
 		for ( int i = 12; i <= 120; i++) {
@@ -631,7 +633,9 @@ public class Board
 
 				Rank rank = op.getApparentRank();
 				if (rank == Rank.BOMB
-					|| rank.toInt() >= chaserank)	// new in version 9.5
+					|| (delayPiece != null
+						&& op != delayPiece
+						&& rank.toInt() >= delayPiece.getApparentRank().toInt()))	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
@@ -1226,17 +1230,14 @@ public class Board
 					continue;
 
 		// If an unprotected unknown chaser forks a known and unknown
-		// piece, assume that the chaser is after the known piece,
-		// unless the known piece is a known bomb.
+		// piece, assume that the chaser is after the known piece.
 		// -- R3 --
 		// B? -- R?
 		// This assigns the chaser a rank of Two.
 		//
-		// -- RB --
-		// B? -- R?
-		// This assigns the chaser a rank of Unknown.
-		//
-		// A special case is when the known piece is a Five.
+		// If the known piece is expendable (5-9) or a Bomb,
+		// assume the chaser is after either the known piece
+		// or the unknown, so set an unknown chase rank.
 		// For example,
 		// -- R5 --
 		// B? -- R?
@@ -1258,10 +1259,13 @@ public class Board
 						continue;
 					}
 
+		// If the chased piece is unknown, but is forked with
+		// a known low rank piece (1-4), do not set an unknown
+		// chase rank.
+
 					if (!chased.isKnown()
 						&& chased2.isKnown()
-						&& chased2.getRank() != Rank.BOMB
-						&& chased2.getRank() != Rank.FIVE)
+						&& chased2.getRank().toInt() <= 4)
 						break;
 
 		// Unknown chaser can be assigned a chase rank.
@@ -1281,17 +1285,15 @@ public class Board
 		//
 		// The difficulty is determining if the piece willingly
 		// moved next to an unknown or was cornered.  So if
-		// the piece already has a chase rank, it is retained
-		// if it approaches an unknown.
+		// the piece is suspected to be a low rank (1-3), it
+		// is retained if it approaches an unknown.
 		//
-
 				Rank chasedRank = chased.getApparentRank();
 				Rank chaserRank = chaser.getApparentRank();
 
 				if (chasedRank == Rank.UNKNOWN) {
-					if (chaserRank == Rank.UNKNOWN) {
-						if (chaser.getActingRankChase() == Rank.NIL)
-							chaser.setActingRankChaseEqual(Rank.UNKNOWN);
+					if (!chaser.isKnown() && chaserRank.toInt() >= 4) {
+						chaser.setActingRankChaseEqual(Rank.UNKNOWN);
 						continue;
 					}
 

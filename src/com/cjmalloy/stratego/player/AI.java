@@ -60,10 +60,9 @@ public class AI implements Runnable
 	// static move ordering
 	static final int WINS = 0;
 	static final int ATTACK = 1;
-	static final int NULLMOVE = 2;
-	static final int APPROACH = 3;
-	static final int FLEE = 4;
-	static final int LOSES = 5;
+	static final int APPROACH = 2;
+	static final int FLEE = 3;
+	static final int LOSES = 4;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -882,7 +881,7 @@ public class AI implements Runnable
 					logMove(n, move, 0, vm, mt);
 				}
 			}
-			addMove(rootMoveList.get(NULLMOVE), bestPrunedMove);
+			addMove(rootMoveList.get(APPROACH), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
 			log(PV, logMove(b, n, bestPrunedMove, MoveType.OK));
 			log("<< pick best pruned move");
@@ -1488,14 +1487,13 @@ public class AI implements Runnable
 			return -qs;
 	}
 
-	void saveTTEntry(int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int bestmove)
+	void saveTTEntry(int hashN, int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int bestmove)
 	{
 		long hashOrig;
-		if (bestmove == -1)
+		if (hashN == 0)
 			hashOrig = b.getHash();
 		else
-			hashOrig = getHash(n);
-
+			hashOrig = getHash(hashN);
 		int index = (int)(hashOrig % ttable.length);
 		TTEntry entry = ttable[index];
 		if (entry == null) {
@@ -1612,7 +1610,7 @@ public class AI implements Runnable
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
 			vm = qscache(depth, alpha, beta, dvr);
 			// save value of position at hash 0 (see saveTTEntry())
-			saveTTEntry(n, searchType, TTEntry.Flags.EXACT, vm-dvr, -1);
+			saveTTEntry(0, n, searchType, TTEntry.Flags.EXACT, vm-dvr, -1);
 			return vm;
 		}
 
@@ -1636,9 +1634,9 @@ public class AI implements Runnable
 			entryType = TTEntry.Flags.EXACT;
 
 		// save each move at each ply for PV
-		saveTTEntry(n, searchType, entryType, vm-dvr, killerMove.getMove());
+		saveTTEntry(n, n, searchType, entryType, vm-dvr, killerMove.getMove());
 		// save value of position at hash 0 (see saveTTEntry())
-		saveTTEntry(n, searchType, entryType, vm-dvr, -1);
+		saveTTEntry(0, n, searchType, entryType, vm-dvr, killerMove.getMove());
 
 		return vm;
 	}
@@ -1781,16 +1779,10 @@ public class AI implements Runnable
 		else {
 			moveList = new ArrayList<ArrayList<Integer>>();
 			boolean isPruned = getMoves(moveList, n, depth, b.bturn);
-
 			// FORWARD PRUNING
 			// Add null move
-			// (NULLMOVE evaluates the move before other APPROACH moves,
-			// so that if the null move is equal in value,
-			// it will be the one selected as the best move.
-			// This allows the AI to subsequently chose an inactive move
-			// as the best move.
 			if (isPruned)
-				addMove(moveList.get(NULLMOVE), 0);
+				addMove(moveList.get(APPROACH), 0);
 		}
 
 		for (int mo = 0; mo <= LOSES; mo++) {
