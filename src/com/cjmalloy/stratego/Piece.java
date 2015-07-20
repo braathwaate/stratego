@@ -156,7 +156,6 @@ public class Piece implements Comparable<Piece>
 	public void revealRank(Rank r)
 	{
 		actualRank = r;
-		rank = r;
 	}
 
 	public void makeKnown()

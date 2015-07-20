@@ -275,6 +275,7 @@ public class TestingBoard extends Board
 		} // color c
 
 		for (int i=12;i<=120;i++) {
+		 	unmovedValue[i] = 0;
 			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
@@ -614,7 +615,7 @@ public class TestingBoard extends Board
 				if (unknownRankAtLarge(Settings.bottomColor, rank) != 0
 					&& dangerousUnknownRank == 99)
 					dangerousUnknownRank = rank;
-				else if (rankAtLarge(Settings.bottomColor, rank) != 0
+				if (rankAtLarge(Settings.bottomColor, rank) != 0
 					&& dangerousKnownRank == 99)
 					dangerousKnownRank = rank;
 
@@ -643,7 +644,6 @@ public class TestingBoard extends Board
 		// Destination Value Matrices depends on piece values
 		// so that needs to be called later.
 
-		setUnmovedValues();	// chase and possibleFlag depend on this
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
 		genInvincibleRank();	// depends on stealth
@@ -701,6 +701,10 @@ public class TestingBoard extends Board
 		// are more skittish and therefore blocked by moving
 		// unknown pieces.
 		needExpendableRank(Settings.topColor);
+
+		// setunmovedValues depends on neededRank:
+		// chase(), needExpendableRank()
+		setUnmovedValues();
 
 		genWinRank();
 		// targetUnknownBlockers();
@@ -954,13 +958,14 @@ public class TestingBoard extends Board
 
 		else if (c == Settings.bottomColor) {
 			if (r == 1)
-				v = 60;
+				v = 12;
 			else if (r == 2)
-				v = 40;
+				v = 8;
 			else if (r == 3)
-				v = 35;
+				v = 7;
 			else if (r == 4)
-				v = 15;
+				v = 3;
+			v *= blufferRisk;
 		} else {
 			int n = 0;
 			int unknownDefenders = 0;
@@ -1152,22 +1157,58 @@ public class TestingBoard extends Board
 	// forcing the opponent to randomly attack.
 	void setUnmovedValues()
 	{
-		// Add value to unknown unmoved pieces to encourage discovery.
-		// Pieces are worth more on the back ranks
-		// because the flag is more likely in the rear.
-		// note: *3 to outgain -depth late capture penalty
+		for (int i=12;i<=120;i++) {
+			if (!Grid.isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p == null
+				|| p.hasMoved()
+				|| p.isKnown())
+				continue;
 
-		for ( int k = 12; k <= 120; k++ ) {
-		 	unmovedValue[k] = 0;
- 		}
- 
+			int rank = p.getRank().toInt();
+			int color = p.getColor();
+
+			if (p == activeRank[color][rank-1])
+				continue;
+
+		// If the opponent has a known invincible rank,
+		// it will be hellbent on obliterating all moved pieces,
+		// so movement of additional pieces is heavily discouraged.
+		//
+		// However, this can lead to draws, so eventually the AI
+		// must sparingly move additional pieces, such as Eights
+		// to attack flag structures or mid ranked pieces needed
+		// to attack other opponent pieces.
+		//
+		// TBD: check if the AI has a fighting chance
+
+			if (color == Settings.topColor
+				&& rank > dangerousKnownRank
+				&& rnd.nextInt(30) != 0)
+				unmovedValue[i] -= VALUE_MOVED*2;
+
+			if (!neededRank[color][rank-1])
+
+		// Moving an unmoved piece needlessly is bad play
+		// because these pieces can become targets for
+		// invincible opponent pieces.  The greater the piece
+		// value, the greater the risk.  If the piece
+		// is part of a structure that could be construed
+		// as a bomb structure, it is best to leave the structure
+		// intact to prevent the opponent from guessing the
+		// real structure.
+
+				unmovedValue[i] += -VALUE_MOVED -values[color][rank]/100;
+		} // i
+
 		// Encourage movement of front line pieces
 		// to clear a path so that pieces can move easily
 		// from side to side.
 
 		for (int c = RED; c <= BLUE; c++) {
 			for (int x = 0; x < 10; x++)
-				unmovedValue[Grid.getIndex(x, yside(c,3))] = -VALUE_MOVED;
+				unmovedValue[Grid.getIndex(x, yside(c,3))] = 0;
 		}
 	}
 
@@ -1589,22 +1630,6 @@ public class TestingBoard extends Board
 			chaseWithExpendable(p, destTmp[GUARDED_UNKNOWN]);
 				
 		} else { // unknown and unmoved
-
-		// The lowest priority for expendable pieces is to
-		// sacrifice themselves on unknown unmoved pieces
-		// as a last ditch effort to avoid a draw.  Only Plan B
-		// is given to avoid conflict with the higher priority Plan A.
-		// Note that GUARDED_MOVED is set to avoid conflict
-		// with moved pieces.
-
-			// if (unmovedValue[i] > VALUE_MOVED) {
-			// 	for ( int j : expendableRank )
-			// 		if (knownRankAtLarge(1-p.getColor(), j) != 0) {
-			// 			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
-			// 			genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
-			// 			genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_LOW);
-			// 		}
-			// }
 
 			return;	// do not comment this out!
 		}
@@ -2448,7 +2473,7 @@ public class TestingBoard extends Board
 
 			int start = i;
 			while (i < maybe_count - 1
-				&& maybe[i][0] + 1 == maybe[i+1][0]) {
+				&& Math.abs(maybe[i][0] - maybe[i+1][0]) == 1) {
 				i++;
 				nb++;
 			}
@@ -2509,12 +2534,11 @@ public class TestingBoard extends Board
 
 			Piece flagp = getPiece(maybe[start][0]);
 			int c = flagp.getColor();
-			if (isWinning(c) < VALUE_THREE) {
+			if (isWinning(c) < VALUE_THREE
+				&& yside(c, Grid.getY(maybe[start][0])) == 0) {
 				for (int j = 1; maybe[start][j] != 0; j++) {
 					int bi = maybe[start][j];
-					int y = yside(c, Grid.getY(bi));
-					if (y == 0 || y == 1)
-						unmovedValue[bi] = (2-y) * 2;
+					unmovedValue[bi] -= 4;
 				}
 			}
 		} // i
@@ -3597,33 +3621,9 @@ public class TestingBoard extends Board
 		boolean fpsuspected = fp.isSuspectedRank();
 
 		int rank = fprank.toInt();
-
 		if (!fp.isKnown()
-			&& fp.moves == 0
-			&& fp != activeRank[fpcolor][rank-1]) {
-
-		// If the opponent has a known invincible rank,
-		// it will be hellbent on obliterating all
-		// moved pieces,
-		// so movement of additional pieces is heavily discouraged.
-
-			if (fpcolor == Settings.topColor
-				&& rank > dangerousKnownRank)
-				vm += -VALUE_MOVED*2;
-
-			if (!neededRank[fpcolor][rank-1])
-
-		// Moving an unmoved piece needlessly is bad play
-		// because these pieces can become targets for
-		// invincible opponent pieces.  The greater the piece
-		// value, the greater the risk.  If the piece
-		// is part of a structure that could be construed
-		// as a bomb structure, it is best to leave the structure
-		// intact to prevent the opponent from guessing the
-		// real structure.
-
-				vm += -VALUE_MOVED -values[fpcolor][rank]/100 -unmovedValue[from];
-		}
+			&& fp.moves == 0)
+			vm += unmovedValue[from];
 
 		if (unknownScoutFarMove) {
 			vm -= stealthValue(fp);
@@ -5786,9 +5786,10 @@ public class TestingBoard extends Board
 
 		// Suspected ranks have much less value than known ranks
 		// because of uncertainty.  The value of a suspected rank
-		// is the value of an unknown or the rank value divided by 5,
-		// whichever is greater.  This represents the high risk
-		// that a suspected rank is bluffing or not moving optimally.
+		// is the value of an unknown or the rank value divided by
+		// blufferRisk [2..5],  whichever is greater.
+		// This represents the risk that a suspected rank is bluffing,
+		// not moving optimally, or the AI simply guessed wrong.
 		//
 		// (Note: the value of an unknown is the minimum value
 		// of the remaining unknowns.  Hence, if the Spy and One
@@ -5891,9 +5892,9 @@ public class TestingBoard extends Board
 			&& rank != Rank.BOMB
 			&& rank != Rank.FLAG) {
 			if (p.moves < SUSPECTED_RANK_AGING_DELAY)
-				v /= 5;
-			else if (p.moves < SUSPECTED_RANK_AGING_DELAY * 3)
-				v = v * p.moves / (SUSPECTED_RANK_AGING_DELAY * 5);
+				v /= blufferRisk;
+			else if (p.moves < SUSPECTED_RANK_AGING_DELAY * blufferRisk)
+				v = v * p.moves / (SUSPECTED_RANK_AGING_DELAY * blufferRisk);
 
 			v = Math.max(pieceValue(p.getColor(), unknownRank[p.getColor()]), v);
 		}

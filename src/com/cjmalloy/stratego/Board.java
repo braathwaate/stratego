@@ -73,6 +73,9 @@ public class Board
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int lowestUnknownExpendableRank;
 	protected boolean sixForay = false;
+	protected int guessedRankCorrect;
+	protected int blufferRisk = 4;
+	
 
 	static {
 		Random rnd = new Random();
@@ -209,8 +212,8 @@ public class Board
 			moveHistory(fp, tp, m.getMove());
 
 			fp.setShown(true);
-			fp.revealRank();
-			tp.revealRank();
+			revealRank(fp);
+			revealRank(tp);
 			fp.setMoved();
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
@@ -886,11 +889,26 @@ public class Board
 					&& um3.getMove() == um7.getMove())
 					continue;
 
-		// TBD: check if the open square is guarded
+		// check if the open square is guarded
+
+				boolean isGuarded = false;
+				for (int d2 : dir) {
+					int j2 = j + d;
+					if (!Grid.isValid(j2))
+						continue;
+					Piece p2 = getPiece(j2);
+					if  (p2 == null
+						|| p2.getColor() == chased.getColor())
+						continue;
+		// TBD: check rank
+					isGuarded = true;
+					break;
+				}
 
 		// assume the move to the open square is a decent flee move
 
-				open++;
+				if (!isGuarded)
+					open++;
 				continue;
 			}
 
@@ -2408,6 +2426,23 @@ public class Board
 		else
 			return p.getRank();
 	}
+
+	protected void revealRank(Piece p)
+	{
+		if (p.getColor() == Settings.bottomColor
+			&& !p.isKnown()
+			&& p.getRank().toInt() <= 4) {
+			if (p.getRank().toInt() >= p.getActualRank().toInt())
+				guessedRankCorrect++;
+			else
+				guessedRankCorrect--;
+			blufferRisk = 5 - guessedRankCorrect;
+			blufferRisk = Math.max(blufferRisk, 2);
+			blufferRisk = Math.min(blufferRisk, 5);
+		}
+		p.revealRank();
+	}
+
 }
 
 
