@@ -67,19 +67,14 @@ public class TestingBoard extends Board
 
 	protected Piece[][] pieces = new Piece[2][41];	// piece arrays
 	protected int[] npieces = new int[2];		// piece counts
-	protected int[] invincibleRankInt = new int[2];	// rank that always wins or ties
-	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
-	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected Piece[][] activeRank = new Piece[2][15];	// moved rank Piece
 	protected boolean[][] neededRank = new boolean[2][15];	// needed ranks
 	protected int[][] lowerRankCount = new int[2][10];
 	protected int[][][][] planA = new int[2][15][2][121];	// plan A
 	protected int[][][][] planB = new int[2][15][2][121];	// plan B
 	protected int[][] winRank = new int[15][15]; // winfight cache
-	protected int[] piecesNotBomb = new int[2];
 	protected int[] sumValues = new int[2];
 	protected int value;	// value of board
-	protected Piece[] flag = new Piece[2];	// flags
 	protected int[] unmovedValue = new int[121];	// unmoved value
 	protected int[][] valueStealth = new int[2][15];
 	protected static final int importantRank[] = { 1, 2, 3, 8 };
@@ -87,8 +82,6 @@ public class TestingBoard extends Board
 	protected long[] hashTest = new long [2];
 	protected int lowestUnknownNotSuspectedRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
-	protected int[] possibleUnknownMovablePieces = new int[2];
-	protected int[] unknownPiecesRemaining = new int[2];
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
@@ -161,8 +154,8 @@ public class TestingBoard extends Board
 	//	These bombs are worth a little more than a Miner.
 	// • The Spy is the lowest valued Piece on the board.  However,
 	//	it has the highest stealth value.  The stealth value
-	//	of an unsuspected Spy is worth less than a General but
-	//	more than a Colonel.  However, once the Spy is suspected,
+	//	of an unsuspected Spy is equal to the value of a
+	//	Colonel.  However, once the Spy is suspected,
 	//	it has limited value except in certain reduced piece
 	//	endgames with Ones.
 	// • The Nine is the next lowest valued piece on the board.  However,
@@ -262,9 +255,7 @@ public class TestingBoard extends Board
 		hashTest[1] = boardHistory[1].hash;	// for debugging (see move)
 
 		for (int c = RED; c <= BLUE; c++) {
-			flag[c]=null;
 			npieces[c] = 0;
-			piecesNotBomb[c] = 0;
 			unknownPiecesRemaining[c] = 0;
 			for (int j=0;j<15;j++) {
 				activeRank[c][j] = null;
@@ -304,12 +295,7 @@ public class TestingBoard extends Board
 					if (!isActiveRank(p.getColor(), r)
 						|| p.isKnown())
 						activeRank[p.getColor()][r-1]=np;
-					if (rank != Rank.BOMB)
-						piecesNotBomb[p.getColor()]++;
 				}
-
-				if (np.getRank() == Rank.FLAG)
-					flag[p.getColor()] = np;
 
 		// The pieces at the front of the lanes at the start
 		// of the game are considered to have
@@ -345,114 +331,6 @@ public class TestingBoard extends Board
 		genSuspectedRank();
 
 		for (int c = RED; c <= BLUE; c++) {
-
-		// If all movable pieces are moved or known
-		// and there is only one unknown rank, then
-		// the remaining unknown moved pieces must be that rank.
-		int unknownRank = 0;
-		for (int r = 1; r <= 10; r++)
-			if (unknownRankAtLarge(c, r) != 0) {
-				if (unknownRank != 0) {
-					unknownRank = 0;
-					break;
-				}
-				unknownRank = r;
-			}
-
-		// If all pieces have been accounted for,
-		// the rest must be bombs (or the flag)
-
-		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
-		if (possibleUnknownMovablePieces[c] == 0) {
-			unknownPiecesRemaining[c]=0;
-			for (int i=12;i<=120;i++) {
-				if (!Grid.isValid(i))
-					continue;
-				Piece p = getPiece(i);
-				if (p == null)
-					continue;
-				if (p.getColor() != c)
-					continue;
-				if (p.isKnown())
-					continue;
-				if (p.hasMoved()) {
-					if (unknownRank != 0) {
-						p.setRank(Rank.toRank(unknownRank));
-						p.makeKnown();
-					}
-				} else {
-
-		// The remaining unmoved pieces must be bombs (or the flag)
-		// Make the piece known to remove it from the piece lists
-		// because it is no longer a possible attacker.
-		// This makes Bombs known, but they could be a Flag.
-		// So subsequent code needs to make this check:
-		// - if a bomb is known and not suspected, it is a bomb.
-		// - if a bomb is known and suspected, it could be either.
-		// This happens in possibleFlag().
-
-				p.makeKnown();
-
-				Rank rank = p.getRank();
-				if (c == Settings.topColor)
-					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai pieces not bomb or flag?";
-				else if (unknownRankAtLarge(c, Rank.BOMB) != 0) {
-		// Set setSuspectedRank (not rank)
-		// because the piece is suspected to
-		// be a bomb, but it could be the flag.
-		// See winFight().
-		//
-		// The value of a suspected bomb is zero.
-		// Piece X Bomb and Bomb X Piece is a LOSS,
-		// Eight X Bomb is a WIN.
-		//
-					p.setSuspectedRank(Rank.BOMB);
-				} else {
-					p.setRank(Rank.FLAG);
-					flag[c] = p;
-				}
-				} // not moved
-			} // for
-
-		} // all pieces accounted for
-
-		} // color
-
-		// A rank becomes invincible when all lower ranking pieces
-		// are gone or *known*.
-		//
-		// Invincibility means that a rank can attack unknown pieces
-		// with the prospect of a win or even exchange.
-		//
-		// Even the Spy can be invincible, if other opponent
-		// pieces are suspected but not known.  (If all the
-		// other opponent pieces were known, then the Spy
-		// would be known by default).
-		//
-		// TBD: if there is one unknown piece remaining
-		// and the others are suspected, then the unknown piece
-		// should be suspected as well, but currently is is
-		// unknown.
-		//
-		// Invincible AI Eights, Nines or the Spy in an
-		// unknown exchange are EVEN (see winFight())
-
-		for (int c = RED; c <= BLUE; c++) {
-			int rank;
-			for (rank = 1;rank<15;rank++)
-				invincibleRank[1-c][rank-1] = false;
-
-			for (rank = 1;rank <= 10;rank++) {
-				invincibleRankInt[1-c] = rank;
-				invincibleRank[1-c][rank-1] = true;
-				if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
-					break;
-			}
-
-			for (rank = 1;rank<9;rank++)
-				if (rankAtLarge(1-c, rank) != 0)
-					break;
-			invincibleWinRank[c] = rank-1;
 
 		// If a player no longer has any pieces of rank N
 		// and rank N-1, the value of the opponent's rank N-1 becomes
@@ -524,24 +402,6 @@ public class TestingBoard extends Board
 			if (hasSpy(1-c))
 				values[c][1] = values[c][1]*9/10;
 
-		// Demote the value of the spy if there is
-		// no opponent marshal left at large.
-		// It is worth less than any other piece now.
-
-			if (rankAtLarge(1-c, Rank.ONE) == 0)
-				values[c][Rank.SPY.toInt()]
-					= values[c][Rank.NINE.toInt()] - 10;
-
-
-		// Pieces become more valuable as they become fewer
-		// (to prevent the piece from random attacking non-moved
-		// pieces)
-
-			if (40 - piecesInTray[c] -
-				(1 + rankAtLarge(c, Rank.BOMB)) <= 3)
-				for (rank = 1;rank<10;rank++)
-					values[c][1] += 30;
-
 		// Do invincible pieces have higher value than
 		// non-invincible pieces?
 		//
@@ -580,7 +440,7 @@ public class TestingBoard extends Board
 		// Note: possibleFlag() revalues Eights.
 		// 
 			sumValues[c] = 0;
-			for (rank = 1; rank <= 10; rank++) {
+			for (int rank = 1; rank <= 10; rank++) {
 				if (rank >= 8) {
 					int n = unknownRankAtLarge(c, rank);
 					sumValues[c] += (11 - rank) * 10 * n;
@@ -942,7 +802,13 @@ public class TestingBoard extends Board
 		// value is a high value.
 
 		else if (r == 10) {
-			if (c == Settings.bottomColor)
+
+		// The spy has no stealth if there is
+		// no opponent marshal left at large.
+
+			if (rankAtLarge(1-c, Rank.ONE) == 0)
+				v = 0;
+			else if (c == Settings.bottomColor)
 				v = 60;	// TBD: depends on remaining pieces
 			else
 				v = VALUE_THREE;
@@ -1557,8 +1423,7 @@ public class TestingBoard extends Board
 
 			if (p.isSuspectedRank() && chasedRank <= 3)
 				chaseWithExpendable(p, destTmp[GUARDED_UNKNOWN]);
-		// Chase the piece
-		// with the same rank IF both ranks are known
+		// Chase the piece with the same rank IF both ranks are known
 		// and the attacker is winning.
 		//
 		// Unless the ai is winning by much, it must keep its low
@@ -3381,28 +3246,6 @@ public class TestingBoard extends Board
 				lowerRanks += rankAtLarge(c, r);
 			}
 		}
-	}
-
-	public boolean isInvincible(int color, int r) 
-	{
-		return invincibleRank[color][r-1];
-	}
-
-	public boolean isInvincible(Piece p) 
-	{
-		Rank rank = p.getRank();
-		return isInvincible(p.getColor(), rank.toInt());
-	}
-
-	//
-	// TBD: this should be assigned in constructor statically
-	//
-	public boolean isInvincibleWin(Piece p) 
-	{
-		Rank rank = p.getRank();
-		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
-			return false;
-		return (rank.toInt() <= invincibleWinRank[p.getColor()]);
 	}
 
 	public boolean isActiveRank(int color, int r)
@@ -6507,7 +6350,7 @@ public class TestingBoard extends Board
 	{
 		assert p.getColor() == Settings.bottomColor : "Opponent piece required";
 		return flag[Settings.bottomColor] != null &&
-			Grid.steps(p.getIndex(), flag[Settings.bottomColor].getIndex()) <= 2;
+			Grid.steps(p.getIndex(), flag[Settings.bottomColor].getIndex()) <= 3;
 	}
 
 	// If the opponent has an unsuspected Spy, it is dangerous for
