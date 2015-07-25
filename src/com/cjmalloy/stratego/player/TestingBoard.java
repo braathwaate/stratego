@@ -314,6 +314,11 @@ public class TestingBoard extends Board
 			}
 		}
 
+		// call genSuspectedRank early before calling aiValue()
+		// but after trayRank and knownRank are calculated
+		// because genSuspectedRank depends on unknownRankAtLarge()
+		genSuspectedRank();
+
 		// The number of expendable ranks still at large
 		// determines the risk of discovery of low ranked pieces.
 		// If there are few expendable pieces remaining,
@@ -324,11 +329,6 @@ public class TestingBoard extends Board
 			for (int r = 5; r <= 9; r++)
 				nUnknownExpendableRankAtLarge[c] += unknownRankAtLarge(c, r);
 		}
-
-		// call genSuspectedRank early before calling aiValue()
-		// but after trayRank and knownRank are calculated
-		// because genSuspectedRank depends on unknownRankAtLarge()
-		genSuspectedRank();
 
 		for (int c = RED; c <= BLUE; c++) {
 
@@ -886,7 +886,7 @@ public class TestingBoard extends Board
 		// unknown pieces.
 
 				else if (isInvincible(c, r))
-					v = 10;	// less than minimum piece val
+					v = 10 - r;	// less than minimum piece val
 				else if (unknownDefenders > 3)
 					v -= v/3;
 				v = v * 2 / 10;
@@ -2309,17 +2309,21 @@ public class TestingBoard extends Board
 		if (color == Settings.bottomColor)
 			setFlagValue(flagp);
 
-		// Send in a lowly piece to find out
+		// Send in a lowly rank and an Eight (if any)
+		// to attack the suspected flag.
+
 		// Note: if the flag is still bombed, the
 		// destination matrix will not extend past the bombs.
-		// So the lowly piece will only be activated IF
+		// So the lowly rank and Eight will only be activated IF
 		// there is an open path to the flag.
+
 		int destTmp[] = genDestTmp(GUARDED_OPEN, flagp.getColor(), i);
 		for (int k = 10; k > 0; k--) {
 			if (k == 10 && rankAtLarge(flagp.getColor(), Rank.ONE) != 0)
 				continue;
 			if (rankAtLarge(1-flagp.getColor(),k) != 0) {
 				genNeededPlanA(0, destTmp, 1-flagp.getColor(), k, DEST_PRIORITY_ATTACK_FLAG);
+				genNeededPlanA(0, destTmp, 1-flagp.getColor(), 8, DEST_PRIORITY_ATTACK_FLAG);
 				break;
 			}
 		}
@@ -5019,12 +5023,16 @@ public class TestingBoard extends Board
 
 	protected int valueBluff(int m, Piece fp, Piece tp)
 	{
+		assert fp.getColor() == Settings.topColor : "valueBluff only for AI";
 		// (note that getLastMove(2) is called to get the prior
 		// move, because the current move is already on the
 		// stack when isEffectiveBluff() is called)
 		UndoMove prev2 = getLastMove(2);
 		if (prev2 != null
 			&& prev2.tp != null) {
+
+			UndoMove prev1 = getLastMove(1);
+			int v = -(prev1.value - prev2.value);
 
 		// Because a One will win any attack on a lesser piece,
 		// regardless of whether the lesser piece is known,
@@ -5052,13 +5060,22 @@ public class TestingBoard extends Board
 		// by the Spy, but this is of course a risk that could
 		// lose the game).
 		// 
-				UndoMove prev1 = getLastMove(1);
-				if (tp.getRank() == Rank.ONE
-					&& tp.isKnown()
-					&& !tp.isSuspectedRank()
-					&& !fp.isKnown()
-					&& !prev2.tp.isKnown())
-					return -(prev1.value - prev2.value);
+			if (tp.getRank() == Rank.ONE
+				&& tp.isKnown()
+				&& !tp.isSuspectedRank()
+				&& !fp.isKnown()
+				&& !prev2.tp.isKnown())
+				return v;
+
+		// If the attacker is suspected, the AI is only guessing
+		// that the attacker is stronger.  This is a situation
+		// that should be avoided, but the AI awards only a small
+		// stipend; otherwise if the situation was highly negative,
+		// the AI could lose material in trying to rectify the
+		// situation.
+
+			if (tp.isSuspectedRank())
+				return v - valueBluff(tp, fp, tp.getIndex());
 
 		// In other cases the AI only receives half of the
 		// value of the bluffing piece.  This discourages the
@@ -5106,9 +5123,9 @@ public class TestingBoard extends Board
 		// This should be solved by "depth value reduction", but
 		// this needs to be verified.
 
-				else
-					return -(prev1.value - prev2.value) / 2;
-			}
+			return v / 2;
+
+		} // prev2.tp != null
 
 		// Return the bluffing value for the approach of an
 		// unknown AI piece towards a lower ranked opponent piece.

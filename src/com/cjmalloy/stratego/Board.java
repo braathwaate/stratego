@@ -475,8 +475,8 @@ public class Board
 		return undoList.get(size-i);
 	}
 
-	// return if fleeing piece could be protected
-	public boolean isProtectedFlee(Piece chasePiece, Piece chasedPiece, int chaser)
+	// return if chaser piece could be protected
+	public boolean isProtected(Piece chaserPiece, Piece chasedPiece, int chaser)
 	{
 		for (int d : dir) {
 			int j = chaser + d;
@@ -484,8 +484,9 @@ public class Board
 				continue;
 			Piece p = getPiece(j);
 			if (p != null
-				&& p.getColor() == chasePiece.getColor()
-				&& (p.getApparentRank() == Rank.UNKNOWN
+				&& p.getColor() == chaserPiece.getColor()
+				&& ((p.getApparentRank() == Rank.UNKNOWN
+					&& !isInvincible(chasedPiece))
 					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
 				return true;
 			}
@@ -554,7 +555,7 @@ public class Board
 		// the chase piece, but does not because
 		// of the protection.
 
-				if (isProtectedFlee(chasePiece, fp, chaser))
+				if (isProtected(chasePiece, fp, chaser))
 					continue;
 
 				fp.setActingRankFlee(rank);
@@ -633,7 +634,7 @@ public class Board
 				Piece op = getPiece(j);
 				if (op == null
 					|| op.getColor() == fp.getColor()
-					|| isProtectedFlee(op, fleeTp, j)
+					|| isProtected(op, fleeTp, j)
 					|| tp != null)	// TBD: test rank
 					continue;
 
@@ -1288,7 +1289,8 @@ public class Board
 				if (chasedRank == Rank.UNKNOWN) {
 					if (!chaser.isKnown()
 						&& chaserRank.toInt() >= 4
-						&& !isInvincible(chaser)) {
+						&& !isInvincible(chaser)
+						&& !isProtected(chaser, chased, j)) {
 						chaser.setActingRankChaseEqual(Rank.UNKNOWN);
 						continue;
 					}

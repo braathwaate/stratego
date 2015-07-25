@@ -72,7 +72,7 @@ public class AI implements Runnable
 	long stopTime = 0;
 	int moveRoot = 0;
 	int completedDepth = 0;
-	boolean deepSearch = false;
+	int deepSearch = 0;
 	private Piece lastMovedPiece;
 
 	enum MoveType {
@@ -439,6 +439,9 @@ public class AI implements Runnable
 
 	public void getAttackMoves(ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
+		if (!b.grid.hasAttack(fp))
+			return;
+
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
 		Rank fprank = fp.getRank();
@@ -494,7 +497,11 @@ public class AI implements Runnable
 		// moving to a safe square or a non-valuable piece moves
 		// to a non-safe square (blocking move).
 
-		boolean isValuable = b.isNineTarget(fp) && unsafeGrid.testBit(i+11);
+		boolean isValuable =
+			fpcolor == Settings.topColor
+			&& b.isNineTarget(fp)
+			&& unsafeGrid.testBit(i+11);
+
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
@@ -597,16 +604,18 @@ public class AI implements Runnable
                 // thus limiting their scope of travel to immediate
                 // attack.
 
-			if (!b.grid.hasAttack(fp))
-				return false;
-
 			getAttackMoves(moveList, fp);
 			return false;
 		}
 
 		if (n > 0) {
-			int fpcolor = fp.getColor();
 
+			if (b.grid.hasAttack(fp)) {
+				getAllMoves(moveList, fp);
+				return false;
+			}
+
+		// FORWARD PRUNING:
                 // Unmoved unknown AI pieces really aren't very
                 // scary to the opponent, unless they can attack
                 // on their first move.  The AI has to generate
@@ -639,15 +648,25 @@ public class AI implements Runnable
                 // the opponent.
 
 			if (fprank == Rank.UNKNOWN
-                                && fp != lastMovedPiece
-				&& n > 2)
-                                n = 2;
+                                && fp != lastMovedPiece) {
 
-			if (b.grid.hasAttack(fp)) {
-				getAllMoves(moveList, fp);
-				return false;
-			} else
-				return getApproachMoves(n, moveList, fp, unsafeGrid);
+		// Deep search reduces an the ability for an AI piece
+		// to flee before an unknown opponent reaches it.
+		// So the AI discards moves by unknowns unless they
+		// can directly attack.  This introduces a problem where
+		// an AI piece is under attack in one area of the board,
+		// and then the AI piece moves its other pieces into
+		// an area where they can be forked by an unknown piece.
+
+				if (deepSearch != 0
+					&& n >= deepSearch)
+					return true;
+
+				if (n > 2)
+					n = 2;
+			}
+
+			return getApproachMoves(n, moveList, fp, unsafeGrid);
 
 		} else if (n < 0) {
 
@@ -716,7 +735,7 @@ public class AI implements Runnable
 		// FORWARD PRUNING
 		// deep chase search
 		// Only examine moves where player and opponent
-		// are separated by up to 1 open square.
+		// are separated by up to MAX_STEPS.
 
 		// What often happens in a extended chase,
 		// is that the chased piece approaches one of its other
@@ -750,23 +769,29 @@ public class AI implements Runnable
 		// such as heading into a trap beyond the search
 		// horizon, and then the chase resumes.)
 
-			if (deepSearch) {
-				if (getMoves(1, moveList, fp, unsafeGrid))
-					isPruned = true;
-			} else {
-
-				if (n >= 0) {
-					Rank fprank = fp.getRank();
-					if (fprank == Rank.NINE)
-						getScoutFarMoves(depth, moveList, fp);
-
-					else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
-						getAttackingScoutFarMoves(depth, moveList, fp);
-				}
-
-				if (getMoves(n, moveList, fp, unsafeGrid))
-					isPruned = true;
+			int ns = n;
+			if (deepSearch != 0) {
+				if (n >= 0)
+					ns = Math.min(n, deepSearch);
+				else
+					ns = Math.max(n, -deepSearch);
 			}
+
+		// TBD: check for suspected rank; if no suspected rank,
+		// then skip AI Nine far moves
+
+			if (n >= 0
+				&& !(deepSearch != 0 && turn == Settings.topColor)) {
+				Rank fprank = fp.getRank();
+				if (fprank == Rank.NINE)
+					getScoutFarMoves(depth, moveList, fp);
+
+				else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
+					getAttackingScoutFarMoves(depth, moveList, fp);
+			}
+
+			if (getMoves(ns, moveList, fp, unsafeGrid))
+					isPruned = true;
 		}
 
 		return isPruned;
@@ -790,7 +815,7 @@ public class AI implements Runnable
 		QSCtable = new QSEntry [2][10007];
 
 		moveRoot = b.undoList.size();
-		deepSearch = false;
+		deepSearch = 0;
 
 		// chase variables
 		Piece chasedPiece = null;
@@ -814,11 +839,12 @@ public class AI implements Runnable
 
 		completedDepth = 0;
 
+		genDeepSearch();
+
 		for (int n = 1; n < MAX_PLY; n++) {
 
 		Move killerMove = new Move(null, -1);
 
-		if (!deepSearch) {
 			rootMoveList = new ArrayList<ArrayList<Integer>>();
 			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor);
 			if (isPruned) {
@@ -886,161 +912,6 @@ public class AI implements Runnable
 			log(PV, logMove(b, n, bestPrunedMove, MoveType.OK));
 			log("<< pick best pruned move");
 			}
-		}
-
-		// DEEP CHASE
-		//
-		// Some opponent AI bots like to chase pieces around
-		// the board relentlessly hoping for material gain.
-		// The opponent is able to chase the AI piece because
-		// the AI always abides by the Two Squares Rule, otherwise
-		// the AI piece could go back and forth between the same
-		// two squares.  If the Settings Two Squares Rule box
-		// is left unchecked, this program does not enforce the
-		// rule for opponents. This is a huge advantage for the
-		// opponent, but is a good beginner setting.
-		//
-		// So an unskilled human or bot can chase an AI piece
-		// pretty easily, but even a skilled opponent abiding
-		// by the two squares rule can still chase an AI piece around
-		// using the proper moves.
-		//
-		// Hence, chase sequences need to be examined in more depth.
-		// So if moving a chased piece
-		// looks like the best move, then do a deep
-		// search of those pieces and any interacting pieces.
-		//
-		// The goal is that the chased piece will find a
-		// protector or at least avoid a trap or dead-end
-		// and simply outlast the chaser's patience.  If not,
-		// the opponent should be disqualified anyway.
-		// 
-		// This requires FORWARD PRUNING which is tricky
-		// to get just right.  The AI may discover many moves
-		// deep that it will lose the chase, but unless the
-		// opponent is highly skilled, the opponent will likely
-		// not realize it.  So the deep chase pruning is only
-		// used when there are a choice of squares to flee to
-		// and it should never attack a chaser if it loses,
-		// even if it determines that it will lose the chase
-		// anyway and the board at the end the chase is less favorable
-		// than the current one.
-		//
-		// If the chaser is unknown, and the search determines
-		// that it will get cornered into a loss situation, then
-		// it should still flee until the loss is imminent.
-		//
-		// To implement this, the deep chase is skipped if
-		// the best move from the broad chase is to attack the
-		// chaser (which could be bluffing),
-		// but otherwise remove the move that attacks
-		// the chaser from consideration.
-
-		if (!deepSearch
-			&& lastMovedPiece != null
-
-		// Begin deep chase after xx iterations of broad search
-			&& n >= 3
-			&& bestMove != 0
-
-		// Deep chase is skipped if best move from broad search
-		// is to attack a piece (perhaps the chaser)
-			&& b.getPiece(Move.unpackTo(bestMove)) == null
-
-		// Deep chase is skipped if best move value is negative.
-		// This indicates that the piece is trapped
-		// already or there is something else on the board
-		// going on.  So broad search is preferred.
-			&& bestMoveValue > -30
-
-		// Limit deep chase to superior pieces.
-		// Using deep chase can be risky if the
-		// objective of the chaser is not be the chased
-		// piece, but some other piece, like a flag or
-		// flag bomb.
-			&& b.getPiece(Move.unpackFrom(bestMove)).getRank().toInt() <= 4
-
-		// If Two Squares is in effect,
-		// deep search only if the best move is not adjacent
-		// to the chase piece from-square.
-		// Otherwise, the chased piece is in no danger,
-		// because the chase piece can move back and forth
-		// until Two Squares prevents the chaser from moving.
-		//
-		// (Note that bestMove cannot lead to a possible two squares
-		// result for the AI, because makeMove() prevents it).
-
-			&& !(Settings.twoSquares
-				&& Grid.isAdjacent(Move.unpackTo(bestMove), lastMove.getFrom()))) {
-
-		// check for possible chase
-			for (int d : dir) {
-				int from = lastMoveTo + d;
-				if (from != Move.unpackFrom(bestMove))
-					continue;
-
-		// chase confirmed:
-		// bestMove is to move chased piece 
-
-				int count = 0;
-				for (int mo = 0; mo <= LOSES; mo++)
-				for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
-				if (from == Move.unpackFrom(rootMoveList.get(mo).get(k))) {
-					int to = Move.unpackTo(rootMoveList.get(mo).get(k));
-					Piece tp = b.getPiece(to);
-					if (tp != null) {
-					
-					int result = b.winFight(b.getPiece(from), tp);
-		// If chased piece wins or is even
-		// continue broad search.
-					if (result == Rank.WINS
-						|| result == Rank.EVEN) {
-						count = 0;
-						break;
-					}
-					else 
-						continue;
-					}
-					count++;
-				}
-
-		// Note: if the chased piece has a choice of
-		// 1 open square and 1 opponent piece,
-		// broad search is continued.  Deep search
-		// is not used because the AI may discover
-		// many moves later that the open square is
-		// a bad move, leading it to attack the
-		// opponent piece. This may appear to
-		// be a bad choice, because usually the opponent
-		// is not highly skilled at pushing the
-		// chased piece for so many moves
-		// in the optimal direction.  But because
-		// the broad search is shallow, the AI can
-		// be lured into a trap by taking material.
-		// So perhaps this can be solved by doing
-		// a half-deep search?
-				if (count >= 2) {
-		// Chased piece has at least 2 moves
-		// to open squares.
-		// Pick the better path.
-					deepSearch = true;
-					chasePiece = lastMovedPiece;
-					chasePiece.setIndex(lastMoveTo);
-					chasedPiece = b.getPiece(from);
-					chasedPiece.setIndex(from);
-
-					log("Deep chase:" + chasePiece.getRank() + " chasing " + chasedPiece.getRank());
-					for (int mo = 0; mo <= LOSES; mo++)
-					for (int k = rootMoveList.get(mo).size()-1; k >= 0; k--)
-						if (from != Move.unpackFrom(rootMoveList.get(mo).get(k))
-							|| b.getPiece(Move.unpackTo(rootMoveList.get(mo).get(k))) != null)
-
-							rootMoveList.get(mo).remove(k);
-
-					break;
-				}
-			}
-		}
 
 		boolean hasMove = false;
 		for (int mo = 0; mo <= LOSES; mo++)
@@ -1107,7 +978,7 @@ public class AI implements Runnable
 		log("<<< pick best move");
 
 		if (n == 1
-			|| deepSearch
+			|| deepSearch != 0
 			|| n == MAX_PLY - 1) {
 
 		// no horizon effect possible until ply 2
@@ -1556,7 +1427,7 @@ public class AI implements Runnable
 		int ttmove = -1;
 		TTEntry.SearchType searchType;
 		int bestmove = -1;
-		if (deepSearch)
+		if (deepSearch != 0)
 			searchType = TTEntry.SearchType.DEEP;
 		else
 			searchType = TTEntry.SearchType.BROAD;
@@ -2048,6 +1919,93 @@ public class AI implements Runnable
 		return -(b.getValue() - um.value) * Math.min(depth, 10) / 20;
 	}
 
+	// DEEP SEARCH
+	//
+	// Some opponent AI bots like to chase pieces around
+	// the board relentlessly hoping for material gain.
+	// The opponent is able to chase the AI piece because
+	// the AI always abides by the Two Squares Rule, otherwise
+	// the AI piece could go back and forth between the same
+	// two squares.  If the Settings Two Squares Rule box
+	// is left unchecked, this program does not enforce the
+	// rule for opponents. This is a huge advantage for the
+	// opponent, but is a good beginner setting.
+	//
+	// So an unskilled human or bot can chase an AI piece
+	// pretty easily, but even a skilled opponent abiding
+	// by the two squares rule can still chase an AI piece around
+	// using the proper moves.
+	//
+	// Hence, chase sequences need to be examined in more depth.
+	// So if moving a chased piece
+	// looks like the best move, then do a deep
+	// search of those pieces and any interacting pieces.
+	//
+	// The goal is that the chased piece will find a
+	// protector or at least avoid a trap or dead-end
+	// and simply outlast the chaser's patience.  If not,
+	// the opponent should be disqualified anyway.
+	// 
+	// This requires FORWARD PRUNING which is tricky
+	// to get just right.  The AI may discover many moves
+	// deep that it will lose the chase, but unless the
+	// opponent is highly skilled, the opponent will likely
+	// not realize it.
+	//
+
+	void genDeepSearch()
+	{
+		final int MAX_STEPS = 2;
+		for (Piece fp : b.pieces[Settings.topColor]) {
+			if (fp == null)	// end of list
+				break;
+
+			if (!fp.isKnown())
+				continue;
+
+			if (!b.grid.isCloseToEnemy(Settings.topColor, fp.getIndex(), MAX_STEPS))
+				continue;
+
+			for (Piece tp : b.pieces[Settings.bottomColor]) {
+				if (tp == null)	// end of list
+					break;
+
+				if (tp.getRank() == Rank.UNKNOWN
+					|| tp.getRank() == Rank.BOMB
+					|| tp.getRank() == Rank.FLAG)
+					continue;
+
+				int steps = Grid.steps(fp.getIndex(), tp.getIndex());
+				if (steps > MAX_STEPS)
+					continue;
+
+	// TBD: If Two Squares is in effect and the chased and chaser pieces
+	// are not on the same row or column, and the chased piece has
+	// an open square, the chased piece is in no danger, 
+	// because the chase piece can move back and forth
+	// until Two Squares prevents the chaser from moving.
+	// But if it has a choice of another open square, deep search
+	// is still needed to examine the flee route.
+
+	// If chased piece wins or is even continue broad search.
+
+				int result = b.winFight(fp, tp);
+				if (result == Rank.WINS
+					|| result == Rank.EVEN)
+					continue;
+
+				if (b.isProtected(fp, tp, fp.getIndex()))
+					continue;
+
+				if (deepSearch == 0
+					|| steps > deepSearch) {
+					deepSearch = 2*steps-1;
+			
+					log("Deep search (" + deepSearch + "):" + tp.getRank() + " chasing " + fp.getRank());
+				}
+			} //tp
+		} //fp
+	}
 
 	String logPiece(Piece p)
 	{
