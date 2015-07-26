@@ -75,7 +75,7 @@ public class TestingBoard extends Board
 	protected int[][] winRank = new int[15][15]; // winfight cache
 	protected int[] sumValues = new int[2];
 	protected int value;	// value of board
-	protected int[] unmovedValue = new int[121];	// unmoved value
+	protected int[] unmovedValue = new int[121];    // unmoved value
 	protected int[][] valueStealth = new int[2][15];
 	protected static final int importantRank[] = { 1, 2, 3, 8 };
 	protected static final int lanes[] = { 0, 1, 4, 5, 8, 9 };
@@ -226,24 +226,6 @@ public class TestingBoard extends Board
 
 	private static final int VALUE_MOVED = 5;
 
-	// generate bomb patterns
-	static int[][] bombPattern = new int[30][6];
-	static {
-	for (int y = 0; y <= 2; y++)
-	for (int x = 0; x <= 9; x++) {
-		int flag = Grid.getIndex(x,y);
-		int bpi = 0;
-		bombPattern[y*10+x][bpi++] = flag;
-		for (int d : dir) {
-			int bi = flag + d;
-			if (!Grid.isValid(bi))
-				continue;
-			bombPattern[y*10+x][bpi++] = bi;
-		}
-		bombPattern[y*10+x][bpi] = 0;	// end of pattern
-	}
-	}
-
 	public TestingBoard() {}
 	
 	public TestingBoard(Board t)
@@ -266,7 +248,7 @@ public class TestingBoard extends Board
 		} // color c
 
 		for (int i=12;i<=120;i++) {
-		 	unmovedValue[i] = 0;
+			unmovedValue[i] = 0;
 			if (!Grid.isValid(i))
 				continue;
 			Piece p = getPiece(i);
@@ -305,7 +287,7 @@ public class TestingBoard extends Board
 		// may have acquired during game play.
 				if (!p.isKnown())
 				for (int x : lanes) {
-					Piece sp = getSetupPiece(Grid.getIndex(x, yside(p.getColor(), 3)));
+					Piece sp = getSetupPiece(Grid.getIndex(x, Grid.yside(p.getColor(), 3)));
 					if (sp == p) {
 						if (np.getActingRankChase() == Rank.NIL)
 							np.setActingRankChaseEqual(Rank.UNKNOWN);
@@ -436,8 +418,8 @@ public class TestingBoard extends Board
 		// applicability to the game of stratego, so someone should
 		// analyze the endgames and publish a FAQ.
 		//
-		// Note: possibleFlag() depends on sumValues.
-		// Note: possibleFlag() revalues Eights.
+		// Note: genDestFlag() depends on sumValues.
+		// Note: genDestFlag() revalues Eights.
 		// 
 			sumValues[c] = 0;
 			for (int rank = 1; rank <= 10; rank++) {
@@ -507,8 +489,8 @@ public class TestingBoard extends Board
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
 		genInvincibleRank();	// depends on stealth
-		possibleFlag();
-		aiFlagSafety(); // depends on possibleFlag, valueStealth, values
+		genDestFlag();
+		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
 
 		{
 		// Revalue expendable pieces based on piece count difference.
@@ -1074,7 +1056,7 @@ public class TestingBoard extends Board
 
 		for (int c = RED; c <= BLUE; c++) {
 			for (int x = 0; x < 10; x++)
-				unmovedValue[Grid.getIndex(x, yside(c,3))] = 0;
+				unmovedValue[Grid.getIndex(x, Grid.yside(c,3))] = 0;
 		}
 	}
 
@@ -2275,24 +2257,42 @@ public class TestingBoard extends Board
 		}
 	}
 
-	// Establish location "i" as a flag destination.
-	void genDestFlag(int i)
+	void genDestFlag()
 	{
-		Piece flagp = getPiece(i);
-		int color = flagp.getColor();
-		if (flagp.getRank() == Rank.FLAG) {
-			setFlagValue(flagp);
-		
+		for (int c = RED; c <= BLUE; c++) {
+
+		Piece pflag = flag[c];
+		if (pflag == null)
+			continue;
+
+		setFlagValue(pflag);
+
+                // revalue eights
+                // (Note: maybe_count == 0 calls setExpendableEights even
+                // if there are not any left.  This is necessary because
+                // Flag value > aiBombValue > Eight value.)
+                int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
+                if (maybe_count[c] == 0 || maybe_count[c] + 1 < eightsAtLarge)
+                        // at least 1 opponent color eight is expendable
+                        // (The AI keeps one more Eight around than
+                        // necessary to insure for an unforeseen mortality).
+                        setExpendableEights(1-c);
+                else if (maybe_count[c] <= 3) {
+
+                // eights become more valuable now
+
+                        values[1-c][Rank.EIGHT.toInt()]
+                                += (maybe_count[c] + 1 - eightsAtLarge) * 30;
+
+		}
+
 		// Making the flag known eliminates the flag
 		// from the piece move lists, which means that
 		// it offers no protective value to pieces that
-		// bluff against lower ranked pieces.  Hence, a side
+		// bluff against lower ranked pieces.
 
-			makeFlagKnown(flagp);
-		}
-
-		// Do not set the opponent flag known.
-		// Otherwise, a low ranked AI piece in the area
+		// Setting the opponent flag known is a gamble.
+		// If the flag is known, a low ranked AI piece in the area
 		// will attack the flag, which could lose the game
 		// For example,
 		// R8 R1
@@ -2306,8 +2306,89 @@ public class TestingBoard extends Board
 		// is set to known, then the AI will hammer all of its
 		// pieces into the remaining unknowns.
 
-		if (color == Settings.bottomColor)
-			setFlagValue(flagp);
+		if (maybe_count[c] == 1)
+			makeFlagKnown(pflag);
+
+		// The ai only uses its eights to attack flag structures
+                // if it has enough remaining.  However, it still approaches
+                // flag structures with unknown expendable pieces.
+                // This subterfuge often can cause the opponent into
+                // making a mistake, attacking an unknown piece that
+                // approaches the flag, perhaps resulting in material
+                // gain for the AI.
+
+                // this code is only for opponent bombs
+
+		// Eights begin to attack bomb structures as the
+		// number of possible structures diminish
+		boolean eightAttack = (maybe_count[c] <= 3
+			|| maybe_count[c] - open_count[c] <= eightsAtLarge);
+
+                if (c == Settings.bottomColor
+                        && isBombedFlag[c]
+                        && eightAttack)
+				for (int d : dir) {
+					int j = flag[c].getIndex() + d;
+					if (!Grid.isValid(j))
+						continue;
+
+					destBomb(j,
+						maybe_count[c] - open_count[c] <= eightsAtLarge);
+				}
+
+		defendFlag(pflag);
+		genDestFlag(pflag.getIndex());
+
+		// Unmoved pieces that remain in structures that could
+		// contain the flag should remain unmoved if possible,
+		// to confuse the opponent about the flag location,
+		// unless the player is winning by a large edge.
+
+		// unmovedValue[] distorts unknown exchanges, so this
+		// needs to be as low as necessary to keep the
+		// pieces unmoved.  This distortion shows up in
+		// close exchanges.  For example,
+		// | R4 --
+		// | B5 B?
+		// | B? B? B?
+		// -------
+		// R4xB5 and B?xR4 is 50 - 100 + 40 (Two stealth) = -10.
+		// But if B? is on the back rank, the unmovedValue is 6,
+		// plus VALUE_MOVED (5), which leads Red to attack.
+
+		for (int x = 0; x < 10; x++) {
+			int i = Grid.getIndex(x, Grid.yside(c, 0));
+			boolean altFlag = true;
+			for (int d : dir) {
+				int j = i + d;
+				if (!Grid.isValid(j))
+					continue;
+				Piece p = getPiece(j);
+				if (p == null
+					|| (p.isKnown() && p.getRank() != Rank.BOMB)
+					|| p.hasMoved()) {
+					altFlag = false;
+					break;
+				}
+			}
+			if (altFlag
+				&& isWinning(c) < VALUE_THREE)
+				for (int d : dir) {
+					int bi = i + d;
+					if (!Grid.isValid(bi))
+						continue;
+					Piece p = getPiece(bi);
+					unmovedValue[bi] -= 4;
+				}
+		} // x
+		} // c
+	}
+
+	// Establish location "i" as a flag destination.
+	void genDestFlag(int i)
+	{
+		Piece flagp = getPiece(i);
+		int color = flagp.getColor();
 
 		// Send in a lowly rank and an Eight (if any)
 		// to attack the suspected flag.
@@ -2327,454 +2408,6 @@ public class TestingBoard extends Board
 				break;
 			}
 		}
-	}
-
-	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count)
-	{
-		int size = 99;
-		int bestGuess = 99;
-		for (int i = 0; i < maybe_count; i++) {
-
-			// compute the number of bombs in the structure
-			int nb;
-			for (nb = 1; maybe[i][nb] != 0; nb++);
-			nb--;
-
-			int start = i;
-			while (i < maybe_count - 1
-				&& Math.abs(maybe[i][0] - maybe[i+1][0]) == 1) {
-				i++;
-				nb++;
-			}
-
-			boolean exposed = false;
-			for (int j = 1; maybe[start][j] != 0; j++)
-				for (int d : dir) {
-					int k = maybe[start][j] + d;
-					if (!Grid.isValid(k))
-						continue;
-					Piece p = getPiece(k);
-					if (p == null
-						|| p.getColor() != getPiece(maybe[start][0]).getColor())
-						exposed = true;
-
-		// The AI also looks at the defense of movable
-		// pieces near the structures.  If the opponent is leaving
-		// a structure undefended, it likely is a ruse.
-
-					else if (p.hasMoved()) {
-						exposed = true;
-						nb--;
-					}
-				}
-
-		// Note: If there is a corner bomb structure (2 bombs) and
-		// a 3 bomb structure, the 3 bomb structure normally
-		// contains the flag because often the corner bomb
-		// structure is a ruse because it is difficult to defend.
-		// However, the corner bomb structure could be inside
-		// a layered corner bomb structure.  In this case,
-		// the corner bomb structure probably has the flag.
-		// So the AI looks for a combination of small size and
-		// large number of defenders.
-
-			if (nb < size && exposed) {
-				size = nb;
-				bestGuess = start;
-			}
-		
-
-		// Unmoved pieces that remain in structures that could
-		// contain the flag should remain unmoved if possible,
-		// to confuse the opponent about the flag location,
-		// unless the player is winning by a large edge.
-
-		// unmovedValue[] distorts unknown exchanges, so this
-		// needs to be as low as necessary to keep the
-		// pieces unmoved.  This distortion shows up in
-		// close exchanges.  For example,
-		// | R4 --
-		// | B5 B?
-		// | B? B? B?
-		// -------
-		// R4xB5 and B?xR4 is 50 - 100 + 40 (Two stealth) = -10.
-		// But if B? is on the back rank, the unmovedValue is 6,
-		// plus VALUE_MOVED (5), which leads Red to attack.
-
-			Piece flagp = getPiece(maybe[start][0]);
-			int c = flagp.getColor();
-			if (isWinning(c) < VALUE_THREE
-				&& yside(c, Grid.getY(maybe[start][0])) == 0) {
-				for (int j = 1; maybe[start][j] != 0; j++) {
-					int bi = maybe[start][j];
-					unmovedValue[bi] -= 4;
-				}
-			}
-		} // i
-
-		// If structure is not exposed at the start end,
-		// bestGuess will be 99.  Eventually, some portion
-		// of a structure will become exposed.
-
-		if (bestGuess == 99)
-			return;
-
-		Piece flagp = getPiece(maybe[bestGuess][0]);
-		int color = flagp.getColor();
-		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
-		if (eightsAtLarge == 0)
-			return;
-
-		// Eights begin to attack bomb structures as the
-		// number of possible structures diminish
-		boolean eightAttack = (maybe_count <= 3
-			|| maybe_count - open_count <= eightsAtLarge);
-
-		// It doesn't matter if the piece really is a bomb or not.
-		boolean found = true;
-		for (int i = bestGuess; i < maybe_count; i++) {
-		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
-			Piece p = getPiece(maybe[i][j]);
-			if (p == null
-				|| (p.isKnown() && p.getRank() != Rank.BOMB)
-				|| p.hasMoved()) {
-				found = false;
-				continue;
-			}
-
-			if (color == Settings.bottomColor) {
-
-		// Note: the AI marks the pieces surrounding
-		// the suspected flag as suspected bombs.  The AI
-		// needs to be relatively confident that these
-		// pieces are bombs, because it will risk approaching
-		// these pieces if the reward is large enough.
-		// (See riskOfLoss()).
-
-				if (eightAttack) {
-					p.setSuspectedRank(Rank.BOMB);
-
-		// If there is only 1 pattern left, the AI goes out
-		// on a limb and decides that the pieces in the
-		// bomb pattern are known.  This eliminates them
-		// from the piece move lists, which means that
-		// they offer no protective value to pieces that
-		// bluff against lower ranked pieces.  This code
-		// works for both AI and opponent bomb patterns.
-
-					if (maybe_count == 1)
-						p.makeKnown();
-				}
-			} else if (p.getRank() == Rank.BOMB
-				&& maybe_count == 1)
-					p.makeKnown();
-		} // j
-		if (i < maybe_count - 1
-			&& maybe[i][0] + 1 == maybe[i+1][0])
-			continue;
-
-		break;
-		} // i
-
-
-		if (maybe_count == 1) {
-			setFlagValue(flagp);
-			makeFlagKnown(flagp);
-		}
-
-		// The ai only uses its eights to attack flag structures
-		// if it has enough remaining.  However, it still approaches
-		// flag structures with unknown expendable pieces.
-		// This subterfuge often can cause the opponent into
-		// making a mistake, attacking an unknown piece that
-		// approaches the flag, perhaps resulting in material
-		// gain for the AI.
-
-		// this code is only for opponent bombs
-		if (color == Settings.bottomColor
-			&& found
-			&& eightAttack)
-			for (int j = 1; maybe[bestGuess][j] != 0; j++)
-				destBomb(maybe[bestGuess][j],
-					maybe_count - open_count <= eightsAtLarge);
-	}
-
-	public int yside(int color, int y)
-	{
-		if (color == Settings.topColor)
-			return y;
-		else
-			return 9-y;
-	}
-
-
-	// Scan the board setup for suspected flag pieces.
-	//
-	// This code is designed primarily to detect the opponent flag,
-	// but by also scanning the AI's own pieces, it can second
-	// guess the opponent where the opponent may think
-	// the AI flag may be located.  This tells the AI whether
-	// to step up protection on its own flag, and possibly to
-	// step up protection on a alternate location in an effort
-	// to create a realistic deception that the flag is at
-	// the alternate location, but really isn't.
-
-	private void possibleFlag()
-	{
-		for (int c = RED; c <= BLUE; c++) {
-
-		Piece flagp = flag[c];
-
-		// A flag is marked as known if it is the last unknown
-		// unmoved piece on the board.
-		if (flagp != null && flagp.isKnown()) {
-			defendFlag(flagp);
-			genDestFlag(flagp.getIndex());
-			continue;
-		}
-
-		int [][] maybe = new int[31][];
-		int maybe_count = 0;
-		int open_count = 0;
-
-		int lastbp = 0;
-                for ( int[] bp : bombPattern ) {
-			int[] b = new int[6];
-			for ( int i = 0; bp[i] != 0; i++) {
-				if (c == Settings.topColor)
-					b[i] = bp[i];
-				else
-					b[i] = 132 - bp[i];
-			}
-			flagp = getPiece(b[0]);
-			if (flagp != null
-				&& (!flagp.isKnown()
-				 	|| flagp.isSuspectedRank()
-				 	|| flagp.getRank() == Rank.FLAG)
-				&& !flagp.hasMoved()) {
-				boolean open = false;
-				int k;
-				for ( k = 1; b[k] != 0; k++ ) {
-					Piece p = getPiece(b[k]);
-					if (p == null
-						|| (p.isKnown() && p.getRank() != Rank.BOMB)
-						|| p.hasMoved()) {
-						if (getSetupRank(b[k]) == Rank.BOMB) {
-							open = true;
-							continue;
-						}
-						break;
-					}
-				} // k
-
-				// b[k] == 0 means possible flag structure
-
-				if (b[k] == 0) {
-					maybe[maybe_count++]=b;
-					if (open) {
-					// if a structure had a bomb removed,
-					// guess that it holds the flag
-						genDestFlag(b[0]);
-						defendFlag(flagp);
-						open_count++;
-					}
-
-		// Note: Adjacent bomb structures are considered to be
-		// only one structure, because it only takes one Eight
-		// to penetrate.  For example:
-		// -- BB BB --
-		// BB B7 BF BB
-		// appears as two substructures, although only one Eight
-		// is necessary.  (Yet, two Eights would be required
-		// if any of the outside bombs were actually pieces.)
-
-		// Note: The large classic bomb structure
-		// -- -- -- BB
-		// -- -- BB B7
-		// -- BB B7 BB
-		// BB B7 BB BF
-		// would never be attacked by the AI, even if it has
-		// its full complement of five Eights.  That is
-		// because there are a total of six substructures.
-		// With the adjacent structure rule, there are
-		// four substructures.
-					if (bp[0] == lastbp + 1) {
-						open_count++;
-						lastbp = 0;
-					} else
-						lastbp = bp[0];
-				}
-
-			} // possible flag
-		} // bombPattern
-
-		// revalue eights
-		// (Note: maybe_count == 0 calls setExpendableEights even
-		// if there are not any left.  This is necessary because
-		// Flag value > aiBombValue > Eight value.)
-		int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
-		if (maybe_count == 0 || maybe_count + 1 < eightsAtLarge)
-			// at least 1 opponent color eight is expendable
-			// (The AI keeps one more Eight around than
-			// necessary to insure for an unforeseen mortality).
-			setExpendableEights(1-c);
-		else if (maybe_count <= 3) 
-
-		// eights become more valuable now
-
-			values[1-c][Rank.EIGHT.toInt()]
-				+= (maybe_count + 1 - eightsAtLarge) * 30;
-
-		if (maybe_count >= 1) {
-
-			genDestBombedFlag(maybe, maybe_count, open_count);
-
-		} else if (c == Settings.bottomColor) {
-
-		// Player color c did not surround his flags with
-		// adjacent bombs.  That does not mean the player did
-		// not bomb the flag, but perhaps surrounded the flag
-		// along with some lowly piece(s) like a Seven.
-		// Common setups are:
-		// Setup 1:
-		// B - -
-		// 7 B -
-		// F 7 B
-		//
-		// Setup 2:
-		// - B B -
-		// B F 7 B
-		//
-		// These setups are attacked using the standard
-		// bomb patterns.  Setup 1 contain 3 patterns.
-		// This is the toughest for the AI to crack, because once
-		// it removes one bomb and one Seven takes its Eight,
-		// the AI will think that the remaining Seven is the Flag,
-		// which is certainly possible.
-		// Setup 3:
-		// B - -
-		// 7 B -
-		// 7 F B
-		//
-		// Setup 2 contain 2 patterns.  If the bomb above the
-		// Seven is removed and the Seven takes the Eight, the
-		// AI will not recognize any bomb pattern .
-		//
-		// But the AI will choose which of the pieces to target
-		// as a flag on the back row based on where any bombs
-		// on the second to back row were removed.  The AI
-		// will choose the piece directly behind the bomb or
-		// next to that piece, if that piece is against the side
-		// or has an unmoved or bomb piece next to it.
-		// For example, in Setup 1, if the middle bomb is removed,
-		// and a Seven takes an Eight, there is still
-		// one matching pattern, so the AI will target the unmoved
-		// Seven.
-		// B - -
-		// - 7 -
-		// F 7 B
-		//
-		// But if that Seven moves, then the Flag is targeted
-		// (rather than the Bomb or any other back row piece)
-		// because the piece is against the side of the board.
-		//
-		// In Setup 2, if the bomb above the Seven is removed,
-		// and the Seven takes the Eight, there are no matching
-		// patterns.
-		// - B 7 -
-		// B F - B
-		//
-		// The next piece to be targeted is the Flag, because it
-		// is next to another unmoved piece.
-		//
-		// Once this rule is exhausted,
-		// go for any remaining unmoved pieces.
-
-			flagp = null;
-			for (int x=1; x <= 8; x++) {
-				int i = Grid.getIndex(x, yside(c,1));
-				if (getSetupRank(i) == Rank.BOMB) {
-					int flagi = Grid.getIndex(x, yside(c,0));
-					Piece flag = getPiece(flagi);
-					if (flag != null
-						&& (!flag.isKnown() || flag.isSuspectedRank())
-						&& !flag.hasMoved()) {
-						flagp = flag;
-						break;
-					}
-					flag = getPiece(flagi-1);
-					if (flag != null
-						&& (!flag.isKnown() || flag.isSuspectedRank())
-						&& !flag.hasMoved()) {
-						if (x == 1) {
-							flagp = flag;
-							break;
-						}
-						Piece p = getPiece(flagi-2);
-						if (p != null && (!p.isKnown() || p.getRank() == Rank.BOMB) && !p.hasMoved()) {
-							flagp = flag;
-							break;
-						}
-					}
-
-					flag = getPiece(flagi+1);
-					if (flag != null
-						&& (!flag.isKnown() || flag.isSuspectedRank())
-						&& !flag.hasMoved()) {
-						if (x == 8) {
-							flagp = flag;
-							break;
-						}
-						Piece p = getPiece(flagi+2);
-						if (p != null && (!p.isKnown() || p.getRank() == Rank.BOMB) && !p.hasMoved()) {
-							flagp = flag;
-							break;
-						}
-					}
-				}
-			}
-
-
-		// Try the back rows first.
-		// Choose the piece that has the most remaining
-		// surrounding pieces.
-		// (water counts, so corners and edges are preferred)
-
-			for (int y=0; y <= 3 && flagp == null; y++)  {
-			int flagprot = 0;
-			for (int x=0; x <= 9; x++) {
-				int i = Grid.getIndex(x, yside(c,y));
-				Piece p = getPiece(i); 
-				if (p != null
-					&& (!p.isKnown() || p.isSuspectedRank())
-					&& !p.hasMoved()) {
-					int count = 0;
-					for (int d : dir) {
-						Piece bp = getPiece(i+d);
-						if (bp == null
-							|| bp.getColor() != c)
-							continue;
-						if (bp.hasMoved())
-							count++;
-						else
-							count+=3;
-					}
-					if (count > flagprot) {
-						flagp = p;
-						flagprot = count;
-					}
-				}
-			}
-			}
-
-			assert flagp != null : "Well, where IS the flag?";
-
-			defendFlag(flagp);
-			genDestFlag(flagp.getIndex());
-
-		} // maybe == 0 (opponent flag only)
-
-		} // color c
 	}
 
 	// Set a destination for a bomb surrounding a possible flag
@@ -3062,7 +2695,7 @@ public class TestingBoard extends Board
 		assert tmp[0] == DEST_VALUE_NIL : "call genDestTmp before setPlan";
 		for (int y = 3; y < 10; y++)
 		for (int x = 0; x < 10; x++) {
-			int j = Grid.getIndex(x, yside(color, y));
+			int j = Grid.getIndex(x, Grid.yside(color, y));
 			if (plan[1][j] > priority) {
 				if (plan[0][j] == DEST_VALUE_NIL) {
 					plan[0][j] = tmp[j];

@@ -263,4 +263,12 @@ public class Grid
 		}
 		return dir;
 	}
+
+	static public int yside(int color, int y)
+        {
+                if (color == Settings.topColor)
+                        return y;
+                else
+                        return 9-y;
+        }
 }

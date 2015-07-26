@@ -1178,18 +1178,31 @@ public class AI implements Runnable
 				int tmpM = Move.packMove(i, t);
 				b.move(tmpM, depth);
 
-		// Don't evaluate losing captures to save time
+		// If there is a negative capture, try fleeing
+
+				if (-negQS(b.getValue() + dvr) < bvalue) {
+					tryFlee = true;
+
+		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
 		// The main search throws these into the LOSES
 		// bucket, hoping that they will get pruned off.
 		// But it has to evaluate them because of the rare
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
-
-				if (-negQS(b.getValue() + dvr) < bvalue) {
-					tryFlee = true;
-					b.undo();
-					continue;
+		//
+		// This code was commented out in version 9.7, because
+		// sometimes a low ranked piece like a Three or Four
+		// must protect the stealth of a One, Two or Three
+		// in the face of an oncoming known Seven.  But 3x7
+		// and 4x7 is a losing move.  There are likely other
+		// scenarios as well.  This results in a more accurate qs,
+		// but with a heavy time penalty.  It is better to save
+		// time by pruning off useless moves so that qs is never
+		// even reached.
+		//
+		//			b.undo();
+		//			continue;
 				}
 		
 				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
