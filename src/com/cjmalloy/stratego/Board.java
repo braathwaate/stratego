@@ -84,7 +84,8 @@ public class Board
 	protected int blufferRisk = 4;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
-
+	protected int[][] lowerRankCount = new int[2][10];
+	protected int[][] lowerNotSuspectedRankCount = new int[2][10];
 	protected boolean[] isBombedFlag = new boolean[2];
 
 	// generate bomb patterns
@@ -508,7 +509,7 @@ public class Board
 			if (p != null
 				&& p.getColor() == chaserPiece.getColor()
 				&& ((p.getApparentRank() == Rank.UNKNOWN
-					&& !isInvincible(chasedPiece))
+					&& !isInvincibleAttacker(chasedPiece))
 					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
 				return true;
 			}
@@ -720,6 +721,21 @@ public class Board
 	{
 		Move m = getLastMove();
 		if (m.getPiece() != chased)
+			return;
+
+		// Do not set chase rank on a fleeing piece.
+		// For example,
+		// -- R3 --
+		// xx B4 --
+		// xx -- R4
+		// -- -- --
+		// Red Three approaches suspected Blue Four.  Blue Four
+		// retreats to a square next to known Red Four.
+		// Blue Four does not acquare a chase rank of Three,
+		// but remains a Four.
+
+		Move m2 = getLastMove(2);
+		if (Grid.isAdjacent(m2.getTo(), m.getFrom()))
 			return;
 
 		// Prior to version 9.6, if a chase piece had a
@@ -1608,7 +1624,7 @@ public class Board
                                 knownRank[c][j] = 0;
 				suspectedRank[c][j] = 0;
 			}
-		}
+		} // c
 
 		// add in the tray pieces to trayRank
 		for (int i=0;i<getTraySize();i++) {
@@ -1825,6 +1841,30 @@ public class Board
 
 		} // all pieces accounted for
 
+			int lowerRanks = 0;
+			int lowerNotSuspectedRanks = 0;
+			for (int r = 1; r <= 10; r++) {
+
+		// Another useful count is the number of opponent pieces with
+		// lower rank.  If a rank has only 1 opponent piece
+		// of lower rank remaining on the board,
+		// then it safe for the rank to venture out,
+		// because it takes two pieces of lower
+		// rank to corner another piece.
+		//
+		// TBD: Even so, because AI's look ahead is limited,
+		// it can be trapped in a dead-end or by the Two Squares
+		// rule or forked with another one of its pieces.
+		// This can be solved by increasing look-ahead.
+
+				lowerRankCount[c][r-1] = lowerRanks;
+				lowerRanks += rankAtLarge(c, r);
+
+				lowerNotSuspectedRankCount[c][r-1] = lowerNotSuspectedRanks;
+				lowerNotSuspectedRanks += rankAtLarge(c, r) - suspectedRankAtLarge(c, r) - knownRankAtLarge(c, r);
+
+			}
+
 		} // c
 
 		// A rank becomes invincible when all lower ranking pieces
@@ -1852,10 +1892,10 @@ public class Board
 				invincibleRank[1-c][rank-1] = false;
 
 			for (rank = 1;rank <= 10;rank++) {
+				if (lowerNotSuspectedRankCount[c][rank-1] > 0)
+					break;
 				invincibleRankInt[1-c] = rank;
 				invincibleRank[1-c][rank-1] = true;
-				if (unknownNotSuspectedRankAtLarge(c, rank) > 0)
-					break;
 			}
 
 			for (rank = 1;rank<9;rank++)
@@ -2939,6 +2979,15 @@ public class Board
 	public boolean isInvincible(Piece p) 
 	{
 		Rank rank = p.getRank();
+		return isInvincible(p.getColor(), rank.toInt());
+	}
+
+	public boolean isInvincibleAttacker(Piece p) 
+	{
+		Rank rank = p.getRank();
+		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
+			return false;
+
 		return isInvincible(p.getColor(), rank.toInt());
 	}
 

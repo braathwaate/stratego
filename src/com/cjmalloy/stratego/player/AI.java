@@ -2000,14 +2000,18 @@ public class AI implements Runnable
 	// But if it has a choice of another open square, deep search
 	// is still needed to examine the flee route.
 
-	// If chased piece wins or is even continue broad search.
-
-				int result = b.winFight(fp, tp);
-				if (result == Rank.WINS
-					|| result == Rank.EVEN)
+				if (b.isProtected(fp, tp, fp.getIndex()))
 					continue;
 
-				if (b.isProtected(fp, tp, fp.getIndex()))
+	// If chased X chaser isn't a bad move, the AI
+	// isn't concerned about a chase, so continue deep search
+
+				int tmpM = Move.packMove(fp.getIndex(), tp.getIndex());
+				int vm = b.getValue();
+				b.move(tmpM, 0);
+				vm = b.getValue() - vm;
+				b.undo();
+				if (vm >= -5)
 					continue;
 
 				if (deepSearch == 0
