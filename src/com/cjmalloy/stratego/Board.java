@@ -272,6 +272,7 @@ public class Board
 				}
 			}
 			genChaseRank(fp.getColor());
+			genFleeRank(fp, tp, m.getMove());	// depends on suspected rank
 			return true;
 		}
 		return false;
@@ -517,38 +518,37 @@ public class Board
 		return false;
 	}
 
-	// stores the state prior to the move
-	// the hash is the position prior to the move
-	protected void moveHistory(Piece fp, Piece tp, int m)
+	// Acting rank is a historical property of the known
+	// opponent piece ranks that a moved piece was adjacent to.
+	//
+	// Acting rank is calculated factually, but is of
+	// questionable use in the heuristic because of bluffing.
+	//
+	// If a piece moves away from an unprotected
+	// opponent attacker, it inherits a flee acting rank
+	// of the lowest rank that it fled from.
+	// High flee acting ranks are probably of
+	// little use because unknown low ranks may flee
+	// to prevent discovery.
+	//
+	// However, the lower the rank it flees from,
+	// the more likely that the piece rank
+	// really is equal to or greater than the flee acting rank,
+	// because low ranks are irresistable captures.
+	// 
+	// Note: genFleeRank() calls isProtected(), which depends on
+	// invincibleRank[] and suspected ranks.  Thus if an unknown flees
+	// from a suspected piece or a piece protected by a suspected bomb,
+	// it will acquire a flee rank.  Although the fleer could have
+	// fled because it does not want to attack because the suspected piece
+	// might in fact be incorrect, the opponent may
+	// at least suspect that the fleer would flee again from a
+	// piece of the same rank.
+
+	void genFleeRank(Piece fp, Piece tp, int m)
 	{
-		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash, 0);
-		undoList.add(um);
-
-		boardHistory[bturn].put(um);
-		bturn = 1 - bturn;
-
-		// Acting rank is a historical property of the known
-		// opponent piece ranks that a moved piece was adjacent to.
-		//
-		// Acting rank is calculated factually, but is of
-		// questionable use in the heuristic because of bluffing.
-		//
-		// If a piece moves away from an unprotected
-		// opponent attacker, it inherits a flee acting rank
-		// of the lowest rank that it fled from.
-		// High flee acting ranks are probably of
-		// little use because unknown low ranks may flee
-		// to prevent discovery.
-		//
-		// However, the lower the rank it flees from,
-		// the more likely that the piece rank
-		// really is equal to or greater than the flee acting rank,
-		// because low ranks are irresistable captures.
-		// 
-
 		// movement aways
 		int from = Move.unpackFrom(m);
-		Piece delayPiece = null;
 		for (int d : dir) {
 			int chaser = from + d;
 			if (!Grid.isValid(chaser))
@@ -560,14 +560,6 @@ public class Board
 				Rank rank = chasePiece.getApparentRank();
 				if (rank == Rank.BOMB)
 					continue;
-
-		// New in version 9.5
-		// If the opponent piece flees, it can delay the setting
-		// of implicit flee rank if the piece
-		// is unknown or of equal or lower rank than a piece
-		// under attack elsewhere on the board.
-
-				delayPiece = fp;
 
 		// if the chase piece is protected,
 		// nothing can be guessed about the rank
@@ -617,8 +609,8 @@ public class Board
 
 		// New code in Version 9.5.
 		// Check for a possible delay before setting the flee rank.
-		// - if the player chases an unknown or an equal or
-		// lower ranked piece
+		// - if the player chases an equal or lower ranked piece.
+		Piece delayPiece = null;
 		int to = Move.unpackTo(m);
 		for (int d : dir) {
 			int j = to + d;
@@ -629,23 +621,17 @@ public class Board
 				|| op.getColor() == fp.getColor())
 				continue;
 			Rank rank = op.getApparentRank();
-			if (delayPiece != null
-				&& rank.toInt() < delayPiece.getApparentRank().toInt())
+
+			if (delayPiece == null
+				|| rank.toInt() < delayPiece.getApparentRank().toInt())
 				delayPiece = op;
+
 		}
 
-		// New in version 9.5
-		// If an unknown piece flees or is chased,
-		// delay the setting of implicit flee rank.
-		if (delayPiece != null
-			&& delayPiece.getApparentRank() == Rank.UNKNOWN)
-			return;
-
 		for ( int i = 12; i <= 120; i++) {
-			if (i == from)
-				continue;
 			Piece fleeTp = getPiece(i);
 			if (fleeTp == null
+				|| fleeTp == fp
 				|| fleeTp.isKnown()
 				|| fleeTp.getColor() != fp.getColor())
 				continue;
@@ -671,6 +657,18 @@ public class Board
 				fleeTp.setActingRankFlee(rank);
 			}
 		}
+	}
+
+	// stores the state prior to the move
+	// the hash is the position prior to the move
+	protected void moveHistory(Piece fp, Piece tp, int m)
+	{
+		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash, 0);
+		undoList.add(um);
+
+		boardHistory[bturn].put(um);
+		bturn = 1 - bturn;
+
 	}
 
 	// Set direct chase rank
@@ -2330,6 +2328,7 @@ public class Board
 				fp.makeKnown();
 			}
 			genChaseRank(fp.getColor());
+			genFleeRank(fp, null, m.getMove());	// depends on suspected rank
 			return true;
 		}
 		

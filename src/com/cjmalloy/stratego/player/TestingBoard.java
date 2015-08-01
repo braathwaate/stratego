@@ -2279,9 +2279,10 @@ public class TestingBoard extends Board
                 // (Note: maybe_count == 0 calls setExpendableEights even
                 // if there are not any left.  This is necessary because
                 // Flag value > aiBombValue > Eight value.)
-                int eightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
 
-                if (maybe_count[c] == 0 || maybe_count[c] + 1 < eightsAtLarge)
+                int opponentEightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
+
+                if (maybe_count[c] == 0 || maybe_count[c] + 1 < opponentEightsAtLarge)
 
 		// at least 1 opponent color eight is expendable
 		// (The AI keeps one more Eight around than
@@ -2289,7 +2290,7 @@ public class TestingBoard extends Board
 
                         setExpendableEights(1-c);
 
-                else if (eightsAtLarge <= Math.min(maybe_count[c],2) + 1) {
+                else if (opponentEightsAtLarge <= Math.min(maybe_count[c],2) + 1) {
 
 		// Opponent Eights become more valuable as their number
 		// falls below the number of player possible structures.
@@ -2328,8 +2329,8 @@ public class TestingBoard extends Board
 		if (maybe_count[c] == 1)
 			makeFlagKnown(pflag);
 
-		if (eightsAtLarge == 0)
-			return;
+		if (opponentEightsAtLarge == 0)
+			continue;
 
 		// The ai only uses its eights to attack flag structures
                 // if it has enough remaining.  However, it still approaches
@@ -2344,7 +2345,7 @@ public class TestingBoard extends Board
 		// Eights begin to attack bomb structures as the
 		// number of possible structures diminish
 		boolean eightAttack = (maybe_count[c] <= 3
-			|| maybe_count[c] - open_count[c] <= eightsAtLarge);
+			|| maybe_count[c] - open_count[c] <= opponentEightsAtLarge);
 
                 if (c == Settings.bottomColor
                         && isBombedFlag[c]
@@ -2355,7 +2356,7 @@ public class TestingBoard extends Board
 						continue;
 
 					destBomb(j,
-						maybe_count[c] - open_count[c] <= eightsAtLarge);
+						maybe_count[c] - open_count[c] <= opponentEightsAtLarge);
 				}
 
 		defendFlag(pflag);
