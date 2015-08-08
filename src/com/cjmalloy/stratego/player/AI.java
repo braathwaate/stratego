@@ -1180,7 +1180,8 @@ public class AI implements Runnable
 
 		// If there is a negative capture, try fleeing
 
-				if (-negQS(b.getValue() + dvr) < bvalue) {
+				if (-negQS(b.getValue() + dvr) < bvalue
+					&& !(fprank == Rank.BOMB || fprank == Rank.FLAG)) {
 					tryFlee = true;
 
 		// It is tempting to skip losing captures to save time

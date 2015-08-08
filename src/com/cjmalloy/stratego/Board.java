@@ -547,6 +547,8 @@ public class Board
 
 	void genFleeRank(Piece fp, Piece tp, int m)
 	{
+		Piece delayPiece = null;
+
 		// movement aways
 		int from = Move.unpackFrom(m);
 		for (int d : dir) {
@@ -560,6 +562,10 @@ public class Board
 				Rank rank = chasePiece.getApparentRank();
 				if (rank == Rank.BOMB)
 					continue;
+
+		// fleeing delays implicit flee rank, see below
+
+				delayPiece = fp;
 
 		// if the chase piece is protected,
 		// nothing can be guessed about the rank
@@ -610,7 +616,17 @@ public class Board
 		// New code in Version 9.5.
 		// Check for a possible delay before setting the flee rank.
 		// - if the player chases an equal or lower ranked piece.
-		Piece delayPiece = null;
+		// - if the player flees from a equal or lower attacker
+		//
+		// For example,
+		// xx xx B3 -- xx 
+		// -- R4 -- R? -- 
+		// -- B? -- -- --
+		// Unknown Blue approaches Red Four, so unknown Blue
+		// now is a suspected Three.  Unknown Red approaches
+		// Blue Three.  Blue Three moves away.  Do not set
+		// a flee rank on unknown Blue.
+
 		int to = Move.unpackTo(m);
 		for (int d : dir) {
 			int j = to + d;
@@ -1714,7 +1730,7 @@ public class Board
 			Piece p = getPiece(i);
 			if (p == null
 				|| p.getColor() != Settings.bottomColor
-				|| p.isKnown())
+				|| (p.isKnown() && !p.isSuspectedRank()))
 				continue;
 
 		// If the opponent still has any unknown Eights,
@@ -1727,6 +1743,7 @@ public class Board
 			else
 				p.setMaybeEight(false);
 
+			p.setKnown(false);
 			p.setRank(Rank.UNKNOWN);
 
 			Rank rank = p.getActingRankChase();

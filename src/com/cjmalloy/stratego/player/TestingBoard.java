@@ -3585,32 +3585,96 @@ public class TestingBoard extends Board
 						// makeKnown(fp);
 						// setPiece(fp, m.getTo());
 					} else {
-						if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
-		// Set fpvalue, because the opponent expects that the
-		// unknown piece is a movable piece like any other piece.
-		// Thus LOSES returns an expected value.  This is
+
+		// The opponent knows that the AI is bluffing, so
+		// the opponent expects that whatever the AI piece rank,
+		// it is lost.
+
+		// Bombs could have a zero value, so when
+		// the AI considers Bx?, it must return a realistic
+		// negative value like any other AI piece.  Fx? must also
+		// return a realistic value rather than its flag value,
+		// because Fx? is not a move the AI can make.  This is
 		// important in the case where tp is invincible,
-		// because all attacks on the invincible piece are equal,
-		// and so the opponent always gains fpvalue, and therefore
-		// may not be deterred in passing, even if it has stealth.
+		// because all attacks on the invincible piece are futile
+		// and therefore is not deterred in passing an unknown AI
+		// piece, even if the opponent has stealth.
 
-							vm -= values[fpcolor][unknownRank[fpcolor]];
-		// makeWinner/makeKnown is not called because the opponent
-		// knows that the attacker is bluffing.
-
-						} else {
-							makeWinner(tp, fprank, true);
+						if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+							vm -= pieceValue(fpcolor, unknownRank[fpcolor]);
+						else
 							vm -= fpvalue;
-						}
+
+		// makeWinner is not called because the opponent
+		// knows that the AI is bluffing, so an AI attack does
+		// nothing to clarify the opponent rank.
+
+						if (tp.isSuspectedRank())
+							tp.makeKnown();
+
 						setPiece(tp, to);
 					}
 				} else {
 
+		// The AI guesses that certain opponent pieces are bombs.
+		// A suspected opponent bomb attacking an AI piece
+		// always LOSES, because winFight return LOSES when
+		// both pieces have rank and a bomb is always higher in rank.
+		// (An unknown AI bomb can move as well, and this is
+		// also handled sent to LOSES. See winFight()).
+		
+		// But the AI could be wrong, and so
+		// allows the suspected bomb piece to move or attack.
+		// An Eight is allowed to approach suspected bombs and attack.
+		// But for valuable ranks, this is a bit aggressive, because
+		// because the suspected bomb could be a lower ranked piece,
+		// and then the AI could unwittingly lose a valuable rank
+		// and consequently the game.
+
+		// Should the Eight be allowed to pass or attack a
+		// suspected worthless bomb?  The prior code
+		// made any suspected worthless bomb an unknown.
+		// This prevents the Eight from passing it to get at the
+		// bomb structure.  The new code puts the Eight
+		// at risk, perhaps unnecessarily if there is some other
+		// path to the bomb structure.  Thus the AI needs to
+		// be relatively confident that the suspected bomb
+		// really is a bomb before marking it suspected.
+		// The AI also tries to retain one more Eight than
+		// the number of bomb structures to insure against loss.
+		// A player cannot waste pieces on trying to identify
+		// worthless bombs.
+
+		// Unknown pieces are also allowed to pass suspected bombs.
+		// This may be necessary to allow the piece to attack
+		// other pieces.  Passing a bomb entails a tiny penalty
+		// to encourage the piece to pick a safer path if at
+		// all possible.
+
+					if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
+						if (tprank == Rank.EIGHT
+							|| !tp.isKnown()
+							|| isExpendable(tp))
+							vm += 1;
+
+		// How risky is it for a known valuable piece to approach
+		// a suspected bomb?  There is always some risk, but
+		// a reward could make it a worthwhile gamble.
+		// The AI is willing to risk a Four (but not a One
+		// Two or Three) if it can capture an expendable piece.
+		// The AI would risk a Three to capture a Five.
+	
+						else
+							vm += pieceValue(tp)/7;
+					} else {
+
 		// fp is opponent, so opponent loses but gains the stealth
 		// value of the AI piece and the AI piece becomes known.
 
-					vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
-					vm += riskOfLoss(tp, fp);
+						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
+						vm += riskOfLoss(tp, fp);
+					}
+
 					tp.makeKnown();
 					vm -= fpvalue;
 					setPiece(tp, to);
@@ -4366,10 +4430,16 @@ public class TestingBoard extends Board
 
 		else if (r > 6) {
 
-		// If the unknown piece has an unknown chase rank, it probably
-		// isn't a Four.  But then the AI piece (7-9) also has
-		// a higher (but slim) probability of winning.  This
-		// is splitting hairs, but useful to discourage known
+		// A high ranked AI piece should prefer:
+		// (1) a suspected Four (or lower rank)
+		// (2) a completely unknown piece
+		// (3) a piece with an unknown chase rank
+		// (4) a suspected Five
+		//
+		// A loss to a suspected Five gains the Five stealth,
+		// so 2 and 3 need to return a higher value.
+		//
+		// This is splitting hairs, but useful to discourage known
 		// low value AI pieces from chasing unknown weak opponent pieces
 		// that probably would win.  tpvalue must be between
 		// Five stealth (10) and Four stealth (15).
@@ -4377,15 +4447,26 @@ public class TestingBoard extends Board
 			if (chaseRank == Rank.UNKNOWN)
 				tpvalue -= (r - 6);
 
-			r = 6;	// results in Four stealth
+			r = 6;	// results in Five stealth
 		}
+
+		// Version 9.7 introduced blufferRisk, which causes
+		// the stealth value of suspected pieces to be reduced
+		// if the opponent does not bluff, because the AI does
+		// not need to attack the suspected pieces to find out
+		// their true rank.  So to keep the value of UNK greater
+		// than LOSES, version 9.8 adds a value based on rank.
+		// This value cannot be higher than 1/2 the value of
+		// the AI piece; otherwise if an opponent piece is guarded
+		// by an unknown, the AI will take the opponent piece.
+		// This usually happens with 4x5, because a this is
+		// 100-50, only 50 points.  So the stealth of a Three
+		// plus the higher UNK value must be less than 50 points.
 
 		if (r == 1)
 			tpvalue += valueStealth[tp.getColor()][0];
-		else if (r == 2)
-			tpvalue += valueStealth[tp.getColor()][0]+10;
-		else
-			tpvalue += valueStealth[tp.getColor()][r-3];
+		else 
+			tpvalue += valueStealth[tp.getColor()][r-2] + (10-r)*2;
 
 		// In an effort to prevent draws,
 		// unknowns are worth more the more they move.
@@ -5843,52 +5924,6 @@ public class TestingBoard extends Board
 		// was not trying to remain cloaked.
 		if (isFleeing(fp, tp))
 			return 0;
-
-		// The AI guesses that certain unknowns are bombs.
-		// This deters pieces other than Eights from
-		// attacking them.  But the AI could be wrong, and so
-		// allows the suspected bomb piece to move or attack.
-		// A suspected opponent bomb attacking an AI piece
-		// always LOSES, because winFight return LOSES when
-		// both pieces have rank and a bomb is always higher in rank.
-		// (An unknown AI bomb can move as well, and this is
-		// also handled sent to LOSES. See winFight()).
-		//
-		// An Eight is allowed to approach suspected bombs and attack.
-		// But for valuable ranks, this is a bit aggressive, because
-		// because the suspected bomb could be a lower ranked piece,
-		// and then the AI could unwittingly lose a valuable rank
-		// and consequently the game.
-
-		// Should the Eight be allowed to pass or attack a
-		// suspected worthless bomb?  The prior code
-		// made any suspected worthless bomb an unknown.
-		// This prevents the Eight from passing it to get at the
-		// bomb structure.  The new code puts the Eight
-		// at risk, perhaps unnecessarily if there is some other
-		// path to the bomb structure.  Thus the AI needs to
-		// be relatively confident that the suspected bomb
-		// really is a bomb before marking it suspected.
-		// The AI also tries to retain one more Eight than
-		// the number of bomb structures to insure against loss.
-		// A player cannot waste pieces on trying to identify
-		// worthless bombs.
-
-		if (tprank == Rank.BOMB || tprank == Rank.FLAG) {
-			if (fprank == Rank.EIGHT
-				|| !fp.isKnown()
-				|| isExpendable(fp))
-				return 0;
-
-		// How risky is it for a known valuable piece to approach
-		// a suspected bomb?  There is always some risk, but
-		// a reward could make it a worthwhile gamble.
-		// The AI is willing to risk a Four (but not a One
-		// Two or Three) if it can capture an expendable piece.
-		// The AI would risk a Three to capture a Five.
-	
-			return pieceValue(fp)/7;
-		}
 
 		// If the opponent has a dangerous unknown rank,
 		// it may approach any AI piece, and therefore may
