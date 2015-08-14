@@ -86,6 +86,7 @@ public class TestingBoard extends Board
 	protected int dangerousUnknownRank;
 	protected Random rnd = new Random();
 	protected UndoMove lastMove;
+	protected boolean defensiveAIOne = false;
 	protected int[] unknownRank = new int[2];
 	protected static final int forayMap[] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -528,6 +529,13 @@ public class TestingBoard extends Board
 			if (rank == Rank.BOMB || rank == Rank.FLAG)
 				continue;
 
+			if (rank == Rank.ONE
+				&& p.getColor() == Settings.topColor
+				&& p.isKnown()
+				&& hasUnsuspectedSpy(Settings.bottomColor)
+				&& !(dangerousKnownRank != 99 || dangerousUnknownRank != 99))
+				defensiveAIOne = true;
+
 		// Encourage lower ranked pieces to find pieces
 		// of higher ranks.
 		//
@@ -775,8 +783,16 @@ public class TestingBoard extends Board
 		for (int c = RED; c <= BLUE; c++) {
 		for (int r = 1; r <= 10; r++) {
 		int v = 0;
+
+		// Five stealth should be lower than the value of a Six (25)
+		// minus a Seven (16).  Otherwise, a Six will attack
+		// a Seven protected by a suspected Five.
+		// This is basically an even exchange.
+		// (A Six should always attack a Seven protected by an
+		// unknown piece).
+
 		if (r == 5)
-			v = 10;
+			v = 8;
 		else if (r >= 6 && r <= 9)
 			v = 5 + (r - 6) * 3;
 
@@ -853,11 +869,12 @@ public class TestingBoard extends Board
 				unknownDefenders += unknownRankAtLarge(c, rs);
 			}
 
-			if (n == 0)
-				v = values[c][r]/6;
-			else {
-				if (unknownDefenders <= 1)
-					v += v/3;
+		// note: if n is zero, then either there are no higher
+		// ranks (v = 0) and stealth will be zero
+		// or just one higher rank (v = higher rank value).
+
+			if (unknownDefenders <= 1)
+				v += v/3;
 
 		// If there is more than one equal or lower ranked unknown
 		// defender, then it is safe for the invincible piece to
@@ -875,12 +892,11 @@ public class TestingBoard extends Board
 		// This should encourage an invincible piece to slam into
 		// unknown pieces.
 
-				else if (isInvincible(c, r))
-					v = 10 - r;	// less than minimum piece val
-				else if (unknownDefenders > 3)
-					v -= v/3;
-				v = v * 2 / 10;
-			}
+			else if (isInvincible(c, r))
+				v = 10 - r;	// less than minimum piece val
+			else if (unknownDefenders > 3)
+				v -= v/3;
+			v = v * 2 / 10;
 		}
 
 		valueStealth[c][r-1] = v;
@@ -2018,6 +2034,7 @@ public class TestingBoard extends Board
 	{
 		int color = flagp.getColor();
 		int flagi = flagp.getIndex();
+		assert color == Settings.topColor : "flagBombTarget only for AI";
 
 		// Determine if any bomb is subject to attack
 		// and take defensive measures.
@@ -2075,8 +2092,9 @@ public class TestingBoard extends Board
 					continue; // no open path
 
 		// Thwart the approach of the closest unknown or eight piece.
-		// Note the use of DEST_PRIORITY_ATTACK_FLAG, because
-		// the attacker could be either the AI or the opponent.
+		// (Note: DEFEND_FLAG must be high enough so that if
+		// the defender is an unmoved piece part of a possible
+		// bomb structure, it will still be the best pruned move).
 
 		// TBD: Note that if the attacker is unknown
 		// the AI relies on a Eight or less to defend.
@@ -2085,7 +2103,7 @@ public class TestingBoard extends Board
 
 				Piece defender = getDefender(color, destTmp, Rank.EIGHT, stepsAttacker);
 				if (defender != null) {
-					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
+					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG);
 				} else {
 					// TBD: try looking for an Eight
 				}
@@ -3651,7 +3669,8 @@ public class TestingBoard extends Board
 		// to encourage the piece to pick a safer path if at
 		// all possible.
 
-					if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
+					if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
+						&& !isInvincibleDefender(tp))  {
 						if (tprank == Rank.EIGHT
 							|| !tp.isKnown()
 							|| isExpendable(tp))
@@ -3742,6 +3761,26 @@ public class TestingBoard extends Board
 					if (depth != 0
 						&& isEffectiveBluff(fp, tp, m))
 						vm = Math.max(vm, VALUE_BLUFF);
+
+		// If unknown fp was protecting a piece that tp attacked
+		// on the prior move, the AI is debited an additional
+		// amount to discourage it from protecting the piece,
+		// because when an attacked piece ceases to move, the
+		// opponent will guess that the protector is a lower ranked
+		// piece, thus losing its stealth without any gain.
+		// It is better for the attacked piece to flee.  Only
+		// when the fleeing piece is cornered should it stop
+		// at the protector; the opponent then has to guess
+		// whether the cornered piece is protected or not.
+
+					UndoMove m2 = getLastMove(2);
+					if (depth != 0
+						&& !fp.isKnown()
+						&& m2 != null
+						&& m2.tp != null
+						&& tp == m2.getPiece())
+						vm = Math.min(vm, VALUE_BLUFF);
+
 					fp.makeKnown();
 				}
 
@@ -4418,7 +4457,7 @@ public class TestingBoard extends Board
 		// the same stealth value as an AI Five.
 
 		else if (r >= 5 && lowestUnknownExpendableRank >= r)
-			r = 5;	// results in Three stealth
+			r = 5;	// results in Four stealth
 
 		// unknownValue() should be more positive than LOSES.
 		// For example, if an AI piece has a choice between
@@ -4442,7 +4481,7 @@ public class TestingBoard extends Board
 		// This is splitting hairs, but useful to discourage known
 		// low value AI pieces from chasing unknown weak opponent pieces
 		// that probably would win.  tpvalue must be between
-		// Five stealth (10) and Four stealth (15).
+		// Five stealth (8) and Four stealth (15).
 
 			if (chaseRank == Rank.UNKNOWN)
 				tpvalue -= (r - 6);
@@ -4454,7 +4493,8 @@ public class TestingBoard extends Board
 		// the stealth value of suspected pieces to be reduced
 		// if the opponent does not bluff, because the AI does
 		// not need to attack the suspected pieces to find out
-		// their true rank.  So to keep the value of UNK greater
+		// their true rank.  So to keep the value of UNK
+		// significantly greater
 		// than LOSES, version 9.8 adds a value based on rank.
 		// This value cannot be higher than 1/2 the value of
 		// the AI piece; otherwise if an opponent piece is guarded
@@ -5834,10 +5874,10 @@ public class TestingBoard extends Board
 	// player would not have moved its spy into a position
 	// where it could be attacked.  So the piece is
 	// probably not a Spy.  For example,
-	// R1
+	// R3 --
 	// B4 B?
 	//
-	// Unknown red One approached known Blue Four and it did not
+	// Unknown Red Three approached known Blue Four and it did not
 	// move on its turn, so unknown Blue now has a chase
 	// rank of Two.  isRankLess() is true, so this is a case
 	// where unknown Blue could still be a Spy.
@@ -5847,9 +5887,9 @@ public class TestingBoard extends Board
 	// or suspected Flag actually turned out to be a Spy.
 	// (NOTE: The One will avoid moving next to a suspected
 	// bomb because of bluffing value of Bomb X Piece in LOSES).
-	// R1
-	// --
-	// BS
+	// R1 --
+	// -- --
+	// BS --
 	// BF BB
 	//
 	// If a piece gains an chase rank of Spy, the One will
@@ -5870,7 +5910,11 @@ public class TestingBoard extends Board
 	// learns to bluff with its Spy, it can cause the AI
 	// to lose its One).
 	//
-	// However, if the opponent has a dangerous known or unknown rank,
+	// However, if the One is not yet known at the outset of
+	// an exchange, then it is unlikely
+	// that the opponent Spy will be in position to capture the One,
+	// even if the Spy has bluffed as some other piece.
+	// Also, if the opponent has a dangerous known or unknown rank,
 	// the AI is sure to lose additional material,
 	// so the AI switches to the most aggressive approach.
 
@@ -5878,11 +5922,9 @@ public class TestingBoard extends Board
 	{
 		Rank fprank = fp.getRank();
 		if (fprank == Rank.ONE
-			&& fp.isKnown()
-			&& hasUnsuspectedSpy(Settings.bottomColor)
-			&& ( !( (dangerousKnownRank != 99 || dangerousUnknownRank != 99)
-				&& tp.getActingRankChase() != Rank.NIL
-				&& !tp.isRankLess())))
+			&& defensiveAIOne
+			&& tp.getActingRankChase() != Rank.NIL
+			&& !tp.isRankLess())
 			return true;
 		return false;
 	}

@@ -510,7 +510,7 @@ public class Board
 			if (p != null
 				&& p.getColor() == chaserPiece.getColor()
 				&& ((p.getApparentRank() == Rank.UNKNOWN
-					&& !isInvincibleAttacker(chasedPiece))
+					&& !isInvincibleDefender(chasedPiece))
 					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
 				return true;
 			}
@@ -2998,7 +2998,7 @@ public class Board
 		return isInvincible(p.getColor(), rank.toInt());
 	}
 
-	public boolean isInvincibleAttacker(Piece p) 
+	public boolean isInvincibleDefender(Piece p) 
 	{
 		Rank rank = p.getRank();
 		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
