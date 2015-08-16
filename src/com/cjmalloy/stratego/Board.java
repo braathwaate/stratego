@@ -792,7 +792,8 @@ public class Board
 		// and gets trapped in some way, it may just give up.
 		// So do not assign a chase rank equal to the flee rank.
 
-		if (chased.getActingRankFleeLow() == chaser.getApparentRank())
+		if (chased.getActingRankFleeLow().toInt() <= chaser.getApparentRank().toInt()
+			&& chased.getActingRankFleeHigh().toInt() >= chaser.getApparentRank().toInt())
 			return;
 
 		Rank arank = chased.getActingRankChase();
@@ -943,6 +944,13 @@ public class Board
 				if (um3 != null
 					&& um7 != null
 					&& um3.getMove() == um7.getMove())
+					continue;
+
+		// check if the open square was occupied by the
+		// piece that just moved
+
+				UndoMove um1 = getLastMove(1);
+				if (j == um1.getFrom())
 					continue;
 
 		// check if the open square is guarded
