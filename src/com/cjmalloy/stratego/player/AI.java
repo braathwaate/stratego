@@ -313,7 +313,7 @@ public class AI implements Runnable
  				log("bestMove from " + Move.unpackFrom(bestMove) + " to " + Move.unpackTo(bestMove) + " but from piece is null?");
 			else {
 				logFlush("----");
-				log(PV, "\n" + logMove(board, 0, bestMove, MoveType.OK));
+				log(PV, "\n" + logMove(board, 0, bestMove));
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(Move.unpackFrom(bestMove)), Move.unpackFrom(bestMove), Move.unpackTo(bestMove)));
 			}
@@ -818,8 +818,6 @@ public class AI implements Runnable
 		deepSearch = 0;
 
 		// chase variables
-		Piece chasedPiece = null;
-		Piece chasePiece = null;
 		Piece lastMovedPiece = null;
 		int lastMoveTo = 0;
 		Move lastMove = b.getLastMove(1);
@@ -849,7 +847,7 @@ public class AI implements Runnable
 			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor);
 			if (isPruned) {
 
-			log(">>> pick best pruned move");
+			log(DETAIL, "\n>>> pick best pruned move");
 
 		// If any moves were pruned off, choose the best looking one
 		// and then evaluate it along with the non-pruned moves
@@ -884,6 +882,7 @@ public class AI implements Runnable
 			int bestPrunedMove = 0;
 			for (int mo = 0; mo <= LOSES; mo++)
 			for (int move : moveList.get(mo)) {
+				logMove(2, move, 0);
 				MoveType mt = makeMove(n, 0, move);
 				if (mt == MoveType.OK
 					|| mt == MoveType.CHASER
@@ -904,13 +903,13 @@ public class AI implements Runnable
 						bestPrunedMove = move;
 					}
 					b.undo();
-					logMove(n, move, 0, vm, mt);
+					log(DETAIL, " " + negQS(vm));
 				}
 			}
 			addMove(rootMoveList.get(APPROACH), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
-			log(PV, logMove(b, n, bestPrunedMove, MoveType.OK));
-			log("<< pick best pruned move");
+			log(PV, logMove(b, n, bestPrunedMove));
+			log(DETAIL, "\n<< pick best pruned move\n");
 			}
 
 		boolean hasMove = false;
@@ -925,7 +924,7 @@ public class AI implements Runnable
 			return;		// ai trapped
 		}
 
-		log(">>> pick best move");
+		log(DETAIL, "\n>>> pick best move");
 		int vm = negamax(n, -9999, 9999, 0, killerMove, 0); 
 		completedDepth = n;
 
@@ -975,7 +974,7 @@ public class AI implements Runnable
 		int bestMovePly = killerMove.getMove();
 		int bestMovePlyValue = vm;
 
-		log("<<< pick best move");
+		log("\n<<< pick best move");
 
 		if (n == 1
 			|| deepSearch != 0
@@ -996,10 +995,12 @@ public class AI implements Runnable
 
 			log(">>> singular extension");
 
+			logMove(n+2, bestMovePly, b.getValue());
 			MoveType mt = makeMove(n, 0, bestMovePly);
 			vm = -negamax(n+1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
 			b.undo();
-			logMove(n+2, bestMovePly, b.getValue(), vm, mt);
+			log(DETAIL, " " + negQS(vm));
+
 
 		// The new move is kept until the ply deepens beyond the depth
 		// of the singular extension, because at that point, the
@@ -1024,9 +1025,9 @@ public class AI implements Runnable
 		}
 
 		hh[bestMove]+=n;
-		log("-+++-");
+		log("\n-+++-");
 
-		log(PV, "\nPV:" + n + " " + vm);
+		log(PV, "PV:" + n + " " + vm + "\n");
 		logPV(n, 0);
 		} // iterative deepening
 	}
@@ -1372,7 +1373,7 @@ public class AI implements Runnable
 			return -qs;
 	}
 
-	void saveTTEntry(int hashN, int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int bestmove)
+	void saveTTEntry(int hashN, int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int dvr, int bestmove)
 	{
 		long hashOrig;
 		if (hashN == 0)
@@ -1401,17 +1402,22 @@ public class AI implements Runnable
 		// (deeper entries have more time invested in them)
 		} else if ((entry.depth > n || bestmove == -1)
 			&& moveRoot == entry.moveRoot
-			&& entry.bestMove != -1)
+			&& entry.bestMove != -1) {
+			log(DETAIL, " collision " + index);
 			return;
+		}
 
 		entry.type = searchType;
 		entry.flags = entryType;
 		entry.moveRoot = moveRoot;
 		entry.hash = hashOrig;
-		entry.bestValue = vm;
+		entry.bestValue = vm - dvr;
 		entry.bestMove = bestmove;
 		entry.depth = n;
 		entry.turn = b.bturn;	//debug
+
+		if (hashN == 0)
+			log(DETAIL, " " + entryType.toString().substring(0,1) + " " + index + " " + negQS(vm) + " " + negQS(vm - dvr));
 	}
 
 	// Note: negamax is split into two parts
@@ -1462,7 +1468,7 @@ public class AI implements Runnable
 					|| entry.type == TTEntry.SearchType.BROAD)) {
 				if (entry.flags == TTEntry.Flags.EXACT) {
 					killerMove.setMove(entry.bestMove);
-					log("exact " + moveRoot + " " + entry.moveRoot );
+					log(DETAIL, " exact " + index + " " + negQS(entry.bestValue) + " " + negQS(entry.bestValue + dvr));
 					return entry.bestValue + dvr;
 				}
 				else if (entry.flags == TTEntry.Flags.LOWERBOUND)
@@ -1471,7 +1477,7 @@ public class AI implements Runnable
 					beta = Math.min(beta, entry.bestValue + dvr);
 				if (alpha >= beta) {
 					killerMove.setMove(entry.bestMove);
-					log("cutoff " + moveRoot + " " + entry.moveRoot );
+					log(DETAIL, " cutoff " + index + " " + negQS(entry.bestValue) + " " +  negQS(entry.bestValue + dvr));
 					return entry.bestValue + dvr;
 				}
 			}
@@ -1495,7 +1501,7 @@ public class AI implements Runnable
 				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
 			vm = qscache(depth, alpha, beta, dvr);
 			// save value of position at hash 0 (see saveTTEntry())
-			saveTTEntry(0, n, searchType, TTEntry.Flags.EXACT, vm-dvr, -1);
+			saveTTEntry(0, n, searchType, TTEntry.Flags.EXACT, vm, dvr, -1);
 			return vm;
 		}
 
@@ -1519,9 +1525,9 @@ public class AI implements Runnable
 			entryType = TTEntry.Flags.EXACT;
 
 		// save each move at each ply for PV
-		saveTTEntry(n, n, searchType, entryType, vm-dvr, killerMove.getMove());
+		saveTTEntry(n, n, searchType, entryType, vm, dvr, killerMove.getMove());
 		// save value of position at hash 0 (see saveTTEntry())
-		saveTTEntry(0, n, searchType, entryType, vm-dvr, killerMove.getMove());
+		saveTTEntry(0, n, searchType, entryType, vm, dvr, killerMove.getMove());
 
 		return vm;
 	}
@@ -1586,7 +1592,7 @@ public class AI implements Runnable
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			else {
 
-			// logMove(n, b, ttMove, b.getValue(), 0, "");
+			logMove(n, ttMove, b.getValue());
 			MoveType mt = makeMove(n, depth, ttMove);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
@@ -1597,7 +1603,7 @@ public class AI implements Runnable
 				long h = b.getHash();
 				b.undo();
 
-				logMove(n, ttMove, b.getValue(), negQS(vm), MoveType.TE);
+				log(DETAIL, " " + negQS(vm) + " " + MoveType.TE);
 
 				alpha = Math.max(alpha, vm);
 
@@ -1622,6 +1628,7 @@ public class AI implements Runnable
 			&& isValidMove(km) 
 			&& (Grid.isAdjacent(km)
 				|| isValidScoutMove(km))) {
+			logMove(n, km, b.getValue());
 			MoveType mt = makeMove(n, depth, km);
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
@@ -1629,7 +1636,7 @@ public class AI implements Runnable
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
 				long h = b.getHash();
 				b.undo();
-				logMove(n, km, b.getValue(), negQS(vm), MoveType.KM);
+				log(DETAIL, " " + negQS(vm) + " " + MoveType.KM);
 				
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1700,6 +1707,7 @@ public class AI implements Runnable
 					|| (max != 0 && max == km))
 					continue;
 
+				logMove(n, max, b.getValue());
 				MoveType mt = makeMove(n, depth, max);
 				if (!(mt == MoveType.OK
 					|| mt == MoveType.CHASER
@@ -1712,7 +1720,7 @@ public class AI implements Runnable
 
 				b.undo();
 
-				logMove(n, max, b.getValue(), negQS(vm), mt);
+				log(DETAIL, " " + negQS(vm));
 
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1772,10 +1780,8 @@ public class AI implements Runnable
 		}
 
 
-		if (b.isTwoSquares(tryMove)) {
-			logMove(n, tryMove, b.getValue(), 0, MoveType.TWO_SQUARES);
+		if (b.isTwoSquares(tryMove))
 			return MoveType.TWO_SQUARES;
-		}
 
 		// AI always abides by Two Squares rule
 		// even if box is not checked (AI plays nice).
@@ -1788,10 +1794,8 @@ public class AI implements Runnable
 	// Piece is being chased, so repetitive moves OK
 	// but can it lead to a two squares result?
 
-				if (b.isPossibleTwoSquares(tryMove)) {
-					logMove(n, tryMove, b.getValue(), 0, MoveType.POSS_TWO_SQUARES);
+				if (b.isPossibleTwoSquares(tryMove))
 					return MoveType.POSS_TWO_SQUARES;
-				}
 
 				b.move(tryMove, depth);
 				mt = MoveType.CHASED;
@@ -1813,7 +1817,6 @@ public class AI implements Runnable
 					b.move(tryMove, depth);
 					if (b.isRepeatedPosition()) {
 						b.undo();
-						logMove(n, tryMove, b.getValue(), 0, MoveType.REPEATED);
 						return MoveType.REPEATED;
 					}
 				}
@@ -2067,14 +2070,14 @@ public class AI implements Runnable
 	}
 
 
-	String logMove(Board b, int n, int move, MoveType mt)
+	String logMove(Board b, int n, int move)
 	{
 
 	String s = "";
 	if (b.bturn == 1)
 		s += "... ";
 	if (move == 0)
-		return s + "(null)" + mt;
+		return s + "(null)";
 
 	s += logPiece(b.getPiece(Move.unpackFrom(move)));
 	s += (char)(Move.unpackFromX(move)+97);
@@ -2096,30 +2099,29 @@ public class AI implements Runnable
 		s += " " + logFlags(b.getPiece(Move.unpackFrom(move)));
 		s += " " + logFlags(b.getPiece(Move.unpackTo(move)));
 	}
-	if (mt != MoveType.OK)
-		s += " " + mt;
 	return s;
 	}
 
-	void logMove(int n, int move, int valueB, int value, MoveType mt)
+	void logMove(int n, int move, int valueB)
 	{
-		log(DETAIL, n + ":" + logMove(b, n, move, mt) + " " + valueB + " " + value);
+		if (Settings.debugLevel >= DETAIL)
+			log.print( "\n" + n + ":" + logMove(b, n, move) + " " + valueB);
 	}
 
 	public void logMove(Move m)
 	{
-		log(PV, logMove(board, 0, m.getMove(), MoveType.OK) + "\n");
+		log(PV, logMove(board, 0, m.getMove()) + "\n");
 	}
 
 	private void log(int level, String s)
 	{
 		if (Settings.debugLevel >= level)
-			log.println(s);
+			log.print(s);
 	}
 
 	private void log(String s)
 	{
-		log(DETAIL, s);
+		log(DETAIL, s + "\n");
 	}
 
 	public void logFlush(String s)
@@ -2141,13 +2143,13 @@ public class AI implements Runnable
 			|| hash != entry.hash)
 			return;
 		if (entry.bestMove == 0) {
-			log(PV,  "   (null)");
+			log(PV,  "   (null)\n");
 			b.pushNullMove();
 		} else if (entry.bestMove == -1) {
-			log(PV,  "   (end of game)");
+			log(PV,  "   (end of game)\n");
 			return;
 		} else {
-			log(PV, "   " + logMove(b, n, entry.bestMove, MoveType.OK));
+			log(PV, "   " + logMove(b, n, entry.bestMove) + "\n");
 			b.move(entry.bestMove, depth);
 		}
 		logPV(--n, ++depth);

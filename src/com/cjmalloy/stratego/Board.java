@@ -1197,6 +1197,16 @@ public class Board
 			while (r > 0 && unknownNotSuspectedRankAtLarge(chased.getColor(), r) == 0)
 				r--;
 
+		// known piece is protector
+		// Note: if the knownProtector is a Spy (rank 10), and
+		// r == 0, the knownProtector does protect the piece.
+		// But because the Spy is not known until it actually captures
+		// the One, this cannot happen.
+
+			if (knownProtector != null
+				&& knownProtector.getRank().toInt() <= r)
+				return;
+
 		// Only a Spy can protect a piece attacked by a One.
 
 			Rank arank = unknownProtector.getActingRankChase();
@@ -1215,12 +1225,6 @@ public class Board
 				rank = Rank.SPY;
 			} else
 				rank = Rank.toRank(r);
-
-		// known piece is protector
-
-			if (knownProtector != null
-				&& knownProtector.getRank().toInt() <= rank.toInt())
-				return;
 
 		// Once the AI has indirectly identified the opponent Spy
 		// (by attacking an opponent Two that had a protector)
