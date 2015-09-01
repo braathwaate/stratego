@@ -1047,7 +1047,7 @@ public class Board
 		// The AI assigns a suspected chase rank to unknown Blue,
 		// which happens to be an isolated bomb.
 
-			Move m = getLastMove();
+			UndoMove m = getLastMove();
 			if (Grid.isAdjacent(m.getFrom(), chaser.getIndex()))
 				return;
 
@@ -1141,6 +1141,26 @@ public class Board
 			if (m.getPiece() != unknownProtector
 				&& chaser.getApparentRank().toInt() >= 5
 				&& !chased.isKnown())
+				return;
+
+
+		// If the chased piece is high ranked and just
+		// captured an AI piece, it did so because it
+		// wanted the AI piece regardless of protection.
+		// For example,
+		// xx xx -- -- |
+		// B? B? R? R4 |
+		// -- -- B? -- |
+		//
+		// Either Blue Unknown attacks unknown Red and wins.
+		// Unknown Blue is a high ranked piece (5 to 8).
+		// Unknown Blue may or may not be protected, because
+		// its mission was to  attack unknown Red, regardless
+		// of the consequence.
+
+			if (chased.getApparentRank().toInt() >= 5
+				&& chased == m.getPiece()
+				&& m.tp != null)
 				return;
 
 		// TBD: If the unknown protector is part of a potential
@@ -1530,10 +1550,12 @@ public class Board
 					break;
 				}
 
-		// Desired unknown rank not found, try the same rank.
-			if (newRank == Rank.UNKNOWN)
-				if (unknownRankAtLarge(color, r) != 0)
-					newRank = Rank.toRank(r);
+		// Lower unknown rank not found.  It is not likely that
+		// the attacker will chase a known rank with the
+		// same unknown rank, unless the attacker is winning
+		// and wants to reduce the piece count.
+		// It is more likely that the attacker is bluffing.
+
 		} else {
 
 		// If a piece approaches an unknown piece, the approacher is

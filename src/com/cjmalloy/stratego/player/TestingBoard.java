@@ -1828,53 +1828,40 @@ public class TestingBoard extends Board
 		// path to the defender of lower rank than the closest
 		// opponent, the defender is drawn towards the flag.
 
-		int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi);
-		int stepsAttacker = 99;
-		Piece pAttacker = null;
-		for (int i = 12; i < 120; i++) {
-			Piece p = getPiece(i);
-			if (p == null || p.getColor() != 1 - color)
+		for (int d: dir) {
+			int side = flagi + d;
+			if (!Grid.isValid(side))
 				continue;
-			if (destTmp[i] < stepsAttacker) {
-				stepsAttacker = destTmp[i];
-				pAttacker = p;
+			Piece pside = getPiece(side);
+
+			int destTmp[] = genDestTmp(GUARDED_OPEN, color, side);
+			int stepsAttacker = 99;
+			Piece pAttacker = null;
+			for (int i = 12; i < 120; i++) {
+				Piece p = getPiece(i);
+				if (p == null || p.getColor() != 1 - color)
+					continue;
+				if (destTmp[i] < stepsAttacker) {
+					stepsAttacker = destTmp[i];
+					pAttacker = p;
+				}
 			}
-		}
-		if (pAttacker == null)
-			return; // no open path
+			if (pAttacker == null)
+				continue; // no open path
 
-		// Now that we have found the closest attacker,
-		// determine its closest approach to the flag
+		// If the flag is partially bombed, the bomb
+		// must be protected from an unknown or Eight
 
-		int stepsTarget = 99;
-		int targetIndex = 0;
-		int destTmp2[] = genDestTmp(GUARDED_OPEN, 1-color, pAttacker.getIndex());
-		for (int d : dir) {
-			int i = flagi + d;
-			if (!Grid.isValid(i))
+			if (pside != null
+				&& pside.getRank() == Rank.BOMB
+				&& !(pAttacker.getRank() == Rank.UNKNOWN
+					|| pAttacker.getRank() == Rank.EIGHT))
 				continue;
 
-		// if attacker is adjacent to flag, not much can be done
-
-			if (i == pAttacker.getIndex())
-				return;
-
-			Piece p = getPiece(i);
-			if (p != null)
-				continue;
-			if (destTmp2[i] < stepsTarget) {
-				stepsTarget = destTmp2[i];
-				targetIndex = i;
-			}
-		}
-		assert targetIndex != 0 : "Open path needs open square";
-
-		// targetIndex is the closest point adjacent to flag
-
-		int destTmp3[] = genDestTmp(GUARDED_OPEN, color, targetIndex);
-		Piece defender = getDefender(color, destTmp3, pAttacker.getRank(), stepsTarget);
-		if (defender == null)
-			return;	// no imminent danger
+			int destTmp3[] = genDestTmp(GUARDED_OPEN, color, side);
+			Piece defender = getDefender(color, destTmp3, pAttacker.getRank(), stepsAttacker);
+			if (defender == null)
+				continue;	// no imminent danger
 
 		// Even if the unbombed flag is not known, call up
 		// the closest defender, even if it means moving
@@ -1885,8 +1872,10 @@ public class TestingBoard extends Board
 		// away.
 		// TBD: If the active piece is able to defend, then
 		// use it.  Fix this in getDefender().
-		int destTmp4[] = genDestTmpGuarded(1-color, targetIndex, pAttacker.getRank());
-		setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG);
+
+			int destTmp4[] = genDestTmpGuarded(1-color, side, pAttacker.getRank());
+			setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG);
+		} // dir
 	}
 
 	// Determine if piece at "index" is at risk of attack
@@ -1939,7 +1928,8 @@ public class TestingBoard extends Board
 			}
 
 			if (p.getRank().toInt() > attackerRank
-				|| stealthValue(p) > values[1-color][attackerRank])
+				|| (!p.isKnown()
+					&& stealthValue(p) > pieceValue(1-color, attackerRank)))
 				continue;
 
 			if (stepsTarget != 0 && destTmp[i] < stepsDefender
@@ -3094,6 +3084,23 @@ public class TestingBoard extends Board
 			p.setMaybeEight(isMaybeEight);
 	}
 
+	// morph() is the same concept as makeWinner(), but for AI pieces.
+	// It is used when a bluff is effective,
+	// because the opponent would have to consider that its piece would
+	// be removed from the board, and a superior known AI piece
+	// would replace it.
+	//
+	// It is also necessary to avoid transposition cache equivalency
+	// because the disappearance of a bluffing AI piece is not equivalent
+	// to its disappearance in other situations (e.g. EVEN).
+	// So keep the bluffing AI piece on the board to avoid this.
+
+	public void morph(Piece p, Rank rankWon)
+	{
+		// TBD: morph into a lower rank
+		p.makeKnown();
+	}
+
 	public void move(int m, int depth)
 	{
 		int from = Move.unpackFrom(m);
@@ -3191,19 +3198,6 @@ public class TestingBoard extends Board
 			if (m2 != null && m2.getTo() == to) {
 				Rank m2fprank = m2.getPiece().getRank();
 
-		// In an EVEN exchange, the pieces are removed from the
-		// board.  But if the opponent piece is unknown,
-		// then there is a chance that AI piece will survive.
-		// So if the opponent has an unknown defender piece,
-		// it is credited with additional value
-		// to account for the risk that the AI piece survives
-		// and then loses to the defender.
-
-				if (fpcolor == Settings.bottomColor
-					&& !m2.tp.isKnown()
-					&& isThreat(fp, m2fprank))
-					vm += values[Settings.topColor][m2fprank.toInt()]/2;
-
 		// If the AI moves an unknown piece adjacent to
 		// an opponent known piece of the same rank, then
 		// if the opponent attacks the AI piece, it is an EVEN
@@ -3292,59 +3286,6 @@ public class TestingBoard extends Board
 			switch (result) {
 			case Rank.EVEN :
 				// assert fprank != Rank.UNKNOWN : "fprank is unknown?";
-		// If the attacker is invincible, then the attacker knows
-		// that it cannot lose the exchange, but because this
-		// exchange is even, tprank must also be the same rank,
-		// so this is a known evenly valued exchange,
-		// unless the AI piece is unknown (because of stealth).
-		//
-		// However, even if the AI piece is unknown and
-		// the opponent piece is known, the AI must always neutralize 
-		// the attacker's invincible pieces, because otherwise
-		// they just run amok obliterating all of the AI's
-		// moved pieces. So the AI deems this
-		// as an even exchange, even if the AI piece still has stealth.
-		// If the opponent has more lower ranked pieces than the AI,
-		// these exchanges may expedite a lost ending,
-		// but there really isn't any choice.
-		//
-		// Note that suspected invincible pieces (except the One,
-		// if the AI has the Spy) must also
-		// be neutralized, although this can lead to loss
-		// of stealth if the opponent is bluffing, or even
-		// loss of the AI piece, if the opponent rank is
-		// lower than suspected.
-
-				if (tp.hasMoved()
-					&& fpcolor == Settings.bottomColor
-					&& isInvincible(fp)) {
-					if  (!tp.isKnown()
-						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
-						vm -= 10;
-					else
-						vm += stealthValue(tp) - stealthValue(fp);
-				} else if (fpcolor == Settings.topColor
-					&& isInvincible(tp)) {
-					if  (!fp.isKnown()
-						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
-						vm += 10;
-					else
-						vm += stealthValue(tp) - stealthValue(fp);
-				}
-
-		// If the defender is known, and either the attacker is known
-		// or the AI is the attacker (AI knows its own pieces)
-		// then, this is a known even exchange based on actual values.
-
-		// Note that although the exchange is even, the value
-		// may not be.  If the AI is winning, its ranks are
-		// worth less than opponent ranks, encouraging it to
-		// make an even exchange.
-
-				else if (tp.isKnown()
-					&& (fp.isKnown() || fpcolor == Settings.topColor))
-					vm += actualValue(tp) - fpvalue;
-
 		// If the defender is an AI piece and the
 		// attacker is unknown OR the defender is an unknown
 		// opponent piece, the AI is just guessing the opponent's
@@ -3384,10 +3325,51 @@ public class TestingBoard extends Board
 		// as inevitable.  But if Blue turns out to be a Six or
 		// Seven, then Red Five would regain the exchange.
 
-				else if (tp.getColor() == Settings.topColor) {
+				if (tp.getColor() == Settings.topColor) {
 
-					if (!fp.isKnown())
-						vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
+		// If the attacker is invincible, then the attacker knows
+		// that it cannot lose the exchange, but because this
+		// exchange is even, tprank must also be the same rank,
+		// so this is a known evenly valued exchange,
+		// unless the AI piece is unknown (because of stealth).
+		//
+		// However, even if the AI piece is unknown and
+		// the opponent piece is known, the AI must always neutralize 
+		// the attacker's invincible pieces, because otherwise
+		// they just run amok obliterating all of the AI's
+		// moved pieces. So the AI deems this
+		// as an even exchange, even if the AI piece still has stealth.
+		// If the opponent has more lower ranked pieces than the AI,
+		// these exchanges may expedite a lost ending,
+		// but there really isn't any choice.
+		//
+		// Note that suspected invincible pieces (except the One,
+		// if the AI has the Spy) must also
+		// be neutralized, although this can lead to loss
+		// of stealth if the opponent is bluffing, or even
+		// loss of the AI piece, if the opponent rank is
+		// lower than suspected.
+
+				if (tp.hasMoved()
+					&& isInvincible(fp)) {
+					if  (!tp.isKnown()
+						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
+						vm -= 10;
+					else
+						vm += stealthValue(tp) - stealthValue(fp);
+		// If the defender is known, and either the attacker is known
+		// or the AI is the attacker (AI knows its own pieces)
+		// then, this is a known even exchange based on actual values.
+
+		// Note that although the exchange is even, the value
+		// may not be.  If the AI is winning, its ranks are
+		// worth less than opponent ranks, encouraging it to
+		// make an even exchange.
+
+				} else if (tp.isKnown()
+					&& fp.isKnown())
+					vm += actualValue(tp) - fpvalue;
+
 
 		// If the defender is an unknown AI piece,
 		// then an attacker (not an invincible attacker, see above)
@@ -3432,14 +3414,19 @@ public class TestingBoard extends Board
 		// Lastly, where this code comes into play, the AI is
 		// unconcerned about B5xR5, because it too is not
 		// a foregone conclusion.
+					else {
+						if (!fp.isKnown())
+							vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
 
-					if (!tp.isKnown()) {
-						vm += apparentWinValue(fp,
-							fprank,
-							unknownScoutFarMove,
-							tp,
-							actualValue(tp))
-							- values[Settings.bottomColor][tprank.toInt()];
+
+						if (!tp.isKnown())
+							vm += apparentWinValue(fp,
+								fprank,
+								unknownScoutFarMove,
+								tp,
+								actualValue(tp))
+								- values[Settings.bottomColor][tprank.toInt()];
+
 		// If the AI piece is known and the opponent is unknown,
 		// it may mean that the AI has guessed wrong,
 		// and the exchange could be a loss.  This case
@@ -3465,18 +3452,61 @@ public class TestingBoard extends Board
 		// Blue is now a suspected Two), leaving Blue to
 		// capture Red Four.
 
-					} else {	// tp is known AI piece
+					else {	// tp is known AI piece
 						assert !fp.isKnown() : "fp is known?";
 		// While the AI always gains the stealth value of the
 		// unknown opponent piece, it may have guess wrong.
-		// (Yet 4x4? is positive, because Four stealth (12, br=4)
-		// slightly outweighs the riskOfLoss factor (10)).
+		//
+		// Note: the bluffing factor (br) changes the outcome
+		// because it affects both stealth and riskOfLoss.
+		// With lower bluffing factors (i.e. opponent not bluffing),
+		// the result becomes more positive, because although the AI
+		// has less knowledge to gain from an even exchange,
+		// it has less chance of complete loss of its piece.
+		//
+		// Capture, Opp. Stealth (br=4), Risk Of Loss Factor, Result
+		// 4x4?, 12, 16, -4 
+		// 3x3?, 28, 33, -5
+		// 2x2?, 32, 66, -34
+		//
 		// Note: riskOfLoss can be zero if the suspected rank fled.
 
-						vm += riskOfLoss(tp, fp)/10;
+						vm += riskOfLoss(tp, fp)/6;
+					}
+					}
+
+		// Unknown AI pieces also have bluffing value
+
+					if (depth != 0
+						&& !isInvincible(fp)
+						&& isEffectiveBluff(tp, fp, m)) {
+						vm = Math.min(vm, valueBluff(fp, tp, to));
+						morph(tp, fprank);
+						setPiece(tp, to);
 					}
 
 				} else {	// AI is attacker
+
+				if (isInvincible(tp)) {
+					if  (!fp.isKnown()
+						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
+						vm += 10;
+					else
+						vm += stealthValue(tp) - stealthValue(fp);
+				}
+
+		// If the defender is known,
+		// this is a known even exchange based on actual values
+		// (AI knows its own pieces).
+
+		// Note that although the exchange is even, the value
+		// may not be.  If the AI is winning, its ranks are
+		// worth less than opponent ranks, encouraging it to
+		// make an even exchange.
+
+				else if (tp.isKnown())
+					vm += actualValue(tp) - fpvalue;
+				else {
 
 					assert !tp.isKnown() : "defender is known?"; 
 					vm += stealthValue(tp) - stealthValue(fp);
@@ -3519,21 +3549,6 @@ public class TestingBoard extends Board
 					}
 				}
 
-		// Unknown AI pieces also have bluffing value
-				if (depth != 0
-					&& !isInvincible(fp)
-					&& isEffectiveBluff(tp, fp, m))
-					vm = Math.min(vm, valueBluff(fp, tp, to));
-
-				else if (depth != 0
-					&& (!isInvincible(tp)
-						|| (tprank == Rank.ONE
-							&& hasSpy(Settings.topColor)))
-					&& !unknownScoutFarMove
-					&& isEffectiveBluff(fp, tp, m)) {
-					vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
-				}
-
 		// Consider the following example.
 		// -- R1 --
 		// BS -- B2
@@ -3574,7 +3589,8 @@ public class TestingBoard extends Board
 		// in an EVEN exchange, because the suspected rank might
 		// actually be higher.
 		//
-		// But this created the following obscure cache bug:
+		// But this created the following undesired transposition
+		// cache equivalency:
 		// R1 RB
 		// R3 --
 		// -- B3
@@ -3590,7 +3606,7 @@ public class TestingBoard extends Board
 		// the negative number stored, rather than a highly
 		// positive number because R3 just rammed into a known bomb!
 		//
-		// (Note: the cache bug also exists in a much reduced
+		// (Note: this issue also exists in a much reduced
 		// form even in WINS. If the pieces are known, there
 		// is no bug, but removing a suspected
 		// opponent piece to a known bomb is not the same as removing
@@ -3598,9 +3614,38 @@ public class TestingBoard extends Board
 		// known AI piece, but at least both are positive.)
 		//
 		// The solution is to remove both pieces from the
-		// board but credit a subsequent opponent move to
-		// the target square.  This is handled in the case
-		// when tp == null (move to open square).
+		// board but debit if there is a protecting opponent piece.
+		//
+		// Note: It is tempting to credit the opponent move,
+		// but the opponent move will likely be forward pruned,
+		// because the AI piece is gone!
+
+					for (int d : dir) {
+						Piece p = getPiece(to+d);
+						if (p == null
+							|| p.getColor() != Settings.bottomColor)
+							continue;
+
+						if (isThreat(p, fprank)) {
+							vm -= values[Settings.topColor][fprank.toInt()]/2;
+							break;
+						}
+					}
+
+		// Unknown AI pieces also have bluffing value
+
+					if (depth != 0
+						&& (!isInvincible(tp)
+							|| (tprank == Rank.ONE
+								&& hasSpy(Settings.topColor)))
+						&& !unknownScoutFarMove
+						&& isEffectiveBluff(fp, tp, m))
+						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
+						morph(fp, tprank);
+						setPiece(fp, to);
+						fp.setIndex(to);
+				} // AI is attacker
+
 
 
 		// If the opponent attacker is invincible and is
@@ -3664,17 +3709,9 @@ public class TestingBoard extends Board
 						&& !unknownScoutFarMove
 						&& isEffectiveBluff(fp, tp, m)) {
 						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
-
-		// What should happen to the piece?
-		// If the bluff is effective, the opponent
-		// would have to consider that its piece would
-		// be removed from the board, and a stronger known
-		// AI piece would replace it.
-		// TBD: for now, both pieces disappear
-
-						// makeWinner(fp, tprank);
-						// makeKnown(fp);
-						// setPiece(fp, m.getTo());
+						morph(fp, tprank);
+						setPiece(fp, to);
+						fp.setIndex(to);
 					} else {
 
 		// The opponent knows that the AI is bluffing, so
@@ -3982,8 +4019,12 @@ public class TestingBoard extends Board
 
 						if (depth != 0
 							&& !isInvincible(fp)
-							&& isEffectiveBluff(tp, fp, m))
+							&& isEffectiveBluff(tp, fp, m)) {
 							vm = Math.min(vm, valueBluff(fp, tp, to));
+							morph(tp, fprank);
+							setPiece(tp, to);
+							break;
+						}
 
 
 					}
@@ -6085,7 +6126,15 @@ public class TestingBoard extends Board
 		// of bluffing is beyond the scope of this program
 		// (and perhaps artificial intelligence).
 
-		int diff = blufferRisk;
+		// riskOfLoss is reduced by low bluffer risk
+		// once the piece has had time to attack AI pieces
+		// and refine its suspected rank.
+
+		int diff;
+		if (tp.moves >= 10)
+			diff = blufferRisk;
+		else
+			diff = 4;
 
 		// protection rank is less reliable than chase rank
 		if (tp.isRankLess())
@@ -6166,7 +6215,7 @@ public class TestingBoard extends Board
 
 		if (!fp.isKnown()
 			&& !fp.isSuspectedRank()) {
-			if (isInvincible(Settings.bottomColor, tprank.toInt())) {
+			if (isInvincible(Settings.topColor, tprank.toInt())) {
 				if (tprank == Rank.ONE)
 					return isPossibleUnknownSpyXOne(tprank, fp);
 				return false;
