@@ -272,6 +272,7 @@ public class AI implements Runnable
 		aiLock.lock();
 		log("Settings.aiLevel:" + Settings.aiLevel);
 		log("Settings.twoSquares:" + Settings.twoSquares);
+		log("blufferRisk:" + board.blufferRisk);
 		stopTime = startTime
 			+ Settings.aiLevel * Settings.aiLevel * 100;
 
@@ -577,10 +578,10 @@ public class AI implements Runnable
 
 		Rank fprank = fp.getRank();
 
-		if (fprank == Rank.BOMB) {
+		if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
 
 		// Known bombs are removed from pieces[] but
-		// a bomb could become known in the search
+		// a bomb or flag could become known in the search
 		// tree.  We need to generate moves for suspected
 		// bombs because the bomb might actually be
 		// some other piece, but once the bomb becomes
@@ -1972,12 +1973,20 @@ public class AI implements Runnable
 
 	void genDeepSearch()
 	{
+
 		final int MAX_STEPS = 2;
 		for (Piece fp : b.pieces[Settings.topColor]) {
 			if (fp == null)	// end of list
 				break;
 
 			if (!fp.isKnown())
+				continue;
+
+		// If the piece is near the flag, the target might be
+		// the AI flag rather than the chased piece,
+		// so a broad search is used.
+
+			if (b.isNearAIFlag(fp.getIndex()))
 				continue;
 
 			if (!b.grid.isCloseToEnemy(Settings.topColor, fp.getIndex(), MAX_STEPS))

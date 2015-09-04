@@ -261,7 +261,6 @@ public class TestingBoard extends Board
 				Piece np = new Piece(p);
 				grid.setPiece(i, np);
 				np.setAiValue(0);
-				np.setIndex(i);
 
 				if (!p.isKnown())
 					unknownPiecesRemaining[p.getColor()]++;
@@ -623,24 +622,32 @@ public class TestingBoard extends Board
 	// Blue Spy is suspected to be a Bomb.  R1 moves towards
 	// Blue Spy and loses.
 	//
+	// Note: the most forward pieces are ordered first in
+	// the piece lists because moving these pieces is often
+	// better.  For example, if the AI has two invincible pieces,
+	// it should move the most forward one rather than moving
+	// the rearward one, which would allow the opponent to catch
+	// up and protect its pieces.
+
 	void genPieceLists()
 	{
-		for (int i=12;i<=120;i++) {
-			if (!Grid.isValid(i))
-				continue;
-			Piece p = getPiece(i);
-			if (p == null)
-				continue;
-			Rank rank = p.getRank();
-			if (p.isKnown()
-				&& (rank == Rank.BOMB || rank == Rank.FLAG))
-				continue;
+		for (int c = RED; c <= BLUE; c++) {
+			for (int y = 0; y < 10; y++)
+			for (int x = 0; x < 10; x++) {
+				Piece p = getPiece(x,Grid.yside(1-c,y));
+				if (p == null
+					|| p.getColor() != c)
+					continue;
+				Rank rank = p.getRank();
+				if (p.isKnown()
+					&& (rank == Rank.BOMB || rank == Rank.FLAG))
+					continue;
 
-			pieces[p.getColor()][npieces[p.getColor()]++]=p;
+				pieces[c][npieces[c]++]=p;
+			}
+
+			pieces[c][npieces[c]++]=null;	 // null terminate list
 		}
-
-		pieces[0][npieces[0]++]=null;	 // null terminate list
-		pieces[1][npieces[1]++]=null;	 // null terminate list
 	}
 
 	// Perhaps the key and most complex decision in Stratego is whether
@@ -3057,6 +3064,9 @@ public class TestingBoard extends Board
 			} else
 				newRank = getChaseRank(p, rankWon, false);
 
+			if (newRank == Rank.NIL)
+				newRank = Rank.toRank(lowestUnknownExpendableRank);
+
 			assert newRank != Rank.UNKNOWN : "Piece " + p.getRank() + " " + p.isSuspectedRank() + " " + p.getActingRankChase() + " " + p.isKnown() + " should not have won (invincible)" + rankWon + " at " + p.getIndex() + " because lowestUnknownNotSuspectedRank is " + lowestUnknownNotSuspectedRank;
 		}
 
@@ -3116,7 +3126,7 @@ public class TestingBoard extends Board
 			assert boardHistory[1].hash == hashTest[1] : "bug: hash changed before move "  + from + " to " + to;
 		}
 
-		setPiece(null, from);
+		clearPiece(from);
 		int vm = 0;
 
 		// Moving an unknown scout reveals its rank.
@@ -3229,7 +3239,6 @@ public class TestingBoard extends Board
 				vm++;
 
 			vm += planValue(fp, from, to, depth);
-			fp.setIndex(to);
 			fp.moves++;
 			setPiece(fp, to);
 
@@ -3240,7 +3249,7 @@ public class TestingBoard extends Board
 		// perhaps with different hash because of
 		// change in "known" status and perhaps rank).
 
-			setPiece(null, to);
+			clearPiece(to);
 
 			Rank tprank = tp.getRank();
 			boolean tpknown = tp.isKnown();
@@ -3643,7 +3652,6 @@ public class TestingBoard extends Board
 						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
 						morph(fp, tprank);
 						setPiece(fp, to);
-						fp.setIndex(to);
 				} // AI is attacker
 
 
@@ -3669,7 +3677,6 @@ public class TestingBoard extends Board
 		//			&& isInvincible(fp)) {
 		//			makeKnown(fp);
 		//			setPiece(fp, m.getTo());
-		//			fp.setIndex(m.getTo());
 		//		}
 				//vm = 0; // fubar
 				break;
@@ -3711,7 +3718,6 @@ public class TestingBoard extends Board
 						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
 						morph(fp, tprank);
 						setPiece(fp, to);
-						fp.setIndex(to);
 					} else {
 
 		// The opponent knows that the AI is bluffing, so
@@ -4035,7 +4041,6 @@ public class TestingBoard extends Board
 
 				fp.moves++;
 				setPiece(fp, to); // won
-				fp.setIndex(to);
 				//vm = 0; // fubar
 				break;
 
@@ -4448,7 +4453,6 @@ public class TestingBoard extends Board
 						if (fp.getRank() != tprank) {
 							fp.moves++;
 							setPiece(fp, to); // won
-							fp.setIndex(to);
 						}
 					} else {
 						tp.makeKnown();
@@ -4646,7 +4650,7 @@ public class TestingBoard extends Board
 			Piece fp = um.getPiece();
 
 			// remove piece at target to update hash
-			setPiece(null, um.getTo());
+			clearPiece(um.getTo());
 
 			// place original piece and restore hash
 			fp.copy(um.fpcopy);
@@ -6198,10 +6202,16 @@ public class TestingBoard extends Board
 		return isNearOpponentFlag(p.getIndex());
 	}
 
+	public boolean isNearAIFlag(int to)
+	{
+		return flag[Settings.topColor].isKnown() &&
+			Grid.steps(to, flag[Settings.topColor].getIndex()) <= 4;
+	}
+
 	// If the opponent has an unsuspected Spy, it is dangerous for
 	// for the One to approach unknown pieces.  But if the Spy is gone
 	// or the AI thinks it knows where it is, then the AI goes on
-	// the ramage with its One.
+	// the rampage with its One.
 
 	boolean hasUnsuspectedSpy(int c)
 	{

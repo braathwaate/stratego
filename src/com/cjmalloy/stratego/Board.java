@@ -81,7 +81,7 @@ public class Board
 	protected int lowestUnknownExpendableRank;
 	protected boolean sixForay = false;
 	protected int guessedRankCorrect;
-	protected int blufferRisk = 4;
+	public int blufferRisk = 4;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
@@ -201,6 +201,8 @@ public class Board
 		tray.addAll(b.tray);
 		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
+		blufferRisk = b.blufferRisk;
+		guessedRankCorrect = b.guessedRankCorrect;
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -250,7 +252,7 @@ public class Board
 			{
 				moveToTray(m.getTo());
 				setPiece(fp, m.getTo());
-				setPiece(null, m.getFrom());
+				clearPiece(m.getFrom());
 			}
 			else if (result == -1)
 			{
@@ -268,7 +270,7 @@ public class Board
 				{
 					moveToTray(m.getFrom());
 					setPiece(tp, m.getFrom());
-					setPiece(null, m.getTo());
+					clearPiece(m.getTo());
 				}
 			}
 			genChaseRank(fp.getColor());
@@ -400,9 +402,29 @@ public class Board
 			p.setShown(false);
 	}
 	
+	public void clearPiece(int i)
+	{
+		setPiece(null, i);
+	}
+
 	public void setPiece(Piece p, Spot s)
 	{
 		setPiece(p, Grid.getIndex(s.getX(),s.getY()));
+	}
+
+	public void setPiece(Piece p, int i)
+	{
+		Piece bp = getPiece(i);
+		if (bp != null) {
+			rehash(bp, i);
+		}
+
+		if (p != null) {
+			p.setIndex(i);
+			grid.setPiece(i, p);
+			rehash(p, i);
+		} else
+			grid.clearPiece(i);
 	}
 
 	// Zobrist hashing.
@@ -472,20 +494,6 @@ public class Board
 		boardHistory[Settings.bottomColor].hash ^= hashPiece(Settings.bottomColor, p, i);
 	}
 	
-	public void setPiece(Piece p, int i)
-	{
-		Piece bp = getPiece(i);
-		if (bp != null) {
-			rehash(bp, i);
-		}
-
-		if (p != null) {
-			grid.setPiece(i, p);
-			rehash(p, i);
-		} else
-			grid.clearPiece(i);
-	}
-
 	public UndoMove getLastMove()
 	{
 		return undoList.get(undoList.size()-1);
@@ -1540,8 +1548,43 @@ public class Board
 		int j = r;
 		Rank newRank = Rank.UNKNOWN;
 
+		// If a piece approaches an unknown piece, the approacher is
+		// usually a Five, Six, Seven or Nine.  No suspected rank
+		// is set, and the evaluation function checks the chase rank
+		// for Rank.UNKNOWN and lowestUnknownExpendableRank to determine
+		// the result of an attack, which must be more positive
+		// than if the lowest unknown expendable rank were assigned as
+		// the suspected rank of the piece, because an unknown
+		// *could* be a higher ranked piece.
+		//
+		// Yet in the very special case
+		// when there are no expendable opponent ranks remaining
+		// except for unknown Fives, the AI assumes that the approacher
+		// *is* a Five.
+
+		if (rank == Rank.UNKNOWN) {
+			for (int e: expendableRank)
+				if (unknownRankAtLarge(color, e) != 0)
+					return Rank.NIL;
+			if (unknownRankAtLarge(color, 5) == 0)
+				return Rank.NIL;
+
+			r = 6; 	// chaser is probably a Five
+		}
+
 		// See if the unknown rank is still on the board.
-		if (r <= 5) {
+
+		// Note: Sixes are usually chased by Fives, but because 4?x6
+		// is also positive, the chaser could be a Four.
+		// So if an AI Five encounters a suspected Five
+		// that has a Six chase rank, the result is EVEN,
+		// but the risk of loss is higher than if the chase
+		// rank is Unknown.
+		//
+		// Note: Sevens are usually chased by Sixes, but 5?x7
+		// is also positive.
+
+		if (r <= 7) {
 			if (!rankLess)
 				j--;
 			for (int i = j; i > 0; i--)
@@ -1558,44 +1601,9 @@ public class Board
 
 		} else {
 
-		// If a piece approaches an unknown piece, the approacher is
-		// usually a Five, Six, Seven or Nine.  No suspected rank
-		// is set, and the evaluation function checks the chase rank
-		// for Rank.UNKNOWN and lowestUnknownExpendableRank to determine
-		// the result of an attack, which must be more positive
-		// than if the lowest unknown expendable rank were assigned as
-		// the suspected rank of the piece, because an unknown
-		// *could* be a higher ranked piece.
-		//
-		// Yet in the very special case
-		// when there are no expendable opponent ranks remaining
-		// except for unknown Fives, the AI assumes that the approacher
-		// *is* a Five.
-
-			if (rank == Rank.UNKNOWN) {
-				for (int e: expendableRank)
-					if (unknownRankAtLarge(color, e) != 0)
-						return Rank.UNKNOWN;
-				if (unknownRankAtLarge(color, 5) == 0)
-					return Rank.UNKNOWN;
-
-				j = 5; 	// chaser is probably a Five
-
-			} else if (rank == Rank.SIX) {
-
-		// Sixes are usually chased by Fives, but because 4?x6
-		// is also positive, the chaser could be a Four.
-		// So if an AI Five encounters a suspected Five
-		// that has a Six chase rank, the result is EVEN,
-		// but the risk of loss is higher than if the chase
-		// rank is Unknown.
-
-				j = 5; 	// chaser is probably a Five
-			} else {
-
-		// Sevens, Eights and Nines are chased
-		// by Fives and higher ranks, as long as the chaser rank
-		// is lower.
+		// Eights and Nines could be chased by
+		// almost any expendable piece, so a rank of
+		// UNKNOWN is returned, and no suspected rank is set.
 		//
 		// This needs to be consistent with winFight.  For example,
 		// R9 B? R6
@@ -1614,27 +1622,7 @@ public class Board
 		// that the chaser is not an Eight, unless all other
 		// unknown lower ranked pieces are gone.
 		//
-				if (lowestUnknownExpendableRank < r)
-					j = lowestUnknownExpendableRank;
-				else
-					j = r - 1;
-			}
-
-			for (int i = j; i <= r; i++)
-				if (unknownRankAtLarge(color, i) != 0) {
-					newRank = Rank.toRank(i);
-					break;
-				}
-
-		// Desired unknown rank not found.
-		// Chaser must be ranked even lower.
-
-			if (newRank == Rank.UNKNOWN)
-				for (int i = j-1; i > 0; i--)
-					if (unknownRankAtLarge(color, i) != 0) {
-						newRank = Rank.toRank(i);
-						break;
-					}
+			return Rank.NIL;
 		}
 
 		return newRank;
@@ -1642,7 +1630,7 @@ public class Board
 
 	protected void setSuspectedRank(Piece p, Rank rank, boolean maybeBluffing)
 	{
-		if (rank == Rank.UNKNOWN)
+		if (rank == Rank.NIL || rank == Rank.UNKNOWN)
 			return;
 
 		if (p.getRank() == Rank.UNKNOWN || p.isSuspectedRank())
@@ -2227,7 +2215,10 @@ public class Board
 			}
 			}
 
-			assert flagp != null : "Well, where IS the flag?";
+	// flagp is null if the AI has just captured the flag
+	// with the last move.
+	// assert flagp != null : "Well, where IS the flag?";
+
 			flag[c] = flagp;
 
 		} // maybe == 0 (opponent flag only)
@@ -2368,7 +2359,7 @@ public class Board
 			Piece fp = getPiece(m.getFrom());
 			moveHistory(fp, null, m.getMove());
 
-			setPiece(null, m.getFrom());
+			clearPiece(m.getFrom());
 			setPiece(fp, m.getTo());
 			fp.setMoved();
 			if (Math.abs(m.getToX() - m.getFromX()) > 1 || 
@@ -2401,7 +2392,7 @@ public class Board
 			return false;
 		
 		tray.add(getPiece(i));
-		setPiece(null, i);
+		clearPiece(i);
 		Collections.sort(tray,new Comparator<Piece>(){
 				     public int compare(Piece p1,Piece p2){
 					return p1.getRank().toInt() - p2.getRank().toInt();
@@ -2892,7 +2883,7 @@ public class Board
 
 		moveToTray(m.getFrom());
 		setPiece(getPiece(m.getTo()), tmp);
-		setPiece(null, m.getTo());
+		clearPiece(m.getTo());
 	}
 	
 	private Spot getScoutLooseFrom(Move m)
