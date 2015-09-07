@@ -860,7 +860,8 @@ public class Board
 
 		if (arank == Rank.NIL 
 			|| (chaser.getApparentRank() == Rank.UNKNOWN
-				&& arank.toInt() >= 5)
+				&& arank.toInt() >= 5
+				&& !isInvincible(chased))
 			|| arank.toInt() > chaser.getApparentRank().toInt()
 
 		// If an unknown piece has IS_LESS set (because it protected
@@ -922,12 +923,90 @@ public class Board
 	//
 	public void isProtectedChase(Piece chaser, Piece chased, int i)
 	{
+		assert getPiece(i) == chased : "chased not at i?";
+
 		// In version 9.6, direct chase rank no longer
 		// depends on protecting pieces
 
 		setDirectChaseRank(chaser, chased);
 
-		assert getPiece(i) == chased : "chased not at i?";
+		Rank chasedRank = chased.getApparentRank();
+		Rank chaserRank = chaser.getApparentRank();
+
+		if (chaserRank == Rank.UNKNOWN) {
+
+		// Because ranks 5-9 are often hellbent on discovery,
+		// an adjacent unknown piece next to the chased should
+		// not be misinterpreted as a protector.
+		// Example 1:
+		// R? B6 -- B?
+		//
+		// Example 2: 
+		// R? -- B6
+		// -- B? --
+		// Unknown Blue moves towards Blue Six (in Example 1) or
+		// Blue Six moves towards unknown Red in Example 2.
+
+		// If Unknown Blue is viewed as a protector, it would acquire
+		// a chase rank of 4.  But Unknown Blue might not
+		// care about protecting Blue 6, if Blue intends
+		// to attack unknown Red anyway.
+
+			if (chasedRank.toInt() >= 5)
+				return;
+
+		// If the chaser piece is Unknown,
+		// then there is more that can be determined in this case
+		// if the chased is not invincible, because if the chased
+		// believes that the Unknown is a low ranked piece, then
+		// the protector must even be lower.  For example,
+		// R? -- B?
+		// -- B2 --
+		// Blue Two moves between Unknown Red and Unknown Blue.
+		// If Blue thinks that Unknown Red could be Red One
+		// and Unknown Blue is Blue Spy, then Red could guess that
+		// Unknown Blue *is* Blue Spy.  But if Blue does not think
+		// that Unknown Red is Red One, this is simply an attacking
+		// move and nothing can be determined about Unknown Blue.
+		// 
+		// One way to determine whether Blue believes Unknown Red
+		// is a superior piece is if Blue neglects to attack
+		// Unknown Red.  For example,
+		// R? B2 -- B?
+		// If Blue Two does not attack Unknown Red, and instead
+		// moves unknown Blue towards Blue Two, then Red is signaling
+		// that it believes Unknown Red is a superior piece.
+		//
+		// So if the last move was not the chased, then it can
+		// be assumed that the player believes the unknown chaser piece
+		// is a superior piece, and so the AI assumes that its
+		// protector is even more superior.
+
+			Move m = getLastMove();
+			if (m.getPiece() == chased)
+				return;
+
+		// If the chased is a lower or equal rank to the chaser piece,
+		// the chased needs no protection.
+		// Set the direct chase rank (when ranks are equal
+		// and the the chased is unknown and suspected)
+
+		} else if (chasedRank.toInt() <= chaserRank.toInt()
+			|| chasedRank == Rank.FLAG
+			|| chasedRank == Rank.BOMB) {
+			if (chaser.isKnown()) {
+
+				return;
+			}
+
+		// chaser piece is an unknown piece, but it has a rank
+		// (i.e. not UNKNOWN, because that was tested for above)
+		// But the chased doesn't know the rank, so the chased
+		// could be assuming that it is a lower ranked piece,
+		// and perhaps relying on a lower rank protector.
+		// So continue.
+
+		}
 
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
@@ -1070,24 +1149,13 @@ public class Board
 		// B? -- R2
 		// -- B? --
 		//
-		// Furthermore, prior chase and flee acting rank
-		// of unknown Blue becomes unreliable.  For example, if
-		// unknown Blue had an acting chase rank of Three,
-		// and then approaches Red Two in the example,
-		// Red cannot assume that unknown Blue is a Three
-		// and sit idly by.
+		// The approaching unknown will acquire a chase rank of Two,
+		// and no chase rank is assigned to the protector.
 		//
-		// So set the acting rank chase to NIL and caveat emptor.
-		// Also set the flee acting rank to NIL, because if
-		// flee acting rank was Unknown, and stayed Unknown while
-		// acting rank chase was set to NIL, the AI would assume
-		// that the piece was a desirable target, because it
-		// fled and did not approach any piece.
-		//
-		// However, if the chased piece neglects to attack
-		// a known piece (thereby acquiring an acting rank flee),
-		// it can be certain that the unknown protector
+		// However, if the unknown chased piece neglects to attack
+		// a known piece, it can be certain that the unknown protector
 		// is the stronger piece.
+		//
 		// For example, known Red Five approaches unknown Blue
 		// (because it has a chase rank of Unknown from chasing
 		// unknown pieces, suggesting that it is a high ranked
@@ -1096,23 +1164,22 @@ public class Board
 		// -- B? R5
 		// B? -- -- 
 
-			if (!chased.isKnown() && m.getPiece() == chased) {
+			if (!chased.isKnown()) {
 				assert chaser.isKnown() : "unknown chaser?";
-				Rank fleeRank = chased.getActingRankFleeLow();
-				Rank chaserRank = chaser.getRank();
-				if (fleeRank != chaserRank) {
-
-		// If the chased piece already has an acting rank chase,
-		// and that rank is greater than the chaser piece rank,
-		// reset the acting rank chase to NIL.
-
-					Rank chasedRank = chased.getActingRankChase();
-					if (chasedRank.toInt() > chaserRank.toInt()) {
-						chased.setActingRankChaseEqual(Rank.NIL);
-						chased.clearActingRankFlee();
-					}
+				if (m.getPiece() == chased)
 					return;
-				}
+
+		// Opponent moved some piece other than the chased,
+		// and neglected to capture the chaser,
+		// likely implying that the chased piece protection
+		// is strong.  Yet we have to check flee rank because
+		// the opponent may have played some other delaying move
+		// (such as chasing another low ranked piece) and intends
+		// to move the chased piece later.  (see flee rank).
+
+				Rank fleeRank = chased.getActingRankFleeLow();
+				if (fleeRank != chaserRank)
+					return;
 			}
 
 		// If the chaser is high ranked (or unknown) and the chased
@@ -1365,105 +1432,6 @@ public class Board
 				} // d2
 				if (chased2 != null)
 					continue;
-
-		// If the chased piece (moved or unmoved) is not known,
-		// and the chaser had no prior chase rank,
-		// the piece gains a permanent chase rank of Unknown.
-		// This is because a piece that willingly moves next
-		// to an unknown is willing to sacrifice itself
-		// (and so the AI guesses that the piece is probably
-		// a high-ranked piece).
-		//
-		// The difficulty is determining if the piece willingly
-		// moved next to an unknown or was cornered.  So if
-		// the piece is suspected to be a low rank (1-3), it
-		// is retained if it approaches an unknown.
-		//
-				Rank chasedRank = chased.getApparentRank();
-				Rank chaserRank = chaser.getApparentRank();
-
-				if (chasedRank == Rank.UNKNOWN) {
-					if (!chaser.isKnown()
-						&& chaserRank.toInt() >= 4
-						&& !isInvincible(chaser)
-						&& !isProtected(chaser, chased, j)) {
-						chaser.setActingRankChaseEqual(Rank.UNKNOWN);
-						continue;
-					}
-
-		// Because ranks 5-9 are often hellbent on discovery,
-		// an adjacent unknown piece next to the chaser should
-		// not be misinterpreted as a protector.
-		// Example 1:
-		// R? B6 -- B?
-		//
-		// Example 2: 
-		// R? -- B6
-		// -- B? --
-		// Unknown Blue moves towards Blue Six (in Example 1) or
-		// Blue Six moves towards unknown Red in Example 2.
-
-		// If Unknown Blue is viewed as a protector, it would acquire
-		// a chase rank of 4.  But Unknown Blue might not
-		// care about protecting Blue 6, if Blue intends
-		// to attack unknown Red anyway.
-
-					if (chaserRank.toInt() >= 5)
-						continue;
-
-		// If the chased piece is Unknown,
-		// then there is more that can be determined in this case
-		// if the chaser is not invincible, because if the chaser
-		// believes that the Unknown is a low ranked piece, then
-		// the protector must even be lower.  For example,
-		// R? -- B?
-		// -- B2 --
-		// Blue Two moves between Unknown Red and Unknown Blue.
-		// If Blue thinks that Unknown Red could be Red One
-		// and Unknown Blue is Blue Spy, then Red could guess that
-		// Unknown Blue *is* Blue Spy.  But if Blue does not think
-		// that Unknown Red is Red One, this is simply an attacking
-		// move and nothing can be determined about Unknown Blue.
-		// 
-		// One way to determine whether Blue believes Unknown Red
-		// is a superior piece is if Blue neglects to attack
-		// Unknown Red.  For example,
-		// R? B2 -- B?
-		// If Blue Two does not attack Unknown Red, and instead
-		// moves unknown Blue towards Blue Two, then Red is signaling
-		// that it believes Unknown Red is a superior piece.
-		//
-		// So if the last move was not the chaser, then it can
-		// be assumed that the player believes the unknown chased piece
-		// is a superior piece, and so the AI assumes that its
-		// protector is even more superior.
-
-					Move m = getLastMove();
-					if (m.getPiece() == chaser)
-						continue;
-
-		// If the chaser is a lower or equal rank to the chased piece,
-		// the chaser needs no protection.
-		// Set the direct chase rank (when ranks are equal
-		// and the the chaser is unknown and suspected)
-
-				} else if (chaserRank.toInt() <= chasedRank.toInt()
-					|| chaserRank == Rank.FLAG
-					|| chaserRank == Rank.BOMB) {
-					if (chased.isKnown()) {
-
-						setDirectChaseRank(chased, chaser);
-						continue;
-					}
-
-		// chased piece is an unknown piece, but it has a rank
-		// (i.e. not UNKNOWN, because that was tested for above)
-		// But the chaser doesn't know the rank, so the chaser
-		// could be assuming that it is a lower ranked piece,
-		// and perhaps relying on a lower rank protector.
-		// So continue on to isProtectedChase().
-
-				}
 
 		// Now this is the tricky part.
 		// The roles of chaser and chased are swapped

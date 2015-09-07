@@ -78,7 +78,8 @@ public class TestingBoard extends Board
 	protected int[] unmovedValue = new int[121];    // unmoved value
 	protected int[][] valueStealth = new int[2][15];
 	protected static final int importantRank[] = { 1, 2, 3, 8 };
-	protected static final int lanes[] = { 0, 1, 4, 5, 8, 9 };
+	protected static final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
+	protected static final int defendlanes[][] = { { 78, 79}, { 82, 83}, {86, 87} };
 	protected long[] hashTest = new long [2];
 	protected int lowestUnknownNotSuspectedRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
@@ -286,7 +287,7 @@ public class TestingBoard extends Board
 		// However, do not override any chase rank that it
 		// may have acquired during game play.
 				if (!p.isKnown())
-				for (int x : lanes) {
+				for (int x : xlanes) {
 					Piece sp = getSetupPiece(Grid.getIndex(x, Grid.yside(p.getColor(), 3)));
 					if (sp == p) {
 						if (np.getActingRankChase() == Rank.NIL)
@@ -549,6 +550,7 @@ public class TestingBoard extends Board
 			flee(p);
 
 		}
+		defendLanes();
 
 		// keep a piece of a high rank in motion,
 		// preferably a 6, 7 or 9 to discover unknown pieces.
@@ -991,6 +993,37 @@ public class TestingBoard extends Board
 				lowUnknownRank = rank;
 		}
 		}
+	}
+
+	// Because of shallow search depth, the AI is encouraged to
+	// guard each lane with a Four or a Five to deter higher ranked
+	// pieces from entering AI territory.
+	void defendLanes()
+	{
+		for (int c = RED; c <= BLUE; c++) {
+		for (int lane = 0; lane < 3; lane++) {
+			boolean found = false;
+			for (int i : defendlanes[lane]) {
+				Piece p = getPiece(i);
+				if (p == null
+					|| p.getColor() != c)
+					continue;
+				if (p.getRank() == Rank.FOUR
+					|| p.getRank() == Rank.FIVE) {
+					found = true;
+					break;
+				}
+			} // i
+			if (!found)
+				for (int i : defendlanes[lane]) {
+					int tmp[] = genDestTmp(GUARDED_OPEN, c, i);
+					for (int r = 4; r <= 5; r++) {
+						genNeededPlanA(0, tmp, c, r, DEST_PRIORITY_LOW);
+						genNeededPlanB(tmp, c, r, DEST_PRIORITY_LOW);
+					}
+				}
+		} // lane
+		} // c
 	}
 
 	// Low rank piece discovery is much more important
@@ -2973,7 +3006,7 @@ public class TestingBoard extends Board
 				else if (vfrom == vto + 1)
 					return priority;
 				else
-					return -priority;
+					return -priority - 1;
 			}
 		return 0;
 	}
@@ -3494,7 +3527,9 @@ public class TestingBoard extends Board
 						setPiece(tp, to);
 					}
 
-				} else {	// AI is attacker
+		// AI is attacker
+
+				} else {
 
 				if (isInvincible(tp)) {
 					if  (!fp.isKnown()
@@ -3648,10 +3683,11 @@ public class TestingBoard extends Board
 							|| (tprank == Rank.ONE
 								&& hasSpy(Settings.topColor)))
 						&& !unknownScoutFarMove
-						&& isEffectiveBluff(fp, tp, m))
-						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
-						morph(fp, tprank);
-						setPiece(fp, to);
+						&& isEffectiveBluff(fp, tp, m)) {
+							vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
+							morph(fp, tprank);
+							setPiece(fp, to);
+					}
 				} // AI is attacker
 
 
@@ -4887,7 +4923,8 @@ public class TestingBoard extends Board
 		// stack when isEffectiveBluff() is called)
 		UndoMove prev2 = getLastMove(2);
 		if (prev2 != null
-			&& prev2.tp != null) {
+			&& prev2.tp != null
+			&& prev2.getPiece() == tp) {
 
 			UndoMove prev1 = getLastMove(1);
 			int v = -(prev1.value - prev2.value);
@@ -5152,9 +5189,31 @@ public class TestingBoard extends Board
 		// unknown miner from taking a worthless bomb.
 		// This is calculated in WINS.
 
-		// The ai is willing to sacrifice a Three in order to
+		if (color == Settings.bottomColor)
+			return pieceValue(1-color, 8) + 10;
+
+		// The ai is willing to sacrifice a known Three in order to
 		// protect its own flag bombs.  Thus an unknown Two
 		// approaching the flag can easily win an AI Three.
+
+		// Note: the reason why the AI flag is not the highest
+		// value at the beginning of the game is because bluffing
+		// then could easily expose the AI low ranked pieces,
+		// and the opponent would also conclude the location
+		// of the flag structure by the strong AI response,
+		// leading to inevitable loss.  But if the AI responds
+		// to an unknown piece with a Four, most opponents may
+		// not realize that the AI is trying to protect its flag,
+		// and the loss of a Four is not a game loser; indeed,
+		// if it exposes a lower rank like a One or Two, it could
+		// be a good move.
+
+		// Note: the value does not vary with the value of Three,
+		// which could be diminished as pieces are removed from
+		// the board.  Thus, towards the end of the game as
+		// lower pieces are removed, the AI flag and bombs
+		// become the most valuable AI pieces, and the AI will
+		// do anything to protect them.
 
 		// TBD:  More suspected rank analysis is needed to
 		// determine if approaching pieces are Eights.  Most
@@ -5165,13 +5224,8 @@ public class TestingBoard extends Board
 		// pieces.  If an approacher is headed towards a Bomb,
 		// it is probably an Eight.
 
-		int more = 10;
-		if (color == Settings.topColor)
-			more = values[color][Rank.THREE.toInt()];
+		return VALUE_THREE;
 
-		return values[1-color][8]
-			+ valueStealth[1-color][Rank.EIGHT.toInt()-1]
-			+ more;
 	}
 
 	// FLAG VALUE.

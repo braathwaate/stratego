@@ -314,12 +314,12 @@ public class AI implements Runnable
  				log("bestMove from " + Move.unpackFrom(bestMove) + " to " + Move.unpackTo(bestMove) + " but from piece is null?");
 			else {
 				logFlush("----");
-				log(PV, "\n" + logMove(board, 0, bestMove));
+				log(PV, logMove(board, 0, bestMove));
 				// return the actual board move
 				engine.aiReturnMove(new Move(board.getPiece(Move.unpackFrom(bestMove)), Move.unpackFrom(bestMove), Move.unpackTo(bestMove)));
 			}
 
-			logFlush("----");
+			logFlush("\n----");
 
 			long t2 = System.currentTimeMillis() - startTime;
 			t2 = System.currentTimeMillis() - startTime;
@@ -909,7 +909,7 @@ public class AI implements Runnable
 			}
 			addMove(rootMoveList.get(APPROACH), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
-			log(PV, logMove(b, n, bestPrunedMove));
+			log(PV, "\n" + logMove(b, n, bestPrunedMove));
 			log(DETAIL, "\n<< pick best pruned move\n");
 			}
 
@@ -1018,7 +1018,7 @@ public class AI implements Runnable
 				bestMoveValue = vm;
 				ncount = 2;
 			} else {
-				log(PV, "\nPV:" + n + " " + vm + " < " + bestMoveValue + "," + bestMovePlyValue + ": best move discarded.");
+				log(PV, "\nPV:" + n + " " + vm + " < " + bestMoveValue + "," + bestMovePlyValue + ": best move discarded.\n");
 				log("<<< singular extension");
 				continue;
 			}
@@ -1141,7 +1141,8 @@ public class AI implements Runnable
 		// known, it ceases to move.
 
 			Rank fprank = fp.getRank();
-			if (fprank == Rank.BOMB && fp.isKnown())
+			if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
+				&& fp.isKnown())
 			 	continue;
 
 		// TBD: Far attacks by nines or unknown pieces

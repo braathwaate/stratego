@@ -240,26 +240,41 @@ public class Piece implements Comparable<Piece>
 
 	public void setActingRankChaseEqual(Rank r)
 	{
-		actingRankChase = r;
-		flags &= ~IS_LESS;
-
 		// Reset moves.  Chase rank matures after a certain
 		// number of subsequent moves to give the AI time
 		// to confirm (attack) the suspected rank.
-		if (moves != 0)
+		//
+		// Note: that if a prior rank was already set, the move
+		// count is not reset.  For example,
+		// (1) an opponent piece chased a Three,
+		//	earning it chase rank of Three.
+		//	so the AI suspects that the piece is Two.
+		// (2) Both of the opponent Threes are known or gone.
+		// (3) So the AI Four thinks that it is invincible,
+		//	because the only lower piece is a One.
+		//	But Then the AI Four is attacked by the real Two.
+		// 	This makes the piece in (1) a suspected One.
+		// (4) Next, the suspected One chases the AI Two.
+		//	This earns it a chase rank of Two.
+		//  It would be a mistake to reset moves after (4),
+		//	because the AI Two was invincible and then not.
+		// 	This could cause the AI Two to become cornered.
+
+		if (r == Rank.NIL && moves != 0)
 			moves = 1;
+
+		actingRankChase = r;
+		flags &= ~IS_LESS;
+
 	}
 
 	public void setActingRankChaseLess(Rank r)
 	{
+		if (r == Rank.NIL && moves != 0)
+			moves = 1;
+
 		actingRankChase = r;
 		flags |= IS_LESS;
-
-		// Reset moves.  Chase rank matures after a certain
-		// number of subsequent moves to give the AI time
-		// to confirm (attack) the suspected rank.
-		if (moves != 0)
-			moves = 1;
 	}
 
 	public boolean isRankLess()
