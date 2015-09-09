@@ -1152,8 +1152,8 @@ public class Board
 		// The approaching unknown will acquire a chase rank of Two,
 		// and no chase rank is assigned to the protector.
 		//
-		// However, if the unknown chased piece neglects to attack
-		// a known piece, it can be certain that the unknown protector
+		// However, if the unknown chased piece neglects to attack,
+		// it can be certain that the unknown protector
 		// is the stronger piece.
 		//
 		// For example, known Red Five approaches unknown Blue
@@ -1165,7 +1165,6 @@ public class Board
 		// B? -- -- 
 
 			if (!chased.isKnown()) {
-				assert chaser.isKnown() : "unknown chaser?";
 				if (m.getPiece() == chased)
 					return;
 
@@ -1644,17 +1643,73 @@ public class Board
 			Piece p = getPiece(i);
 			if (p == null)
 				continue;
+
+		// reset suspected ranks to unknown
+		// because these are recalculated each time
+
+			if (p.getColor() == Settings.bottomColor
+				&& p.isSuspectedRank()) {
+				p.setKnown(false);
+				p.setRank(Rank.UNKNOWN);
+			}
+
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().toInt()-1]++;
 			if ((p.hasMoved() || p.isKnown())
 				&& p.getRank() != Rank.BOMB)
 				piecesNotBomb[p.getColor()]++;
 
-			if (p.getRank() == Rank.FLAG)
+			if (p.getRank() == Rank.FLAG
+				&& p.getColor() == Settings.topColor)
 				flag[p.getColor()] = p;
 		}
 
-		// The pieces at the front of the lanes at the start
+		for (int i = 12; i <= 120; i++) {
+			if (!Grid.isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p == null
+				|| p.getColor() != Settings.bottomColor
+				|| (p.isKnown() && !p.isSuspectedRank()))
+				continue;
+
+		// If the opponent still has any unknown Eights,
+		// assume that the suspected rank can also be an Eight,
+		// due to the possibility of bluffing to get at the flag.
+		// (The maybeEight status can be cleared during the search
+		// tree if a Seven or lower ranked piece attacks the unknown)
+			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0)
+				p.setMaybeEight(true);
+			else
+				p.setMaybeEight(false);
+
+			Rank rank = p.getActingRankChase();
+			if (rank == Rank.NIL)
+				continue;
+
+		// If the piece both chased and fled from the same rank,
+		// it means that the piece is not dangerous to the
+		// same rank, so creating a lower suspected rank
+		// would be in error.  Perhaps it should acquire a
+		// suspected rank of the same rank?  But because this is
+		// unusual behavior, the piece stays Unknown.
+
+			if (rank == p.getActingRankFleeLow()
+				|| rank == p.getActingRankFleeHigh())
+				continue;
+
+		// The AI needs time to confirm whether a suspected
+		// rank is bluffing.  The more the suspected rank moves
+		// without being discovered, the more the AI believes it.
+
+			if (rank == Rank.SPY) {
+				if (hasSpy(p.getColor()))
+					setSuspectedRank(p, Rank.SPY, p.moves < SUSPECTED_RANK_AGING_DELAY);
+
+			} else
+				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()), p.moves < 15);
+
+		} // for
 
 		// Knowing the lowest unknown expendable rank is
 		// useful in an encounter with an opponent piece that
@@ -1714,56 +1769,6 @@ public class Board
 		if (sixForay && lowestUnknownExpendableRank == 5)
 			lowestUnknownExpendableRank = 6;
 
-		for (int i = 12; i <= 120; i++) {
-			if (!Grid.isValid(i))
-				continue;
-			Piece p = getPiece(i);
-			if (p == null
-				|| p.getColor() != Settings.bottomColor
-				|| (p.isKnown() && !p.isSuspectedRank()))
-				continue;
-
-		// If the opponent still has any unknown Eights,
-		// assume that the suspected rank can also be an Eight,
-		// due to the possibility of bluffing to get at the flag.
-		// (The maybeEight status can be cleared during the search
-		// tree if a Seven or lower ranked piece attacks the unknown)
-			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0)
-				p.setMaybeEight(true);
-			else
-				p.setMaybeEight(false);
-
-			p.setKnown(false);
-			p.setRank(Rank.UNKNOWN);
-
-			Rank rank = p.getActingRankChase();
-			if (rank == Rank.NIL)
-				continue;
-
-		// If the piece both chased and fled from the same rank,
-		// it means that the piece is not dangerous to the
-		// same rank, so creating a lower suspected rank
-		// would be in error.  Perhaps it should acquire a
-		// suspected rank of the same rank?  But because this is
-		// unusual behavior, the piece stays Unknown.
-
-			if (rank == p.getActingRankFleeLow()
-				|| rank == p.getActingRankFleeHigh())
-				continue;
-
-		// The AI needs time to confirm whether a suspected
-		// rank is bluffing.  The more the suspected rank moves
-		// without being discovered, the more the AI believes it.
-
-			if (rank == Rank.SPY) {
-				if (hasSpy(p.getColor()))
-					setSuspectedRank(p, Rank.SPY, p.moves < SUSPECTED_RANK_AGING_DELAY);
-
-			} else
-				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()), p.moves < 15);
-
-		} // for
-
                 // The ai considers all isolated unmoved pieces to be bombs.
                 //
                 // So one way to fool the AI is to make the flag
@@ -1793,6 +1798,7 @@ public class Board
 		// the rest must be bombs (or the flag)
 
 		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
+		int unknownBombs = unknownRankAtLarge(c, Rank.BOMB);
 		if (possibleUnknownMovablePieces[c] == 0) {
 			unknownPiecesRemaining[c]=0;
 			for (int i=12;i<=120;i++) {
@@ -1826,7 +1832,7 @@ public class Board
 				Rank rank = p.getRank();
 				if (c == Settings.topColor)
 					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai pieces not bomb or flag?";
-				else if (unknownRankAtLarge(c, Rank.BOMB) != 0) {
+				else if (unknownBombs != 0) {
 		// Set setSuspectedRank (not rank)
 		// because the piece is suspected to
 		// be a bomb, but it could be the flag.
@@ -2187,7 +2193,10 @@ public class Board
 	// with the last move.
 	// assert flagp != null : "Well, where IS the flag?";
 
-			flag[c] = flagp;
+			if (flagp != null) {
+				flag[c] = flagp;
+				flagp.setSuspectedRank(Rank.FLAG);
+			}
 
 		} // maybe == 0 (opponent flag only)
 
@@ -2196,6 +2205,7 @@ public class Board
 
 	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count)
 	{
+		final int nearDir[] = { 23, 22, 21, 13, 12, 11, 10, 9, 2, 1, -1, -2, -9, -10, -11, -12, -13, -21, -22, -23 };
 		int size = 99;
 		int bestGuess = 99;
 		for (int i = 0; i < maybe_count; i++) {
@@ -2213,25 +2223,24 @@ public class Board
 			}
 
 			boolean exposed = false;
-			for (int j = 1; maybe[start][j] != 0; j++)
-				for (int d : dir) {
-					int k = maybe[start][j] + d;
-					if (!Grid.isValid(k))
-						continue;
-					Piece p = getPiece(k);
-					if (p == null
-						|| p.getColor() != getPiece(maybe[start][0]).getColor())
-						exposed = true;
+			for (int d : nearDir) {
+				int k = maybe[start][0] + d;
+				if (k < 0 || k > 120 || !Grid.isValid(k))
+					continue;
+				Piece p = getPiece(k);
+				if (p == null
+					|| p.getColor() != getPiece(maybe[start][0]).getColor())
+					exposed = true;
 
 		// The AI also looks at the defense of movable
 		// pieces near the structures.  If the opponent is leaving
 		// a structure undefended, it likely is a ruse.
 
-					else if (p.hasMoved()) {
-						exposed = true;
-						nb--;
-					}
+				else if (p.hasMoved()) {
+					exposed = true;
+					nb--;
 				}
+			}
 
 		// Note: If there is a corner bomb structure (2 bombs) and
 		// a 3 bomb structure, the 3 bomb structure normally
@@ -2258,8 +2267,10 @@ public class Board
 
 		Piece flagp = getPiece(maybe[bestGuess][0]);
 		int color = flagp.getColor();
-		if (color == Settings.bottomColor)
+		if (color == Settings.bottomColor) {
 			flag[color] = flagp;
+			flagp.setSuspectedRank(Rank.FLAG);
+		}
 
 		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
 
@@ -2290,8 +2301,6 @@ public class Board
 		// (See riskOfLoss()).
 
 				if (eightAttack) {
-					p.setSuspectedRank(Rank.BOMB);
-
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
 		// bomb pattern are known.  This eliminates them
@@ -2302,6 +2311,8 @@ public class Board
 
 					if (maybe_count == 1)
 						p.makeKnown();
+					p.setSuspectedRank(Rank.BOMB);
+
 				}
 			} else if (p.getRank() == Rank.BOMB
 				&& maybe_count == 1)
