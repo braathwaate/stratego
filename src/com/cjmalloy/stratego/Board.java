@@ -1979,6 +1979,7 @@ public class Board
 		open_count[c] = 0;
 
 		int lastbp = 0;
+		int bestGuess = 99;
                 for ( int[] bp : bombPattern ) {
 			int[] b = new int[6];
 			for ( int i = 0; bp[i] != 0; i++) {
@@ -2011,10 +2012,11 @@ public class Board
 				// b[k] == 0 means possible flag structure
 
 				if (b[k] == 0) {
-					maybe[maybe_count[c]++]=b;
 					if (open) {
+						bestGuess = maybe_count[c];
 						open_count[c]++;
 					}
+					maybe[maybe_count[c]++]=b;
 
 		// Note: Adjacent bomb structures are considered to be
 		// only one structure, because it only takes one Eight
@@ -2047,7 +2049,18 @@ public class Board
 
 		if (maybe_count[c] >= 1) {
 
-			genDestBombedFlag(maybe, maybe_count[c], open_count[c]);
+			if (bestGuess == 99) {
+				bestGuess = getBestGuess(maybe, maybe_count[c]);
+
+		// If structure is not exposed at the start end,
+		// bestGuess will be 99.  Eventually, some portion
+		// of a structure will become exposed.
+
+				if (bestGuess == 99)
+					return;
+			}
+
+			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 
 		} else if (c == Settings.bottomColor) {
 
@@ -2203,7 +2216,7 @@ public class Board
 		} // color c
 	}
 
-	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count)
+	int getBestGuess(int[][] maybe, int maybe_count)
 	{
 		final int nearDir[] = { 23, 22, 21, 13, 12, 11, 10, 9, 2, 1, -1, -2, -9, -10, -11, -12, -13, -21, -22, -23 };
 		int size = 99;
@@ -2232,11 +2245,11 @@ public class Board
 					|| p.getColor() != getPiece(maybe[start][0]).getColor())
 					exposed = true;
 
-		// The AI also looks at the defense of movable
-		// pieces near the structures.  If the opponent is leaving
+		// The AI also looks at possible defenders
+		// near the structures.  If the opponent is leaving
 		// a structure undefended, it likely is a ruse.
 
-				else if (p.hasMoved()) {
+				else if (p.getRank() != Rank.BOMB) {
 					exposed = true;
 					nb--;
 				}
@@ -2257,13 +2270,12 @@ public class Board
 				bestGuess = start;
 			}
 		} // i
+		return bestGuess;
+	}
 
-		// If structure is not exposed at the start end,
-		// bestGuess will be 99.  Eventually, some portion
-		// of a structure will become exposed.
 
-		if (bestGuess == 99)
-			return;
+	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
+	{
 
 		Piece flagp = getPiece(maybe[bestGuess][0]);
 		int color = flagp.getColor();

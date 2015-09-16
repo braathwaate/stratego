@@ -1559,7 +1559,10 @@ public class AI implements Runnable
 		Piece tp = b.getPiece(to);
 		if (fp == null
 			|| fp.getColor() != b.bturn
-			|| (tp != null && tp.getColor() == b.bturn))
+			|| (tp != null && tp.getColor() == b.bturn)
+			|| (fp.isKnown()
+				&& (fp.getRank() == Rank.BOMB
+					|| fp.getRank() == Rank.FLAG)))
 			return false;
 		return true;
 	}
