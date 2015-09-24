@@ -796,14 +796,6 @@ public class Board
 		if (chased.isKnown())
 			return;
 
-		// If an unknown piece has been fleeing,
-		// and gets trapped in some way, it may just give up.
-		// So do not assign a chase rank equal to the flee rank.
-
-		if (chased.getActingRankFleeLow().toInt() <= chaser.getApparentRank().toInt()
-			&& chased.getActingRankFleeHigh().toInt() >= chaser.getApparentRank().toInt())
-			return;
-
 		Rank arank = chased.getActingRankChase();
 
 		// An unknown chase rank, once set, is never changed to
@@ -1512,7 +1504,6 @@ public class Board
 		int color = p.getColor();
 		int r = rank.toInt();
 		assert color == Settings.bottomColor : "getChaseRank() only for opponent pieces";
-		int j = r;
 		Rank newRank = Rank.UNKNOWN;
 
 		// If a piece approaches an unknown piece, the approacher is
@@ -1552,6 +1543,7 @@ public class Board
 		// is also positive.
 
 		if (r <= 7) {
+			int j = r;
 			if (!rankLess)
 				j--;
 			for (int i = j; i > 0; i--)
@@ -1769,14 +1761,6 @@ public class Board
 		if (sixForay && lowestUnknownExpendableRank == 5)
 			lowestUnknownExpendableRank = 6;
 
-                // The ai considers all isolated unmoved pieces to be bombs.
-                //
-                // So one way to fool the AI is to make the flag
-                // isolated on the front rank (by moving all pieces that
-                // surround it) and then the AI will not attack it until
-                // it is the last piece remaining.  I doubt that few
-                // opponents will ever realize this without reading this code.
-                //
                 possibleBomb();
 
 		for (int c = RED; c <= BLUE; c++) {
@@ -1924,6 +1908,16 @@ public class Board
 	// the piece to be something else, usually a Flag),
 	// reset the piece rank to Bomb so that the AI pieces
 	// will not want to attack it.
+
+	// The ai considers all isolated unmoved pieces to be bombs.
+	//
+	// So one way to fool the AI is to make the flag
+	// isolated on the front rank (by moving all pieces that
+	// surround it) and then the AI will not attack it until
+	// it is the last piece remaining.  I doubt that few
+	// opponents will ever realize this without reading this code.
+	//
+
 	private void possibleBomb()
 	{
 		for (int i = 78; i <= 120; i++) {
@@ -1939,14 +1933,35 @@ public class Board
 					if (!Grid.isValid(j))
 						continue;
 					Piece p = getPiece(j);
-					if (p != null && !p.hasMoved()) {
+
+	// pieces surrounding corner pieces are always suspected bombs
+	// and the corner piece is never a suspected bomb.
+
+					if (i == 111 || i == 120) {
+						if (p == null
+							|| p.hasMoved()
+							|| (p.isKnown() && p.getRank() != Rank.BOMB)) {
+							found = true;
+							break;
+						}
+					} else if (p != null
+						&& !p.hasMoved()) {
 						found = true;
 						break;
 					}
 				}
 				if (!found) {
-		// transform the piece into a suspected bomb.
-					tp.setSuspectedRank(Rank.BOMB);
+
+	// transform the piece into a suspected bomb.
+
+					if (i == 111) {
+						getPiece(100).setSuspectedRank(Rank.BOMB);
+						getPiece(112).setSuspectedRank(Rank.BOMB);
+					} else if (i == 120) {
+						getPiece(119).setSuspectedRank(Rank.BOMB);
+						getPiece(109).setSuspectedRank(Rank.BOMB);
+					} else
+						tp.setSuspectedRank(Rank.BOMB);
 				}
 			}
 		}
@@ -2223,9 +2238,23 @@ public class Board
 		int bestGuess = 99;
 		for (int i = 0; i < maybe_count; i++) {
 
-			// compute the number of bombs in the structure
+		// compute the number of bombs in the structure
+
 			int nb;
-			for (nb = 1; maybe[i][nb] != 0; nb++);
+			for (nb = 1; maybe[i][nb] != 0; nb++) {
+
+		// If the one of the possible bombs has a chase rank
+		// (meaning that it protected some piece under attack),
+		// it is much less likely that the piece is actually
+		// a bomb, unless the player is a bluffer.
+
+				Piece p = getPiece(maybe[i][nb]);
+				if (!p.isKnown()
+					&& p.getActingRankChase() != Rank.NIL) {
+					nb = 99;
+					break;
+				}
+			}
 			nb--;
 
 			int start = i;

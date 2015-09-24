@@ -1973,12 +1973,11 @@ public class AI implements Runnable
 	// deep that it will lose the chase, but unless the
 	// opponent is highly skilled, the opponent will likely
 	// not realize it.
-	//
 
 	void genDeepSearch()
 	{
-
 		final int MAX_STEPS = 2;
+		final int MAX_STEPS2 = 4;
 		for (Piece fp : b.pieces[Settings.topColor]) {
 			if (fp == null)	// end of list
 				break;
@@ -1996,6 +1995,7 @@ public class AI implements Runnable
 			if (!b.grid.isCloseToEnemy(Settings.topColor, fp.getIndex(), MAX_STEPS))
 				continue;
 
+			int attackers = 0;
 			for (Piece tp : b.pieces[Settings.bottomColor]) {
 				if (tp == null)	// end of list
 					break;
@@ -2006,7 +2006,7 @@ public class AI implements Runnable
 					continue;
 
 				int steps = Grid.steps(fp.getIndex(), tp.getIndex());
-				if (steps > MAX_STEPS)
+				if (steps > MAX_STEPS2)
 					continue;
 
 	// TBD: If Two Squares is in effect and the chased and chaser pieces
@@ -2031,14 +2031,30 @@ public class AI implements Runnable
 				if (vm >= -5)
 					continue;
 
+				attackers++;
+				if (steps > MAX_STEPS)
+					continue;
+
+				log("Deep search (" + steps + "):" + tp.getRank() + " chasing " + fp.getRank());
+
 				if (deepSearch == 0
 					|| steps > deepSearch) {
 					deepSearch = 2*steps-1;
-			
-					log("Deep search (" + deepSearch + "):" + tp.getRank() + " chasing " + fp.getRank());
+
 				}
 			} //tp
+
+	// If there are two attackers nearby, then use broad search
+	// to try to avoid becoming trapped by the two attackers.
+
+			if (attackers >= 2) {
+				deepSearch = 0;
+				return;
+			}
 		} //fp
+
+		if (deepSearch != 0)
+			log("Deep search (" + deepSearch + ") in effect");
 	}
 
 	String logPiece(Piece p)
