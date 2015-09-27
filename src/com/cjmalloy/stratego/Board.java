@@ -80,6 +80,7 @@ public class Board
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int lowestUnknownExpendableRank;
 	protected boolean sixForay = false;
+	protected boolean fiveForay = false;
 	protected int guessedRankCorrect;
 	public int blufferRisk = 4;
 	protected int[] maybe_count = new int[2];
@@ -1058,6 +1059,12 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
+		// check if the square was open before the last move
+
+			UndoMove um1 = getLastMove(1);
+			if (j == um1.getTo())
+				open++;
+
 			if (p.getRank() != Rank.UNKNOWN) {
 				if (knownProtector == null
 					|| knownProtector.getRank().toInt() > p.getRank().toInt())
@@ -1761,6 +1768,16 @@ public class Board
 		if (sixForay && lowestUnknownExpendableRank == 5)
 			lowestUnknownExpendableRank = 6;
 
+		fiveForay = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
+			) > 15;
                 possibleBomb();
 
 		for (int c = RED; c <= BLUE; c++) {
@@ -2341,7 +2358,9 @@ public class Board
 		// these pieces if the reward is large enough.
 		// (See riskOfLoss()).
 
-				if (eightAttack) {
+				if (eightAttack
+					&& p.getRank() != Rank.BOMB) {
+
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
 		// bomb pattern are known.  This eliminates them

@@ -73,12 +73,10 @@ public class TestingBoard extends Board
 	protected boolean[][] neededRank = new boolean[2][15];	// needed ranks
 	protected int[][][][] planA = new int[2][15][2][121];	// plan A
 	protected int[][][][] planB = new int[2][15][2][121];	// plan B
-	protected int[][] winRank = new int[15][15]; // winfight cache
 	protected int[] sumValues = new int[2];
 	protected int value;	// value of board
 	protected int[] unmovedValue = new int[121];    // unmoved value
 	protected int[][] valueStealth = new int[2][15];
-	protected static final int importantRank[] = { 1, 2, 3, 8 };
 	protected static final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
 	protected static final int attacklanes[][] = { { 78, 79}, { 82, 83}, {86, 87} };
 	protected long[] hashTest = new long [2];
@@ -90,7 +88,13 @@ public class TestingBoard extends Board
 	protected UndoMove lastMove;
 	protected boolean knownAIOne;
 	protected int[] unknownRank = new int[2];
-	protected static final int forayMap[] = {
+
+	// The idea behind a Six Foray is to discover low ranked pieces
+	// and win high ranked pieces while avoiding Fives, Fours and Bombs.
+	// Low ranks are usually positioned behind the lakes and high
+	// ranks such as Eights are usually on the last row.
+
+	protected static final int sixForayMap[] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -98,9 +102,25 @@ public class TestingBoard extends Board
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+		1, 0, 1, 1, 0, 0, 1, 1, 0, 1,
 		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-		0, 1, 0, 0, 0, 0, 0, 0, 1, 0,
-		0, 0, 1, 1, 1, 1, 1, 1, 0, 0
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+	};
+
+	// The idea behind a Five Foray is to 
+	// win high ranked pieces while avoiding Fours and Bombs.
+
+	protected static final int fiveForayMap[] = {
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+		1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
+		1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 	};
 
 	// De Boer (2007) suggested a formula
@@ -228,6 +248,15 @@ public class TestingBoard extends Board
 	// of its flag discovery routine).
 
 	private static final int VALUE_MOVED = 5;
+
+	// cache the winFight values for faster evaluation
+	protected static int[][] winRank = new int[15][15]; // winfight cache
+	static {
+		for (Rank frank : Rank.values())
+		for (Rank trank : Rank.values())
+			winRank[frank.toInt()][trank.toInt()]
+				= frank.winFight(trank);
+	}
 
 	public TestingBoard() {}
 	
@@ -567,7 +596,6 @@ public class TestingBoard extends Board
 		// chase(), needExpendableRank()
 		setUnmovedValues();
 
-		genWinRank();
 		// targetUnknownBlockers();
 		genPieceLists();
 
@@ -841,7 +869,16 @@ public class TestingBoard extends Board
 			v = 0;
 
 		else if (c == Settings.bottomColor) {
-			if (r == 1)
+
+	// If the opponent has a dangerous unknown rank,
+	// and the AI suspects which piece it is,
+	// it is best to keep it unknown, because once it becomes
+	// discovered, it will certainly go on a rampage.
+
+			if (dangerousUnknownRank != 99
+				&& r <= dangerousUnknownRank)
+				v = 0;
+			else if (r == 1)
 				v = 12;
 			else if (r == 2)
 				v = 8;
@@ -1017,7 +1054,8 @@ public class TestingBoard extends Board
 					if (p.getRank().toInt() < oppRank.toInt())
 						oppRank = p.getRank();
 				} else {
-					if (p.getRank().toInt() < thisRank.toInt())
+					if (p.getRank().toInt() < thisRank.toInt()
+						&& !isStealthy(p))
 						thisRank = p.getRank();
 				
 				}
@@ -1368,7 +1406,7 @@ public class TestingBoard extends Board
 		// they will all chase the piece.
 
 			if (found != 0) {
-				int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(found));
+				int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(found));
 				genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), found, DEST_PRIORITY_CHASE);
 				genPlanB(rnd.nextInt(2), destTmp2, 1-p.getColor(), found, DEST_PRIORITY_CHASE);
 			}
@@ -1510,19 +1548,24 @@ public class TestingBoard extends Board
 			if (p.getActingRankFleeLow() != Rank.NIL
 				&& p.getActingRankFleeLow().toInt() <= 4) {
 				for (int j = p.getActingRankFleeLow().toInt(); j > 0; j--)
-					if (!isInvincible(1-p.getColor(),j))
-						genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					if (!isInvincible(1-p.getColor(),j)) {
+						int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
+						genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					}
 
 			} else if (p.getActingRankFleeLow() == Rank.UNKNOWN) {
 				for ( int j : expendableRank ) {
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-					genPlanB(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
+					genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					genPlanB(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				}
 
 			} else if (p.getActingRankFleeLow() != Rank.NIL
 				&& p.getActingRankFleeLow().toInt() >= 5) {
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFleeLow().toInt(), DEST_PRIORITY_CHASE);
-					genPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), p.getActingRankFleeLow().toInt()+1, DEST_PRIORITY_CHASE);
+					int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, p.getActingRankFleeLow());
+					genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), p.getActingRankFleeLow().toInt(), DEST_PRIORITY_CHASE);
+					int destTmp3[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(p.getActingRankFleeLow().toInt()+1));
+					genPlanA(rnd.nextInt(2), destTmp3, 1-p.getColor(), p.getActingRankFleeLow().toInt()+1, DEST_PRIORITY_CHASE);
 			}
 
 		// Also use Fours and Fives to chase unknown pieces.
@@ -1533,8 +1576,9 @@ public class TestingBoard extends Board
 			for ( int j = 5; j >= 4; j--) {
 				if (isInvincible(1-p.getColor(), j))
 					continue;
-				genNeededPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), 5, DEST_PRIORITY_CHASE);
-				genPlanB(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), 5, DEST_PRIORITY_CHASE);
+				int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
+				genNeededPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+				genPlanB(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 			}
 		//
 		// Chase completely unknown pieces with known AI pieces
@@ -1549,7 +1593,7 @@ public class TestingBoard extends Board
 				if (isInvincible(1-p.getColor(), j))
 					continue;
 				else if (knownRankAtLarge(1-p.getColor(), j) != 0) {
-					int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
+					int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
 					genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 					genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				}
@@ -1755,15 +1799,6 @@ public class TestingBoard extends Board
 			}
 		} // for
 
-	}
-
-	// cache the winFight values for faster evaluation
-	private void genWinRank()
-	{
-		for (Rank frank : Rank.values())
-		for (Rank trank : Rank.values())
-			winRank[frank.toInt()][trank.toInt()]
-				= frank.winFight(trank);
 	}
 
 	// > 0 : the rank is still at large, location unknown
@@ -5844,7 +5879,8 @@ public class TestingBoard extends Board
 
 			else if ((fp.getActingRankChase() == Rank.UNKNOWN
 					|| riskExpendable)
-				&& !isNearOpponentFlag(fp)) {
+				&& !isNearOpponentFlag(fp)
+				&& dangerousUnknownRank == 99) {
 					if (tprank.toInt() < lowestUnknownExpendableRank)
 						return Rank.LOSES;	// maybe not
 					else if (tprank.toInt() == lowestUnknownExpendableRank)
@@ -5872,7 +5908,11 @@ public class TestingBoard extends Board
 		else if (fprank != Rank.EIGHT && isPossibleBomb(tp)) {
 			if (fprank == Rank.SIX
 				&& sixForay
-				&& forayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
+				&& sixForayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
+				return Rank.WINS;
+			if (fprank == Rank.FIVE
+				&& fiveForay
+				&& fiveForayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
 				return Rank.WINS;
 			return result;
 		}
@@ -5892,7 +5932,8 @@ public class TestingBoard extends Board
 			return Rank.WINS; // maybe not, but who cares?
 
 		else if (tp.getActingRankChase() == Rank.UNKNOWN
-			&& !isNearOpponentFlag(tp)) {
+			&& !isNearOpponentFlag(tp)
+			&& dangerousUnknownRank == 99) {
 				if (fprank.toInt() < lowestUnknownExpendableRank)
 					return Rank.WINS;	// maybe not
 				else if (fprank.toInt() == lowestUnknownExpendableRank)
@@ -6348,5 +6389,12 @@ public class TestingBoard extends Board
 		}
 		return false;
 	}
+
+	boolean isStealthy(Piece p)
+	{
+		return (!p.isKnown()
+			&& stealthValue(p) > pieceValue(1-p.getColor(), unknownRank[1-p.getColor()]));
+	}
+
 }
 
