@@ -271,4 +271,12 @@ public class Grid
                 else
                         return 9-y;
         }
+
+	static public int side(int color, int i)
+        {
+		if (color == Settings.topColor)
+			return i;
+		else
+			return getIndex(getX(i), 9-getY(i));
+	}
 }

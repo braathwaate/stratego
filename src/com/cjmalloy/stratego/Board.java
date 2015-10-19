@@ -78,9 +78,6 @@ public class Board
         protected int[] unknownPiecesRemaining = new int[2];
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
-	protected int lowestUnknownExpendableRank;
-	protected boolean sixForay = false;
-	protected boolean fiveForay = false;
 	protected int guessedRankCorrect;
 	public int blufferRisk = 4;
 	protected int[] maybe_count = new int[2];
@@ -1710,74 +1707,6 @@ public class Board
 
 		} // for
 
-		// Knowing the lowest unknown expendable rank is
-		// useful in an encounter with an opponent piece that
-		// has approached an AI unknown.  The AI assumes that
-		// these piece are expendable, because an opponent
-		// usually tries to avoid discovery of its lower ranks.
-
-		lowestUnknownExpendableRank = 0;
-		for (int r = 1; r <= 9; r++)
-			if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, r) > 0) {
-				lowestUnknownExpendableRank = r;
-				if (r >= 5)
-					break;
-			}
-
-		if (lowestUnknownExpendableRank == 0
-			|| (lowestUnknownExpendableRank < 5
-			&& rankAtLarge(Settings.topColor, Rank.ONE) == 0)
-			&& unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SPY) > 0)
-			lowestUnknownExpendableRank = 10;
-
-		// One exception to the rule that the AI piece loses its value
-		// in an unknown exchange is at the start of the game when
-		// few of the pieces can move and most of the expendable
-		// pieces are still unknown.  This condition is slightly
-		// favorable to a kamikaze foray by a Six, because 
-		// winning a random encounter is greater than 50%
-		// even against an unmoved piece.
-		//
-		// A Six has to win only one such encounter.
-		// Because the opponent often places
-		// its higher ranks in the front line and bombs in the
-		// rear row, odds are improved for a foray into the front row.
-		//
-		// The probability is hard to prove theoretically
-		// (because it depends on opponent setup) so
-		// one must run a series of games to prove that this
-		// is a valid rule.  One can also reason this intuitively
-		// as follows.
-		//
-		// A Six loses against 14 pieces (Bombs, 4s and 5s).
-		// Note that even if it wins only one piece and loses the
-		// next, it will also have won the stealth value of the
-		// attacker.  The probability of winning one piece is
-		// about 60%.
-
-		sixForay = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
-			) > 15;
-		if (sixForay && lowestUnknownExpendableRank == 5)
-			lowestUnknownExpendableRank = 6;
-
-		fiveForay = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
-			) > 15;
                 possibleBomb();
 
 		for (int c = RED; c <= BLUE; c++) {
@@ -2014,12 +1943,8 @@ public class Board
 		int bestGuess = 99;
                 for ( int[] bp : bombPattern ) {
 			int[] b = new int[6];
-			for ( int i = 0; bp[i] != 0; i++) {
-				if (c == Settings.topColor)
-					b[i] = bp[i];
-				else
-					b[i] = 132 - bp[i];
-			}
+			for ( int i = 0; bp[i] != 0; i++)
+				b[i] = Grid.side(c, bp[i]);
 			flagp = getPiece(b[0]);
 			if (flagp != null
 				&& (!flagp.isKnown()
@@ -2081,16 +2006,8 @@ public class Board
 
 		if (maybe_count[c] >= 1) {
 
-			if (bestGuess == 99) {
+			if (bestGuess == 99)
 				bestGuess = getBestGuess(maybe, maybe_count[c]);
-
-		// If structure is not exposed at the start end,
-		// bestGuess will be 99.  Eventually, some portion
-		// of a structure will become exposed.
-
-				if (bestGuess == 99)
-					return;
-			}
 
 			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 
@@ -2255,9 +2172,10 @@ public class Board
 		int bestGuess = 99;
 		for (int i = 0; i < maybe_count; i++) {
 
+			int nb;
+
 		// compute the number of bombs in the structure
 
-			int nb;
 			for (nb = 1; maybe[i][nb] != 0; nb++) {
 
 		// If the one of the possible bombs has a chase rank
@@ -2274,6 +2192,9 @@ public class Board
 			}
 			nb--;
 
+		// patterns closest to the back row are preferred
+			nb += i;
+
 			int start = i;
 			while (i < maybe_count - 1
 				&& Math.abs(maybe[i][0] - maybe[i+1][0]) == 1) {
@@ -2281,7 +2202,6 @@ public class Board
 				nb++;
 			}
 
-			boolean exposed = false;
 			for (int d : nearDir) {
 				int k = maybe[start][0] + d;
 				if (k < 0 || k > 120 || !Grid.isValid(k))
@@ -2289,14 +2209,13 @@ public class Board
 				Piece p = getPiece(k);
 				if (p == null
 					|| p.getColor() != getPiece(maybe[start][0]).getColor())
-					exposed = true;
+					continue;
 
 		// The AI also looks at possible defenders
 		// near the structures.  If the opponent is leaving
 		// a structure undefended, it likely is a ruse.
 
 				else if (p.getRank() != Rank.BOMB) {
-					exposed = true;
 					nb--;
 				}
 			}
@@ -2311,7 +2230,7 @@ public class Board
 		// So the AI looks for a combination of small size and
 		// large number of defenders.
 
-			if (nb < size && exposed) {
+			if (nb < size) {
 				size = nb;
 				bestGuess = start;
 			}
@@ -2325,10 +2244,6 @@ public class Board
 
 		Piece flagp = getPiece(maybe[bestGuess][0]);
 		int color = flagp.getColor();
-		if (color == Settings.bottomColor) {
-			flag[color] = flagp;
-			flagp.setSuspectedRank(Rank.FLAG);
-		}
 
 		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
 
@@ -2340,7 +2255,8 @@ public class Board
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
 		for (int i = bestGuess; i < maybe_count; i++) {
-		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
+		for (int j = 1; maybe[i][j] != 0; j++) {
+			assert Grid.isValid(maybe[i][j]) : maybe[i][j] + " is not valid ";
 			Piece p = getPiece(maybe[i][j]);
 			if (p == null
 				|| (p.isKnown() && p.getRank() != Rank.BOMB)
@@ -2385,6 +2301,10 @@ public class Board
 		break;
 		} // i
 
+		if (color == Settings.bottomColor) {
+			flag[color] = flagp;
+			flagp.setSuspectedRank(Rank.FLAG);
+		}
 	}
 	// ********* end of suspected ranks
 

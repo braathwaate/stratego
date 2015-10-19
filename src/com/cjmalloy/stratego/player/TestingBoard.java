@@ -81,6 +81,7 @@ public class TestingBoard extends Board
 	protected static final int attacklanes[][] = { { 78, 79}, { 82, 83}, {86, 87} };
 	protected long[] hashTest = new long [2];
 	protected int lowestUnknownNotSuspectedRank;
+	protected int lowestUnknownExpendableRank;
 	protected int[] nUnknownExpendableRankAtLarge = new int[2];
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
@@ -89,12 +90,13 @@ public class TestingBoard extends Board
 	protected boolean knownAIOne;
 	protected int[] unknownRank = new int[2];
 
-	// The idea behind a Six Foray is to discover low ranked pieces
-	// and win high ranked pieces while avoiding Fives, Fours and Bombs.
+	// The idea behind a foray is to discover low ranked pieces
+	// and win high ranked pieces while avoiding Bombs.
 	// Low ranks are usually positioned behind the lakes and high
 	// ranks such as Eights are usually on the last row.
+	protected boolean[] foray = new boolean[15];
 
-	protected static final int sixForayMap[] = {
+	protected static final int forayMap[] = {
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -103,22 +105,6 @@ public class TestingBoard extends Board
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
 		1, 0, 1, 1, 0, 0, 1, 1, 0, 1,
-		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-	};
-
-	// The idea behind a Five Foray is to 
-	// win high ranked pieces while avoiding Fours and Bombs.
-
-	protected static final int fiveForayMap[] = {
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
-		1, 0, 0, 0, 0, 0, 0, 0, 0, 1,
 		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
 		1, 1, 1, 1, 1, 1, 1, 1, 1, 1
 	};
@@ -334,6 +320,8 @@ public class TestingBoard extends Board
 		// but after trayRank and knownRank are calculated
 		// because genSuspectedRank depends on unknownRankAtLarge()
 		genSuspectedRank();
+
+		genForay();
 
 		// The number of expendable ranks still at large
 		// determines the risk of discovery of low ranked pieces.
@@ -580,7 +568,7 @@ public class TestingBoard extends Board
 
 		// Encourage higher ranked pieces to flee from pieces
 		// of lower ranks
-			flee(p);
+			// flee(p);
 
 		}
 		attackLanes();
@@ -1062,17 +1050,33 @@ public class TestingBoard extends Board
 			} // y
 			if (oppRank.toInt() < thisRank.toInt())
 				for (int i : attacklanes[lane]) {
-					int tmp[] = genDestTmp(GUARDED_OPEN, c, i);
 					int ranksNeeded = 1;
 					for (int r = oppRank.toInt(); ranksNeeded <= 3 && r > 1; r--) {
 						if (rankAtLarge(c, r) != 0
 							&& !isInvincible(c, r)) {
+							int tmp[] = genDestTmp(GUARDED_OPEN, c, i);
 							genNeededPlanA(0, tmp, c, r, DEST_PRIORITY_LOW);
 							genNeededPlanB(tmp, c, r, DEST_PRIORITY_LOW);
 							ranksNeeded++;
 						}
 					}
 				}
+
+
+			// Higher ranked pieces flee the lane
+			for (int r = oppRank.toInt()+1; r <= 5; r++) {
+				int[] tmp = new int[121];
+				for (int j = 0; j <= 120; j++)
+					tmp[j] = DEST_VALUE_NIL;
+
+				for (int i : attacklanes[lane])
+				for (int y = 0; y < 4; y++)
+					tmp[Grid.side(c, i - y*11)] = 5 - y;
+
+				setFleePlan(c, planA[c][r-1], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(c, planB[c][r-1], tmp, DEST_PRIORITY_FLEE);
+			}
+
 		} // lane
 		} // c
 	}
@@ -1933,14 +1937,21 @@ public class TestingBoard extends Board
 		// If the flag is partially bombed, the bomb
 		// must be protected from an unknown or Eight
 
+			Rank rankAttacker = pAttacker.getRank();
 			if (pside != null
-				&& pside.getRank() == Rank.BOMB
-				&& !(pAttacker.getRank() == Rank.UNKNOWN
-					|| pAttacker.getRank() == Rank.EIGHT))
-				continue;
+				&& pside.getRank() == Rank.BOMB) {
+				if (!(rankAttacker == Rank.UNKNOWN
+					|| rankAttacker == Rank.EIGHT))
+					continue;
 
-			int destTmp3[] = genDestTmp(GUARDED_OPEN, color, side);
-			Piece defender = getDefender(color, destTmp3, pAttacker.getRank(), stepsAttacker);
+		// If the approaching piece is unknown, assume that it
+		// could be a low ranked piece on a kamikaze attack to discover the flag,
+		// so the AI needs an equal or even lower piece.
+
+			} else if (rankAttacker == Rank.UNKNOWN)
+				rankAttacker = Rank.toRank(lowestUnknownNotSuspectedRank);
+
+			Piece defender = getDefender(color, destTmp, rankAttacker, stepsAttacker);
 			if (defender == null)
 				continue;	// no imminent danger
 
@@ -1954,8 +1965,7 @@ public class TestingBoard extends Board
 		// TBD: If the active piece is able to defend, then
 		// use it.  Fix this in getDefender().
 
-			int destTmp4[] = genDestTmpGuarded(1-color, side, pAttacker.getRank());
-			setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG);
+			setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG);
 		} // dir
 	}
 
@@ -3005,6 +3015,125 @@ public class TestingBoard extends Board
 		}
 	}
 
+	// An expedition into the unmoved and unknown area of the
+	// opponents ranks is called a foray.  Statistically,
+	// random forays result in a loss of material, if the opponent has
+	// strategically placed its pieces to rebuff them.
+	//
+	// Yet if the AI does not make any forays, then the opponent
+	// will be free to use its pieces in a sustained foray of its
+	// own, eventually uncovering the flag location, and winning
+	// even when the AI gains material.
+	//
+	// Humans are often able to guess the ranks of unmoved pieces
+	// and direct forays accordingly, resulting in material gain.
+	// This ability needs to distilled into an algorithm giving
+	// the AI the same advantage.
+
+	public void genForay()
+	{
+		// Knowing the lowest unknown expendable rank is
+		// useful in an encounter with an opponent piece that
+		// has approached an AI unknown.  The AI assumes that
+		// these piece are expendable, because an opponent
+		// usually tries to avoid discovery of its lower ranks.
+
+		lowestUnknownExpendableRank = 0;
+		for (int r = 1; r <= 9; r++)
+			if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, r) > 0) {
+				lowestUnknownExpendableRank = r;
+				if (r >= 5)
+					break;
+			}
+
+		if (lowestUnknownExpendableRank == 0
+			|| (lowestUnknownExpendableRank < 5
+			&& rankAtLarge(Settings.topColor, Rank.ONE) == 0)
+			&& unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SPY) > 0)
+			lowestUnknownExpendableRank = 10;
+
+
+		foray[5] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
+			) > 15;
+
+		// One exception to the rule that the AI piece loses its value
+		// in an unknown exchange is at the start of the game when
+		// few of the pieces can move and most of the expendable
+		// pieces are still unknown.  This condition is slightly
+		// favorable to a kamikaze foray by a Six, because 
+		// winning a random encounter is greater than 50%
+		// even against an unmoved piece.
+		//
+		// A Six has to win only one such encounter.
+		// Because the opponent often places
+		// its higher ranks in the front line and bombs in the
+		// rear row, odds are improved for a foray into the front row.
+		//
+		// The probability is hard to prove theoretically
+		// (because it depends on opponent setup) so
+		// one must run a series of games to prove that this
+		// is a valid rule.  And if the AI always uses its
+		// Sixes to attack, then the opponent will learn this,
+		// and simply place Fives in the front row to rebuff them.
+
+		// One can reason this intuitively as follows.
+		//
+		// A Six loses against 14 pieces (Bombs, 4s and 5s).
+		// Note that even if it wins only one piece and loses the
+		// next, it will also have won the stealth value of the
+		// attacker.  The probability of winning one piece is
+		// about 60%.
+
+		foray[6] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
+			) > 15;
+		if (foray[6] && lowestUnknownExpendableRank == 5)
+			lowestUnknownExpendableRank = 6;
+
+		foray[7] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
+			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
+			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
+			) > 15;
+
+		// The AI prefers to retain its Scouts for bluffing or
+		// for directed attack on suspected ranks,
+		// but if the AI never uses its Scouts for random attack,
+		// then the opponent would simply place its low ranked
+		// pieces in the front lines.
+		//
+		// So there is always a chance that the AI will make
+		// a random Scout attack, although the probability
+		// diminishes greatly with the number of its remaining Scouts.
+
+		int i;
+		for (i = 9 - rankAtLarge(Settings.topColor, Rank.NINE); i > 0 && rnd.nextInt(4) == 0; i--);
+		
+		if (i == 0)	
+			foray[9] = true;
+
+	}
+
 	public boolean hasPlanAPiece(int color, int r)
 	{
 		return planAPiece[color][r-1] != null;
@@ -3036,9 +3165,11 @@ public class TestingBoard extends Board
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
 		int priority = plan[1][from];
-		if (vto != DEST_VALUE_NIL
-			&& vfrom != DEST_VALUE_NIL
-			&& plan[1][to] == priority) {
+		if (vto == DEST_VALUE_NIL
+			|| vfrom == DEST_VALUE_NIL)
+			return 0;
+
+		if (plan[1][to] == priority) {
 
 		// The difference in chase plan values for adjacent squares
 		// is always 1, except if the plan was modified by
@@ -3074,7 +3205,21 @@ public class TestingBoard extends Board
 					return priority;
 				else
 					return -priority - 1;
+
+			} // to-priority == from-priority
+
+			else {
+
+		// Note: flee() is currently commented out,
+		// replaced by attacklanes() flee, and the goal is to keep the higher
+		// ranked piece off of the flee squares.
+
+				if (priority == DEST_PRIORITY_FLEE)
+					return priority;
+				else if (plan[1][to] == DEST_PRIORITY_FLEE)
+					return -priority;
 			}
+
 		return 0;
 	}
 
@@ -5886,6 +6031,10 @@ public class TestingBoard extends Board
 					else if (tprank.toInt() == lowestUnknownExpendableRank)
 						return Rank.EVEN;	// maybe not
 			}
+			else if (fp.moves == 0
+				&& foray[tprank.toInt()])
+				return Rank.LOSES;
+
 		// Any piece will take a SPY.
 
 			else if (tprank == Rank.SPY)
@@ -5906,13 +6055,8 @@ public class TestingBoard extends Board
 		// a higher value than LOSES.
 
 		else if (fprank != Rank.EIGHT && isPossibleBomb(tp)) {
-			if (fprank == Rank.SIX
-				&& sixForay
-				&& sixForayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
-				return Rank.WINS;
-			if (fprank == Rank.FIVE
-				&& fiveForay
-				&& fiveForayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
+			if (foray[fprank.toInt()]
+				&& forayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
 				return Rank.WINS;
 			return result;
 		}
@@ -6160,7 +6304,8 @@ public class TestingBoard extends Board
 	// and the AI still has its Spy, the AI usually can still win
 	// anyway).
 
-		if (!knownAIOne) {
+		if (!knownAIOne
+			&& rankAtLarge(Settings.bottomColor, Rank.TWO) != 0) {
 			UndoMove um = getLastMove(2);
 			if (um != null
 				&& um.tp != null
