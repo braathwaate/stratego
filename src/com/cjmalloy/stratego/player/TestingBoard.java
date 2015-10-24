@@ -566,10 +566,6 @@ public class TestingBoard extends Board
 		// where material can be gained.
 			chase(p);
 
-		// Encourage higher ranked pieces to flee from pieces
-		// of lower ranks
-			// flee(p);
-
 		}
 		attackLanes();
 
@@ -1178,163 +1174,6 @@ public class TestingBoard extends Board
 		}
 	}
 
-	//
-	// Flee from the piece p for pieces of higher "chaseRank"
-
-	// A goal of this logic is to avoid becoming trapped by
-	// a team of lower ranks.  In the example below, Red Three
-	// should cease its attack on Blue Four and move up before
-	// Blue can trap it with the sequence:
-	// null   1c7-b7
-	// 3a9-a8 2b10-b9
-	// null   2b9-a10
-	// It takes 6 ply to discover this trap.  Because of the
-	// horizon effect, the AI really needs 8 ply.  So this logic
-	// is needed until the AI can search to this depth.
-	//
-	// (Fleeing takes priority over chasing).
-	//
-	// 5  -- -- xx xx
-	// 6  -- -- xx xx
-	// 7  -- -- B1 --
-	// 8  -- -- -- --
-	// 9  R3 -- -- --
-	// 10 R4 B2 -- --
-	//    a  b  c  d
-	//
-	// This logic is also an offensive tactic, as the AI will
-	// try to trap an opponent piece between on its side of
-	// the board.
-	
-	protected void flee(Piece p)
-	{
-
-	// When the number of pieces is reduced, it is assumed that the risk
-	// risk of entrapment is reduced as well, so the flee code
-	// is skipped, because flee interferes with the AI ability to
-	// chase pieces.  The reduction of the number of pieces is also
-	// accompanied by an increase in evaluation ply as well.
-
-		if (npieces[p.getColor()] < 20)
-			return;
-
-	// The retreat pattern pushes the piece away and towards
-	// its back rank which is usually safer.
-	// This needs to handle the following case:
-	// xx xx -- --
-	// xx xx -- --
-	// -- -- R3 B1
-	// Red Three should move up the board rather than to the left.
-	//
-	// The 1's in the retreat pattern are safe squares.  setFleePlan()
-	// does not override chase plans on these squares if the
-	// piece is already on these squares.
-
-		int retreat[][] = {
-			{1, 1, 2, 1, 1},
-			{1, 2, 3, 2, 1},
-			{2, 3, 4, 3, 2},
-			{3, 4, 5, 4, 3},
-			{4, 5, 6, 5, 4}
-		};
-
-		int fi = p.getIndex();
-		int fx = Grid.getX(fi);
-		int fy = Grid.getY(fi);
-
-		int[] tmp = new int[121];
-		for (int j = 0; j <= 120; j++)
-			tmp[j] = DEST_VALUE_NIL;
-
-		for (int j = 0; j < 5; j++)
-		for (int k = 0; k < 5; k++) {
-			int x = fx + k - 2;
-			int y = fy + j - 2;
-			if (x < 0 || x > 9 || y < 0 || y > 9)
-				continue;
-			int i = Grid.getIndex(x, y);
-			if (!Grid.isValid(i))
-				continue;
-			if (p.getColor() == Settings.topColor)
-				tmp[i] = retreat[j][4-k];
-			else
-				tmp[i] = retreat[j][k];
-		}
-
-		if (p.isKnown() || p.isSuspectedRank()) {
-			for (int j = 5; j > p.getRank().toInt(); j--) {
-				if (lowerRankCount[p.getColor()][j-1] >= 2) {
-					setFleePlan(1-p.getColor(), planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-					setFleePlan(1-p.getColor(), planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-				}
-			}
-
-			// The unknown AI One either flees from opponent pieces
-			// (to preserve its stealth) or it has a chase plan
-			// (see chase()).
-			if (unknownRankAtLarge(1-p.getColor(), Rank.ONE) != 0
-				&& valueStealth[1-p.getColor()][0] > pieceValue(p)
-				&& p.getColor() == Settings.bottomColor
-				&& !hasFewExpendables(p.getColor())
-				&& p.getIndex() > 65)
-				setFleePlan(1-p.getColor(), planA[1-p.getColor()][0], tmp, DEST_PRIORITY_FLEE);
-
-		} else
-
-		// While an opponent piece does not deliberately
-		// flee from an unknown ai piece of lower rank,
-		// it is a negative result for the opponent to approach it.
-		// One reason is because if an ai piece of higher
-		// rank is fleeing and has a choice of fleeing directions,
-		// where one direction is towards a lower ranked ai piece, it
-		// should flee that direction because it is able to
-		// to increase its distance away from the attacker
-		// or draw the attacker towards the unknown ai piece
-		// of lower rank.  This is one way of achieving
-		// the desired result of an ai piece finding a lower
-		// ranked protector.
-
-
-			for (int j = 4; j > invincibleWinRank[1-p.getColor()]; j--) {
-		// The AI discourages its low ranked pieces from getting
-		// too close to unknown unmoved pieces,
-		// because this is often how a piece becomes trapped.
-		// This does not apply to its invincible pieces
-		// that are known or have low stealth
-		// which it allows to get close to any piece.
-
-				if (knownRankAtLarge(1-p.getColor(), j) != 0
-					|| valueStealth[1-p.getColor()][j-1] <= values[p.getColor()][unknownRank[p.getColor()]]) {
-
-		// Commented out for version 9.2.
-		// This defensive strategy works quite well, but
-		// it leads to draws if the opponent *never* chases
-		// the AI piece.  The AI piece has to approach unknown
-		// territory and bait the opponent into chasing it, thereby
-		// allowing the AI to guess its rank.  The AI has to rely
-		// on the search tree to protect it from entrapment.
-		// Once the opponent piece rank is suspected, then the
-		// AI piece can flee back to its protective rank and send
-		// an expendable piece to confirm the rank of the chaser.
-		// Its a risky strategy given the shallow depth of the
-		// search tree, but this can be rectified by deeper
-		// searching in the future.
-
-		//			if (p.hasMoved() || j <= invincibleRankInt[1-p.getColor()])
-						continue;
-
-		// If the chasing rank is unknown, it is discouraged
-		// from getting close to *any* unknown piece,
-		// because this is how it can become discovered.
-
-				} else if (hasFewExpendables(p.getColor()))
-					continue;
-
-				setFleePlan(1-p.getColor(), planA[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-				setFleePlan(1-p.getColor(), planB[1-p.getColor()][j-1], tmp, DEST_PRIORITY_FLEE);
-			}
-	}
-
 	protected void chaseWithExpendable(Piece p, int i)
 	{
 		for ( int r = 1; r <= 10; r++)
@@ -1345,14 +1184,16 @@ public class TestingBoard extends Board
 			}
 	}
 
-	protected void chaseWithUnknownExpendable(Piece p, int tmp[])
+	protected void chaseWithUnknown(Piece p, int tmp[])
 	{
-		for ( int r = 1; r <= 10; r++)
-			if (isExpendable(1-p.getColor(), r)) {
-				Piece a = planAPiece[1-p.getColor()][r-1];
-				if (a != null) {
-					if (a.isKnown())
-						continue;
+		boolean found = false;
+		int valuableRank = 0;
+		int valuableRankValue = 0;
+		for ( int r = 1; r <= 10; r++) {
+			Piece a = planAPiece[1-p.getColor()][r-1];
+			if (a != null) {
+				if (a.isKnown())
+					continue;
 
 		// If the expendable has fled from this rank before,
 		// it is no longer a convincing bluffer.
@@ -1361,13 +1202,27 @@ public class TestingBoard extends Board
 		// it may have fled to avoid detection (or capture,
 		// in the case of a Spy).
 
-					if (a.getActingRankFleeLow() == p.getRank())
-						continue;
-				}
+				if (a.getActingRankFleeLow() == p.getRank())
+					continue;
+			}
 
+			if (isExpendable(1-p.getColor(), r)) {
 				genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
 				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+				found = true;
+			} else if (valuableRank == 0 || valuableRankValue < pieceValue(1-p.getColor(), r)) {
+				valuableRank = r;
+				valuableRankValue = pieceValue(1-p.getColor(), r);
 			}
+		}
+				
+
+		// If unknown expendables are exhausted, bluff with some other minor piece
+
+		if (!found && valuableRank != 0) {
+			genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+			genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+		}
 	}
 
 	// Chase the piece "p"
@@ -1518,7 +1373,7 @@ public class TestingBoard extends Board
 				&& (!isInvincible(p)
 					|| chasedRank == 1 && hasSpy(1-p.getColor()))
 				|| chasedRank == Rank.SPY.toInt())
-				chaseWithUnknownExpendable(p, destTmp[GUARDED_UNKNOWN]);
+				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
 
 		// Chase suspected low ranked pieces with known
 		// expendables to confirm their identity
@@ -1798,7 +1653,7 @@ public class TestingBoard extends Board
 				} else if (j != 1)
 					genPlanA(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				// tbd: PlanB as well
-				chaseWithUnknownExpendable(p, destTmp[GUARDED_UNKNOWN]);
+				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
 
 			}
 		} // for
@@ -2453,7 +2308,7 @@ public class TestingBoard extends Board
 					if (!Grid.isValid(j))
 						continue;
 
-					destBomb(j,
+					destFlagBomb(j,
 						maybe_count[c] - open_count[c] <= opponentEightsAtLarge);
 				}
 
@@ -2546,12 +2401,12 @@ public class TestingBoard extends Board
 	// The idea is once the low ranked piece reaches the bomb area
 	// with the eight trailing behind, the search tree will
 	// discover a way for the eight to win the bomb.
-	private void destBomb(int j, boolean sendEight)
+	private void destFlagBomb(int j, boolean sendEight)
 	{
 		Piece p = getPiece(j);
 		assert !(p == null
 			|| (p.isKnown() && p.getRank() != Rank.BOMB)
-			|| p.hasMoved()) : "destBomb() called on non-bomb";
+			|| p.hasMoved()) : "destFlagBomb() called on non-bomb";
 
 		// If the structure is intact, encourage the Eight
 		// to sacrifice itself to open the flag to attack
@@ -2581,13 +2436,21 @@ public class TestingBoard extends Board
 		// higher rank is pointless and counterproductive.
 		// 
 
+		int destTmp[] = genDestTmp(GUARDED_OPEN, p.getColor(), near);
+
 		if (sendEight) {
 
 		// Send the miner(s)
-		// multiple structures can be investigated in parallel
+		//
+		// The active miner heads directly for the flag, regardless of any protection,
+		// so GUARDED_OPEN is used.  Another miner, if available, pursues the flag
+		// through an unguarded path.  (At least one miner has to head directly for
+		// the flag regardless of protection; otherwise, the miner would simply retrace
+		// its steps to an alternative path, the protection would move, and the miner
+		// would retrace again).
 
-			int destTmp[] = genDestTmpGuarded(p.getColor(), j, Rank.EIGHT);
-			genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_ATTACK_FLAG);
+			if (hasFewExpendables(p.getColor()))
+				genNeededPlanA(0, destTmp, 1-p.getColor(), 8, DEST_PRIORITY_ATTACK_FLAG);
 			int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), j, Rank.EIGHT);
 			genPlanB(destTmp2, 1-p.getColor(), 8, DEST_PRIORITY_ATTACK_FLAG);
 		}
@@ -2610,8 +2473,7 @@ public class TestingBoard extends Board
 		// (3) keep the guard pinned near the flag area, allowing the
 		//	player to attack other pieces
 
-		int destTmp[] = genDestTmp(GUARDED_OPEN, p.getColor(), near);
-		chaseWithUnknownExpendable(p, destTmp);
+		chaseWithUnknown(p, destTmp);
 	}
 
 	// Generate a matrix of consecutive values with the highest
@@ -2757,6 +2619,8 @@ public class TestingBoard extends Board
 		return genDestTmpCommon(GUARDED_OPEN_CAUTIOUS, color, to, guard);
 	}
 
+	// Used by invincible pieces and the Spy, which move towards opponent pieces
+	// even if blocked by pieces of their own color
 	private int[] genDestTmpGuarded(int color, int to, Rank guard)
 	{
 		return genDestTmpCommon(GUARDED_CAUTIOUS, color, to, guard);
