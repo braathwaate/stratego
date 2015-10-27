@@ -2006,6 +2006,11 @@ public class AI implements Runnable
 					continue;
 
 				int steps = Grid.steps(fp.getIndex(), tp.getIndex());
+
+	// TBD: MAX_STEPS2 is only an approximation of the steps to the attacker
+	// because the attacker could be blocked by the lakes, bombs, or its
+	// own piece.
+
 				if (steps > MAX_STEPS2)
 					continue;
 

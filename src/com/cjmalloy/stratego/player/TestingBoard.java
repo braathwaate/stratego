@@ -161,9 +161,7 @@ public class TestingBoard extends Board
 	//	both rank N and N-1 have the same strength.
 	// • Bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
-	// • The Spy is the lowest valued Piece on the board.  However,
-	//	it has the highest stealth value.  The stealth value
-	//	of an unsuspected Spy is equal to the value of a
+	// • An unsuspected Spy is equal to the value of a
 	//	Colonel.  However, once the Spy is suspected,
 	//	it has limited value except in certain reduced piece
 	//	endgames with Ones.
@@ -197,16 +195,16 @@ public class TestingBoard extends Board
 	// almost any discovery exceeds their value.  If the AI is
 	// winning (and therefore its pieces are reduced in value)
 	// a known Seven (or Nine) should sacrifice itself
-	// to discover a Four (15 stealth)
+	// to discover a Four (20 stealth)
 	// but not a Five (10 stealth).  
 
 	private static final int VALUE_THREE = 200;
 	private static final int VALUE_FOUR = 100;
 	private static final int VALUE_FIVE = 50;
 	private static final int VALUE_SIX = 25;
-	private static final int VALUE_SEVEN = 16;
+	private static final int VALUE_SEVEN = 18;
 	private static final int VALUE_EIGHT = 30;
-	private static final int VALUE_NINE = 12;
+	private static final int VALUE_NINE = 14;
 	private static final int [] startValues = {
 		0,
 		800,	// 1 Marshal
@@ -218,7 +216,7 @@ public class TestingBoard extends Board
 		VALUE_SEVEN,	// 7 Sergeant
 		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
-		VALUE_SEVEN,	// Spy value with opponent One still on board
+		VALUE_THREE,	// Spy value with opponent One still on board
 		0,	// Bomb (valued by code)
 		1000,	// Flag (valued by code)
 		0,	// Unknown (valued by code, minimum piece value)
@@ -408,10 +406,16 @@ public class TestingBoard extends Board
 
 		// If the opponent Marshal is off on the board,
 		// the Spy value is reduced.
-		// (The Spy stealth changes as well.  See genValueStealth()).
 
 			if (rankAtLarge(1-c, Rank.ONE) == 0)
-				values[c][10] /= 2;
+				values[c][10] = values[c][7]/2;
+
+		// The opponent spy, once suspected, is worth maybe a Five, but
+		// this depends on the remaining pieces, because in an endgame with
+		// Ones on the board, the Spy can be the critical piece to win the game.
+
+			else if (c == Settings.bottomColor)
+				values[c][10] = 60; // TBD: depends on remaining pieces
 
 		// Do invincible pieces have higher value than
 		// non-invincible pieces?
@@ -685,15 +689,21 @@ public class TestingBoard extends Board
 	// But if doesn't take a Three, then the opponent Threes
 	// become defacto invincible once the Two is known.
 	//
-	// This means that an unknown AI One must take
-	// a Three if its Two is known or has been lost.
+	// Currently, an unknown AI One will attack a Three
+	// only if any of the Twos or any of the Threes
+	// are gone from the board.  Otherwise, the AI One will only
+	// pursue the Two, ignoring the opponent Threes.
 	//
-	// The sum of the higher ranked pieces is used because the
+	// An unknown General will attack a Four only if a couple of
+	// Threes are gone from the board.  (If the opponent makes a foray
+	// with a Four, the AI relies on the fact that it has 2 Threes
+	// and 3 Fours to repulse the attack).
+	//
 	// Stealth value for pieces (1-4) is slightly less than
-	// the sum of next two higher ranked pieces still on the board
+	// the sum of next six higher ranked pieces still on the board
 	// times a risk factor if stealth is maintained.
 	//
-	// The risk factor is 20%, which is the probability
+	// The risk factor is 10%, which is the probability
 	// of capture of each of these pieces.
 	//
 	// If the piece is the only player piece that prevents an opponent
@@ -701,25 +711,23 @@ public class TestingBoard extends Board
 	// by 1/3.  If there are more than one player pieces, the value is
 	// decreased by 1/3.
 	//
-	// stealth of a lower ranked piece decreases the less chance
-	// it has for capture a valuable piece.
+	// Stealth of a low ranked piece decreases the less chance
+	// it has for capture a less valuable piece.
 	// For example, if the Ones are still on the board, the
 	// Twos have been removed, the stealth of the One
 	// drops in half.
 	//
-	// A One stealth value is equal to 800 *.2 (160 +- 53 points)
-	// if the both Twos are still on the board and player Two
-	// is unknown.
+	// A One stealth value is equal to 1600 *.1 (160 +- 53 points)
+	// if both Twos and all the Threes are still on the board.
 	//
-	// A Two stealth value is equal to 400 *.2 (80 +- 27 points)
-	// if two Threes are still on the board and any player Three
-	// is unknown.
+	// A Two stealth value is equal to 1000 *.1 (100 +- 33 points)
+	// if all Threes and two of the Fours are still on the board.
 	//
-	// A Three stealth value is equal to 200 *.2 (40 +- 13 points)
-	// if two Fours are still on the board.
+	// A Three stealth value is equal to 600 *.1 (60 +- 20 points)
+	// if six Fours are still on the board.
 	//
-	// A Four stealth value is equal to 100 * .2 (20 +- 6 points)
-	// if two Fives are still on the board.
+	// A Four stealth value is equal to 300 * .1 (30 +- 10 points)
+	// if six Fives are still on the board.
 	//
 	// Stealth value for pieces (6-9) derives not from opponent piece value,
 	// but from opponent stealth value and bluffing.
@@ -832,16 +840,9 @@ public class TestingBoard extends Board
 
 		else if (r == 10) {
 
-		// If the opponent Marshal is still left at large,
-		// the Spy has great stealth, but without an opponent
-		// Marshal, the Spy stealth is equal to about a Seven.
+		// Spy stealth is equal to about a Seven.
 
-			if (rankAtLarge(1-c, Rank.ONE) == 0)
-				v = 8;
-			else if (c == Settings.bottomColor)
-				v = 60;	// TBD: depends on remaining pieces
-			else
-				v = VALUE_THREE;
+			v = 8;
 		}
 		
 		// If the player is winning by more than the value
@@ -874,7 +875,8 @@ public class TestingBoard extends Board
 		} else {
 			int n = 0;
 			int unknownDefenders = 0;
-			int count=2;
+			int count=6;
+			boolean found = false;
 			for (int rs = 1; rs<8; rs++) {
 				if (rs > r) {
 					n = rankAtLarge(1-c, rs);
@@ -884,12 +886,10 @@ public class TestingBoard extends Board
 						count -= n;
 						if (count == 0)
 							break;
+						found = true;
 					}
 
-		// note: unknownRankAtLarge is called to reduce
-		// One stealth if own Two becomes known
-
-					n = unknownRankAtLarge(c, rs);
+					n = rankAtLarge(c, rs);
 					if (n != 0) {
 						n = Math.min(n, count);
 						v += values[c][rs] * n;
@@ -898,8 +898,8 @@ public class TestingBoard extends Board
 							break;
 					}
 				}
-
-				unknownDefenders += unknownRankAtLarge(c, rs);
+				if (!found)
+					unknownDefenders += unknownRankAtLarge(c, rs);
 			}
 
 		// note: if n is zero, then either there are no higher
@@ -929,7 +929,7 @@ public class TestingBoard extends Board
 				v = 10 - r;	// less than minimum piece val
 			else if (unknownDefenders > 3)
 				v -= v/3;
-			v = v * 2 / 10;
+			v = v / 10;
 		}
 
 		valueStealth[c][r-1] = v;
@@ -1029,6 +1029,7 @@ public class TestingBoard extends Board
 		for (int lane = 0; lane < 3; lane++) {
 			Rank oppRank = Rank.SEVEN;
 			Rank thisRank = Rank.UNKNOWN;
+			Rank duplicateRank = Rank.NIL;
 			for (int i : attacklanes[lane])
 			for (int y = 0; y < 4; y++) {
 				Piece p = getPiece(i - y*11);
@@ -1041,9 +1042,19 @@ public class TestingBoard extends Board
 					if (p.getRank().toInt() < thisRank.toInt()
 						&& !isStealthy(p))
 						thisRank = p.getRank();
+					else if (p.getRank().toInt() == thisRank.toInt())
+						duplicateRank = p.getRank();
 				
 				}
 			} // y
+
+		// DEST_PRIORITY_CHASE_DEFEND is used because the AI piece
+		// is attracted to a fixed square, so eventually should reach its goal
+		// (does not create constant motion).  Because of low search depth,
+		// the AI often cannot see an attack on its weak flanks until too late,
+		// so establishing control of the lanes is more important than chasing
+		// opponent pieces hoping for a successful attack.
+
 			if (oppRank.toInt() < thisRank.toInt())
 				for (int i : attacklanes[lane]) {
 					int ranksNeeded = 1;
@@ -1051,26 +1062,35 @@ public class TestingBoard extends Board
 						if (rankAtLarge(c, r) != 0
 							&& !isInvincible(c, r)) {
 							int tmp[] = genDestTmp(GUARDED_OPEN, c, i);
-							genNeededPlanA(0, tmp, c, r, DEST_PRIORITY_LOW);
-							genNeededPlanB(tmp, c, r, DEST_PRIORITY_LOW);
+							genNeededPlanA(0, tmp, c, r, DEST_PRIORITY_CHASE_DEFEND);
+							genNeededPlanB(tmp, c, r, DEST_PRIORITY_CHASE_DEFEND);
 							ranksNeeded++;
 						}
 					}
 				}
 
 
+			int[] tmp = new int[121];
+			for (int j = 0; j <= 120; j++)
+				tmp[j] = DEST_VALUE_NIL;
+
+			for (int i : attacklanes[lane])
+			for (int y = 0; y < 4; y++)
+				tmp[Grid.side(c, i - y*11)] = 5 - y;
+
 			// Higher ranked pieces flee the lane
 			for (int r = oppRank.toInt()+1; r <= 5; r++) {
-				int[] tmp = new int[121];
-				for (int j = 0; j <= 120; j++)
-					tmp[j] = DEST_VALUE_NIL;
-
-				for (int i : attacklanes[lane])
-				for (int y = 0; y < 4; y++)
-					tmp[Grid.side(c, i - y*11)] = 5 - y;
-
 				setFleePlan(c, planA[c][r-1], tmp, DEST_PRIORITY_FLEE);
 				setFleePlan(c, planB[c][r-1], tmp, DEST_PRIORITY_FLEE);
+			}
+
+			// If there are two or more of the same rank in a lane,
+			// both should flee until one of them is out of the lane.
+			// This reduces the risk of forks.
+
+			if (duplicateRank != Rank.NIL) {
+				setFleePlan(c, planA[c][duplicateRank.toInt()-1], tmp, DEST_PRIORITY_FLEE);
+				setFleePlan(c, planB[c][duplicateRank.toInt()-1], tmp, DEST_PRIORITY_FLEE);
 			}
 
 		} // lane
@@ -2197,22 +2217,28 @@ public class TestingBoard extends Board
 
 			if (pflag.isKnown() && Grid.getY(flagi) == 0) {
 
-			// Keep an Eight guard nearby just in case
-			// (This blows the cover for the flag
-			// structure, so do this only if known).
-			//
-			// TBD: The guard is attracted to a fixed square
-			// above the flag.
-			// It would be better to check the direction of
-			// the attacker and move between.  But if this
-			// is coded, make sure that moving the defender
-			// does not cause back and forth motion.
-			// (The top square should be close enough that
-			// minimax should ward off any attackers.)
+		// Keep an Eight guard nearby just in case
+		// (This blows the cover for the flag
+		// structure, so do this only if known).
+		//
+		// TBD: The guard is attracted to a fixed square
+		// above the flag.
+		// It would be better to check the direction of
+		// the attacker and move between.  But if this
+		// is coded, make sure that moving the defender
+		// does not cause back and forth motion.
+		// (The top square should be close enough that
+		// minimax should ward off any attackers.)
 
 				int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi + 22);
 				Piece defender = getDefender(color, destTmp, Rank.SEVEN, 0);
-				if (defender != null)
+
+		// TBD: The guard is only necessary if there isn't already
+		// some other piece blocking the path.  Otherwise, in an equal
+		// endgame, the AI will defend its flag rather than attack.
+
+				if (defender != null
+					&& !isInvincible(defender))
 					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG_BOMBS);
 			}
 		}
@@ -2519,7 +2545,7 @@ public class TestingBoard extends Board
 			attackPiece = planAPiece[1-color][attackRank.toInt()-1];
 			if (attackPiece == null)
 				attackPiece = planBPiece[1-color][attackRank.toInt()-1];
-			if (attackPiece == null)
+			if (attackPiece == null) 
 				return null;
 		}
 			
@@ -4083,8 +4109,7 @@ public class TestingBoard extends Board
 
 		// could be bomb
 
-					if ((tprank == Rank.BOMB
-						|| isPossibleBomb(tp))
+					if (isPossibleBomb(tp)
 						&& (fp.isKnown() || fp.isSuspectedRank())
 						&& fprank != Rank.EIGHT) {
 						int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
@@ -4827,7 +4852,16 @@ public class TestingBoard extends Board
 		// Bluffing doesn't work:
 		//	- if the AI piece is known
 		//	- if the opponent piece is expendable
-		// 	- if the AI piece has fled from this same rank
+		// 	- if the AI piece has fled from this same piece rank before
+		//		(or neglected to attack)
+		// 	- if the AI piece has fled from some other piece rank before
+		//		(or neglected to attack)
+		// 		and the value of that piece was greater than
+		//		70% of the stealth value of the AI piece that
+		//		could win the target piece of the current bluff.
+		//		For example, if a Five passed by an AI piece,
+		//		the AI piece can no longer bluff against a
+		//		Five, Four, or Three, but could against a Two or One.
 		//	- if the AI piece has chased a low-value
 		//		(unknown or expendable) piece
 		//	- if the AI piece is the flag or flag bomb
@@ -4839,6 +4873,9 @@ public class TestingBoard extends Board
 			|| fp.isKnown()
 			|| tp.getRank().toInt() >  4
 			|| fp.getActingRankFleeLow() == tp.getRank()
+			|| (fp.getActingRankFleeLow() != Rank.NIL
+				&& tp.getRank() != Rank.ONE	// Spy flees from any other piece
+				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow().toInt()) > stealthValue(Settings.topColor, tp.getRank().toInt()-1) * 7 / 10)
 			|| (fp.getActingRankChase() != Rank.NIL
 				&& isExpendable(Settings.bottomColor, fp.getActingRankChase().toInt()))
 			|| ((fp.getRank() == Rank.FLAG || fp.getRank() == Rank.BOMB)
@@ -5379,7 +5416,7 @@ public class TestingBoard extends Board
 		// a Four to save the Spy.
 
 		if (unknownScoutFarMove)
-			return 5 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
+			return 3 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
 		// High ranking pieces
 
 		int r = rank.toInt();
@@ -5455,12 +5492,12 @@ public class TestingBoard extends Board
 		if (!tp.isKnown()
 			&& tp.getActingRankFleeHigh() != Rank.NIL
 			&& r <= tp.getActingRankFleeHigh().toInt())
-			return 8;	// 80% chance of attack
+			return 9;	// 90% chance of attack
 
 		// Known Fives are unpredictable.  Suspected Fives
 		// even more so (because they could be a 6, 7 or 9).
 		if (r == 5 && !fp.isSuspectedRank())
-			return 6;	// 60% chance of attack
+			return 7;	// 70% chance of attack
 
 		// The unknown defender has moved or the attacker is
 		// an unknown or a high ranking piece that may actually
@@ -5468,7 +5505,7 @@ public class TestingBoard extends Board
 		// This makes it much more likely for an unknown defender
 		// to be attacked, and so the risk is much higher.
 
-		return 8;	// 80% chance of attack
+		return 9;	// 90% chance of attack
 
 	}
 
@@ -5896,8 +5933,12 @@ public class TestingBoard extends Board
 						return Rank.EVEN;	// maybe not
 			}
 			else if (fp.moves == 0
-				&& foray[tprank.toInt()])
-				return Rank.LOSES;
+				&& foray[tprank.toInt()]) {
+				if (!tp.isKnown())
+					return Rank.LOSES;
+				else
+					return Rank.EVEN;
+			}
 
 		// Any piece will take a SPY.
 
@@ -6090,7 +6131,12 @@ public class TestingBoard extends Board
 	// attack by an invincible piece.
 	boolean isPossibleBomb(Piece p)
 	{
-		return (p.moves == 0 && unknownRankAtLarge(p.getColor(), Rank.BOMB) != 0);
+		if (p.getRank() == Rank.BOMB)
+			return true;
+
+		return (!p.isKnown()
+			&& p.moves == 0
+			&& unknownRankAtLarge(p.getColor(), Rank.BOMB) != 0);
 	}
 
 	// How to guess whether the marshal will win or lose
@@ -6155,7 +6201,27 @@ public class TestingBoard extends Board
 
 	boolean isPossibleUnknownSpyXOne(Rank fprank, Piece tp)
 	{
+		assert !tp.isKnown() : "Opponent piece must be unknown";
+
 		if (fprank != Rank.ONE)
+			return false;
+
+		if (tp.getRank() == Rank.SPY)
+			return true;
+
+	// If the AI has guessed the location of the Spy, the AI One is safe
+	// from any unknown piece.
+
+		if (!hasUnsuspectedSpy(Settings.bottomColor))
+			return false;
+
+	// If the opponent has dangerous ranks, then the AI is aggressive
+	// and assumes that the AI One is safe from suspected ranks as well
+
+		if ((dangerousKnownRank != 99 || dangerousUnknownRank != 99)
+			&& tp.isSuspectedRank()
+			&& tp.getRank() != Rank.SPY
+			&& !tp.isRankLess())
 			return false;
 
 	// If the One is not yet known at the outset of an exchange,
@@ -6177,15 +6243,6 @@ public class TestingBoard extends Board
 				return true;
 			return false;
 		}
-
-		if ((dangerousKnownRank != 99 || dangerousUnknownRank != 99)
-			&& tp.isSuspectedRank()
-			&& tp.getRank() != Rank.SPY
-			&& !tp.isRankLess())
-			return false;
-
-		if (!hasUnsuspectedSpy(Settings.bottomColor))
-			return false;
 
 		return true;
 	}
