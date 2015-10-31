@@ -378,7 +378,7 @@ public class TestingBoard extends Board
 		// no longer has any lower ranks but still has
 		// a Spy.
 
-			for (int r = 1; r <= 10; r++)
+			for (int r = 1; r <= 7; r++)
 				if (rankAtLarge(c, r) == 0)
 					values[1-c][r] = missingValue(c, r+1);
 						
@@ -3361,7 +3361,7 @@ public class TestingBoard extends Board
 					&& !m2.tp.isKnown()
 					&& !fp.isKnown()
 					&& hasSpy(Settings.topColor))
-					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp, to);
+					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp, fpcolor);
 			}
 
 		// Because each move towards a chase piece is rewarded,
@@ -3622,9 +3622,9 @@ public class TestingBoard extends Board
 		// Unknown AI pieces also have bluffing value
 
 					if (depth != 0
-						&& !isInvincible(fp)
+						&& !maybeIsInvincible(fp)
 						&& isEffectiveBluff(tp, fp, m)) {
-						vm = Math.min(vm, valueBluff(fp, tp, to));
+						vm = Math.min(vm, valueBluff(fp, tp, fpcolor));
 						morph(tp, fprank);
 						setPiece(tp, to);
 					}
@@ -3786,7 +3786,7 @@ public class TestingBoard extends Board
 								&& hasSpy(Settings.topColor)))
 						&& !unknownScoutFarMove
 						&& isEffectiveBluff(fp, tp, m)) {
-							vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
+							vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, fpcolor));
 							morph(fp, tprank);
 							setPiece(fp, to);
 					}
@@ -3853,7 +3853,7 @@ public class TestingBoard extends Board
 								&& hasSpy(fpcolor)))
 						&& !unknownScoutFarMove
 						&& isEffectiveBluff(fp, tp, m)) {
-						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, to));
+						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, fpcolor));
 						morph(fp, tprank);
 						setPiece(fp, to);
 					} else {
@@ -4161,9 +4161,9 @@ public class TestingBoard extends Board
 		// bluffing using its valuable pieces to bluff
 
 						if (depth != 0
-							&& !isInvincible(fp)
+							&& !maybeIsInvincible(fp)
 							&& isEffectiveBluff(tp, fp, m)) {
-							vm = Math.min(vm, valueBluff(fp, tp, to));
+							vm = Math.min(vm, valueBluff(fp, tp, fpcolor));
 							morph(tp, fprank);
 							setPiece(tp, to);
 							break;
@@ -4569,7 +4569,7 @@ public class TestingBoard extends Board
 		// be discouraged from approaching an unknown opponent piece.
 
 
-					vm = Math.max(vm, valueBluff(fp, tp, to));
+					vm = Math.max(vm, valueBluff(fp, tp, fpcolor));
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -4614,28 +4614,9 @@ public class TestingBoard extends Board
 	}
 
 	// The AI always assumes that it loses in an unknown encounter.
-	// It receives only the stealth value of the rank that
-	// removes the AI piece.  Because the opponent piece is unknown, the
-	// AI assumes that it is two ranks lower.
-
-	// Recall that if an opponent piece chases an AI piece,
-	// it acquires a suspected rank of one rank lower
-	// than the AI piece.  So the AI gains only the stealth of
-	// one rank lower in LOSES.  But in an unknown exchange,
-	// the rank is assumed to be two ranks lower, so an unknown
-	// exchange is always more favorable to the AI than LOSES.
-
-	// For example, a Five approaches an unknown.
-	// The stealth value of the unknown is (35), assuming
-	// that the Five loses to a Three.
-	// The Five loses its value (50), so the result is -15.
-
-	// Note that an opponent piece cannot be protected by
-	// an unknown piece because the protector always gains
-	// a chase rank and therefore has a suspected rank.
-
-	// So you can see that the AI always loses something
-	// but not everthing in an unknown encounter.
+	// It receives only the stealth value of one rank lower plus
+	// a nominal value based on rank so that this function always
+	// returns slightly more than LOSES.
 
 	// Odds improve for higher ranked pieces
 	// once *all* the opponents lower ranked
@@ -4696,26 +4677,24 @@ public class TestingBoard extends Board
 		// in an unknown exchange.
 
 		if (lowestUnknownExpendableRank < 5)
-			r = Math.min(r, lowestUnknownExpendableRank);
+			r = Math.min(r-1, lowestUnknownExpendableRank);
 
 		// As the opponent uses up its expendable ranks,
 		// it becomes more likely that the unknown piece
-		// has higher stealth value.  Recall that the AI Five
-		// receives the stealth of a Three.  If all the
+		// has higher stealth value.  If all the
 		// opponent Fives are gone, then an AI Six is no
 		// different from an AI Five, and hence should receive
 		// the same stealth value as an AI Five.
 
 		else if (r >= 5 && lowestUnknownExpendableRank >= r)
-			r = 5;	// results in Four stealth
+			r = 4;	// results in Four stealth
 
 		// unknownValue() should be more positive than LOSES.
-		// For example, if an AI piece has a choice between
-		// a suspected Five and an unknown piece, it should attack
-		// the unknown piece.  If an AI piece Six or higher
+		// For example, if an AI piece Six or higher
 		// attacks a suspected Five, it LOSES but gains the
 		// stealth of a Five.  If it attacks an unknown, 
-		// the result is UNK and it gains the stealth value of a Four.
+		// the result is UNK and it gains the stealth value of a Five
+		// plus a nominal amount.
 
 		else if (r > 6) {
 
@@ -4736,8 +4715,10 @@ public class TestingBoard extends Board
 			if (chaseRank == Rank.UNKNOWN)
 				tpvalue -= (r - 6);
 
-			r = 6;	// results in Five stealth
+			r = 5;	// results in Five stealth
 		}
+		else
+			r--;	// gains the stealth of one rank lower
 
 		// Version 9.7 introduced blufferRisk, which causes
 		// the stealth value of suspected pieces to be reduced
@@ -4753,10 +4734,10 @@ public class TestingBoard extends Board
 		// 100-50, only 50 points.  So the stealth of a Three
 		// plus the higher UNK value must be less than 50 points.
 
-		if (r == 1)
+		if (r == 0)
 			tpvalue += valueStealth[tp.getColor()][0];
 		else 
-			tpvalue += valueStealth[tp.getColor()][r-2] + (10-r)*2;
+			tpvalue += valueStealth[tp.getColor()][r-1] + (9-r)*2;
 
 		// In an effort to prevent draws,
 		// unknowns are worth more the more they move.
@@ -5166,24 +5147,14 @@ public class TestingBoard extends Board
 		return values[fp.getColor()][unknownRank[fp.getColor()]]/2;
 	}
 
-	protected int valueBluff(Piece oppPiece, Piece aiPiece, int to)
+	protected int valueBluff(Piece oppPiece, Piece aiPiece, int fpcolor)
 	{
 		assert aiPiece.getColor() == Settings.topColor : "valueBluff only for AI";
 
-		// Bluffing with the Spy against the opponent One
-		// is encouraged.  Because the One is invincible,
-		// the AI does this only when it has an unknown protector.
-		// So the opponent One can become confused about which
-		// of the unknown AI pieces is actually the Spy.
-
-		Rank rank = oppPiece.getRank();
-		if (aiPiece.getRank() == Rank.SPY && rank == Rank.ONE)
-			return -VALUE_BLUFF;
-
-		// Bluffing using valuable pieces is (slightly) discouraged.
-		//
-		// But not more than an unknown; otherwise the AI
-		// can leave pieces hanging if an approach by an opponent
+		// When the AI considers the approach of an opponent piece,
+		// the situation is always positive for the AI (return negative value).
+		// Otherwise, if the return value is more than a positive unknown,
+		// the AI can leave pieces hanging if an approach by an opponent
 		// piece is unavoidable.  For example,
 		// R2 RB R1
 		// -- -- --
@@ -5199,8 +5170,26 @@ public class TestingBoard extends Board
 		// is to move Blue Two up, but instead Blue will just
 		// take the lowly piece.
 
+		if (fpcolor == Settings.bottomColor)
+			return -VALUE_BLUFF;
+
+		// Bluffing with the Spy against the opponent One
+		// is encouraged.  Because the One is invincible,
+		// the AI does this only when it has an unknown protector.
+		// So the opponent One can become confused about which
+		// of the unknown AI pieces is actually the Spy.
+
+		Rank rank = oppPiece.getRank();
+		if (aiPiece.getRank() == Rank.SPY && rank == Rank.ONE)
+			return -VALUE_BLUFF;
+
+		// Bluffing using valuable pieces is discouraged
+		// (unless some further goal is highly positive, such as a win
+		// of a valuable piece, the flag, or the protection
+		// of its flag.)
+
 		if (!isExpendable(aiPiece))
-			return Math.min(pieceValue(aiPiece)/10, values[aiPiece.getColor()][unknownRank[aiPiece.getColor()]]/2);
+			return pieceValue(aiPiece)/7;
 
 		// A suspected Four (that chased a Five) could well be a Five.
 		// If so, the piece might attack and the AI would
@@ -6120,6 +6109,7 @@ public class TestingBoard extends Board
 	{
 		Rank rank = p.getRank();
 		return (rank == Rank.FLAG
+			|| rank == Rank.SPY
 			|| (!p.isKnown()
 				&& rank != Rank.NINE	// nines have high stealth value but are not targets
 				&& valueStealth[p.getColor()][rank.toInt()-1] > values[1-p.getColor()][9]));
@@ -6460,6 +6450,31 @@ public class TestingBoard extends Board
 	{
 		return (!p.isKnown()
 			&& stealthValue(p) > pieceValue(1-p.getColor(), unknownRank[1-p.getColor()]));
+	}
+
+	// For an AI bluff to be effective, the defending opponent piece
+	// must not be invincible.  If the AI has incorrectly guessed
+	// the opponent piece to be non-invincible, and it turns out to be
+	// invincible, the AI loses big, so it needs to be more conservative.
+	// For example,
+	// -- R9 -- --
+	// xx -- B3 xx
+	// xx R2 -- xx
+	// -- -- B2 --
+	// All pieces are unknown except for Blue Three.  Red has the move.
+	// It moves its Red Two to the right.  Red still has its unknown One,
+	// so it is bluffing that suspected Blue Two will move away, allowing
+	// it to capture Blue Three.  But if Blue Two turns out to be Blue One,
+	// then BAM! Red loses its Two.
+
+	boolean maybeIsInvincible(Piece p)
+	{
+		if (isInvincible(p))
+			return true;
+		if (p.isKnown()
+			|| !p.isSuspectedRank())
+			return false;
+		return isInvincible(p.getColor(), p.getRank().toInt()-1);
 	}
 
 }

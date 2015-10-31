@@ -1515,9 +1515,40 @@ public class AI implements Runnable
 
 		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove, dvr);
 
+		// The transposition table cannot be used if the current position
+		// results from moves leading to a possible Two Squares ending.
+		// That is because it is the order of the moves that is important,
+		// and therefore the value of the position depends on whether the
+		// moves were issued in the proper order to result in a
+		// possible Two Squares ending.  For example,
+		// BB -- BB -- |
+		// -- -- -- BB |
+		// R3 -- B4 -- |
+		// -------------
+		// Red has the move.  Two Squares is possible after R3 moves right,
+		// B4 moves up, R3 moves up. B4 moving down is then disallowed by
+		// isPossibleTwoSquares(), so the value of the position to Red is
+		// the win of Blue Four.
+		//
+		// But this is the same position as R3 moves up, B4 moves up,
+		// R3 moves right.  B4 moving down is allowed.  So if this latter
+		// position is stored in the transposition table, and is retrieved for
+		// the value of the first position, Red would not be awarded
+		// the win of Blue Four.
+		//
+		// Vice versa, if the first position were stored, and the value
+		// retrieved for the latter position, the AI would erroneously
+		// believe it had a Two Squares ending when it really didn't.
+		//
+		// The solution is to not store any positions resulting from
+		// chase moves into the transposition table.
+
+		UndoMove m = b.getLastMove(1);
+		if (m != null && b.grid.hasAttack(m.getPiece()))
+			return vm;
+
 		assert hashOrig == b.getHash() : "hash changed";
 
-		// reuse existing entry and avoid garbage collection
 		TTEntry.Flags entryType;
 		if (vm <= alphaOrig)
 			entryType = TTEntry.Flags.UPPERBOUND;
