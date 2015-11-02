@@ -45,7 +45,8 @@ public class TTEntry {
 	public enum Flags {
 		EXACT,
 		LOWERBOUND,
-		UPPERBOUND
+		UPPERBOUND,
+		BESTMOVE
 	}
 
         public Flags flags;

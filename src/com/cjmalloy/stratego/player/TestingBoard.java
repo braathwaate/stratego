@@ -198,17 +198,17 @@ public class TestingBoard extends Board
 	// to discover a Four (20 stealth)
 	// but not a Five (10 stealth).  
 
-	private static final int VALUE_THREE = 200;
-	private static final int VALUE_FOUR = 100;
-	private static final int VALUE_FIVE = 50;
-	private static final int VALUE_SIX = 25;
-	private static final int VALUE_SEVEN = 18;
-	private static final int VALUE_EIGHT = 30;
-	private static final int VALUE_NINE = 14;
+	private static final int VALUE_THREE = 400;
+	private static final int VALUE_FOUR = 200;
+	private static final int VALUE_FIVE = 100;
+	private static final int VALUE_SIX = 50;
+	private static final int VALUE_SEVEN = 36;
+	private static final int VALUE_EIGHT = 60;
+	private static final int VALUE_NINE = 28;
 	private static final int [] startValues = {
 		0,
-		800,	// 1 Marshal
-		400, 	// 2 General
+		1600,	// 1 Marshal
+		800, 	// 2 General
 		VALUE_THREE, 	// 3 Colonel
 		VALUE_FOUR,	// 4 Major
 		VALUE_FIVE,	// 5 Captain
@@ -415,7 +415,7 @@ public class TestingBoard extends Board
 		// Ones on the board, the Spy can be the critical piece to win the game.
 
 			else if (c == Settings.bottomColor)
-				values[c][10] = 60; // TBD: depends on remaining pieces
+				values[c][10] = VALUE_FIVE; // TBD: depends on remaining pieces
 
 		// Do invincible pieces have higher value than
 		// non-invincible pieces?
@@ -2282,7 +2282,7 @@ public class TestingBoard extends Board
 		// while using its Eight to attack.
 
                         values[1-c][Rank.EIGHT.toInt()]
-                                += 30 - lowerRankCount[c][8];
+                                += (30 - lowerRankCount[c][8])*2;
 		}
 
 		// Making the flag known eliminates the flag

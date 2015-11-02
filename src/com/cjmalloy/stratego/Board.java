@@ -942,7 +942,7 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-			if (chasedRank.toInt() >= 5)
+			if (chasedRank.toInt() >= 5)	// or UNKNOWN
 				return;
 
 		// If the chaser piece is Unknown,
@@ -964,13 +964,27 @@ public class Board
 		// Unknown Red.  For example,
 		// R? B2 -- B?
 		// If Blue Two does not attack Unknown Red, and instead
-		// moves unknown Blue towards Blue Two, then Red is signaling
-		// that it believes Unknown Red is a superior piece.
+		// moves unknown Blue towards Blue Two, then Blue is signaling
+		// that it believes Unknown Red is Red One.
 		//
 		// So if the last move was not the chased, then it can
 		// be assumed that the player believes the unknown chaser piece
 		// is a superior piece, and so the AI assumes that its
 		// protector is even more superior.
+		//
+		// Another example,
+		// R? B3 -- B?
+		// If Blue Three does not attack Unknown Red, and instead
+		// moves unknown Blue towards Blue Two, then Blue is signaling
+		// that it thinks unknown Red is either Red One, and therefore
+		// unknown Blue is Blue Spy OR it thinks that unknown Red is
+		// Red Two, and therefore unknown Blue is Blue One.
+		// So Red does not know if unknown Blue is Blue Spy or Blue One,
+		// but both pieces are worthy targets to discover its identity.
+		// 
+		// The AI makes the assumption that unknown Blue is probably
+		// Blue One in this case, although obviously it could be wrong.
+
 
 			Move m = getLastMove();
 			if (m.getPiece() == chased)
@@ -1063,9 +1077,16 @@ public class Board
 				open++;
 
 			if (p.getRank() != Rank.UNKNOWN) {
-				if (knownProtector == null
-					|| knownProtector.getRank().toInt() > p.getRank().toInt())
-				knownProtector = p;
+				if (chaserRank != Rank.UNKNOWN) {
+					if (p.getRank().toInt() < chaserRank.toInt()
+						|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE)
+						return;
+				} else {
+					assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
+					if (knownProtector == null
+						|| p.getRank().toInt() < knownProtector.getRank().toInt())
+						knownProtector = p;
+				}
 
 			} else if (unknownProtector != null) {
 				// more than one unknown protector
@@ -1288,13 +1309,10 @@ public class Board
 				r--;
 
 		// known piece is protector
-		// Note: if the knownProtector is a Spy (rank 10), and
-		// r == 0, the knownProtector does protect the piece.
-		// But because the Spy is not known until it actually captures
-		// the One, this cannot happen.
 
 			if (knownProtector != null
-				&& knownProtector.getRank().toInt() <= r)
+				&& (knownProtector.getRank().toInt() <= r
+					|| (knownProtector.getRank() == Rank.SPY && r == 0)))
 				return;
 
 		// Only a Spy can protect a piece attacked by a One.

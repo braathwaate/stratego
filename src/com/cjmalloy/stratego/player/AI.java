@@ -1515,6 +1515,8 @@ public class AI implements Runnable
 
 		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove, dvr);
 
+		assert hashOrig == b.getHash() : "hash changed";
+
 		// The transposition table cannot be used if the current position
 		// results from moves leading to a possible Two Squares ending.
 		// That is because it is the order of the moves that is important,
@@ -1540,17 +1542,15 @@ public class AI implements Runnable
 		// retrieved for the latter position, the AI would erroneously
 		// believe it had a Two Squares ending when it really didn't.
 		//
-		// The solution is to not store any positions resulting from
-		// chase moves into the transposition table.
-
-		UndoMove m = b.getLastMove(1);
-		if (m != null && b.grid.hasAttack(m.getPiece()))
-			return vm;
-
-		assert hashOrig == b.getHash() : "hash changed";
+		// The solution is to not use the value from the transposition
+		// for positions resulting from chase moves, but the
+		// best move is useful in most cases and harmless in others.
 
 		TTEntry.Flags entryType;
-		if (vm <= alphaOrig)
+		UndoMove m = b.getLastMove(1);
+		if (m != null && b.grid.hasAttack(m.getPiece()))
+			entryType = TTEntry.Flags.BESTMOVE;
+		else if (vm <= alphaOrig)
 			entryType = TTEntry.Flags.UPPERBOUND;
 		else if (vm >= beta)
 			entryType = TTEntry.Flags.LOWERBOUND;
