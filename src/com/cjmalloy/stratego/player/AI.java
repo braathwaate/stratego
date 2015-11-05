@@ -905,7 +905,8 @@ public class AI implements Runnable
 					}
 					b.undo();
 					log(DETAIL, " " + negQS(vm));
-				}
+				} else
+					log(DETAIL, " " + mt);
 			}
 			addMove(rootMoveList.get(APPROACH), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
@@ -1275,7 +1276,6 @@ public class AI implements Runnable
 
 	private int qscache(int depth, int alpha, int beta, int dvr)
 	{
-
 		BitGrid bg = new BitGrid();
 		b.grid.getNeighbors(bg);
 		int valueB = b.getValue();
@@ -1614,6 +1614,27 @@ public class AI implements Runnable
 
 	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove, int dvr) throws InterruptedException
 	{
+		// The player with the last movable piece on the board wins
+
+		boolean playerMove = true;
+		boolean oppMove = true;
+		if (b.pieces[b.bturn][1] == null) {
+			Piece fp = b.pieces[b.bturn][0];
+			if (b.getPiece(fp.getIndex()) != fp)
+				oppMove = false;
+		}
+		if (b.pieces[1-b.bturn][1] == null) {
+			Piece fp = b.pieces[1-b.bturn][0];
+			if (b.getPiece(fp.getIndex()) != fp)
+				playerMove = false;
+		}
+		if (playerMove == false && oppMove == false)
+			return 0;	// tie
+		else if (oppMove == false)
+			return 9999;	// win
+		else if (playerMove == false)
+			return -9999;	// loss
+
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
 		int bestmove = 0;
@@ -1651,7 +1672,8 @@ public class AI implements Runnable
 
 				bestValue = vm;
 				bestmove = ttMove;
-			}
+			} else
+				log(DETAIL, " " + mt);
 			}
 		}
 
@@ -1685,7 +1707,8 @@ public class AI implements Runnable
 					hh[km]+=n;
 					return bestValue;
 				}
-			}
+			} else
+				log(DETAIL, " " + mt);
 		}
 
 		// Sort the move list.
@@ -1747,8 +1770,10 @@ public class AI implements Runnable
 				MoveType mt = makeMove(n, depth, max);
 				if (!(mt == MoveType.OK
 					|| mt == MoveType.CHASER
-					|| mt == MoveType.CHASED))
+					|| mt == MoveType.CHASED)) {
+					log(DETAIL, " " + mt);
 					continue;
+				}
 
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
 

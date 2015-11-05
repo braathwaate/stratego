@@ -2384,9 +2384,17 @@ public class Board
 
 	// Three Moves on Two Squares: Two Square Rule.
 	//
+	// (ISF 10.1)
 	// It is not allowed to move a piece more than 3
 	// times non-stop between the same two
 	// squares, regardless of what the opponent is doing.
+	// It does not matter whether a piece is
+	// moving and thereby attacking an opponent‟s
+	// piece, or just moving to an empty square.
+	//
+	// Thus, even if the to square is becomes occupied
+	// by an opponent piece, the player is not allowed
+	// to attack it, if it would cause this rule to be violated.
 	//
 	public boolean isTwoSquares(int m)
 	{
@@ -2512,10 +2520,6 @@ public class Board
 
 		// not back to the same square?
 		if (m2.getFrom() != to)
-			return false;
-
-		// is a capture?
-		if (getPiece(to) != null)
 			return false;
 
 		// was a capture?
