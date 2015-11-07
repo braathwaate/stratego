@@ -1631,9 +1631,9 @@ public class AI implements Runnable
 		if (playerMove == false && oppMove == false)
 			return 0;	// tie
 		else if (oppMove == false)
-			return 9999;	// win
+			return -9999;	// win
 		else if (playerMove == false)
-			return -9999;	// loss
+			return 9999;	// loss
 
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
