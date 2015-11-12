@@ -88,6 +88,12 @@ public class BitGrid
 			|| (low & b.low) != 0;
 	}
 
+	public int andBitCount(BitGrid b)
+	{
+		return Long.bitCount(high & b.high)
+			+ Long.bitCount(low & b.low);
+	}
+
 	public boolean xorMask(BitGrid b)
 	{
 		return ((high & b.high) ^ b.high) != 0

@@ -1097,6 +1097,34 @@ public class AI implements Runnable
 	// thwarting movement of opponent pieces towards the flag.
 	// Thus it may leave material at risk to keep its chase piece
 	// near the flag.  
+	//
+	// TBD: Should QSMAX be even?  Should it be limited at all?
+	//
+	// The reason why QSMAX is even is that it superficially gives
+	// the opponent a chance to respond in kind.  But this fails
+	// when the player does not have a successful capture, because
+	// then the player loses its turn by pushing a null move.
+	// This allows the opponent to move first,
+	// and then the player can be limited by QSMAX.
+	//
+	// For example, the player's Two is guarded by a Spy,
+	// and adjacent to an opponent One.  When qs() is called,
+	// the player has no winning attacks, so
+	// a null move is pushed.  Then the
+	// opponent plays some other losing attacking move, and then
+	// another losing attacking move, and so on, until QSMAX-1 is hit;
+	// then it plays 1X2 and the player is limited out by QSMAX
+	// and cannot play SX1.  This results in an erroneous qs.
+	//
+	// The issue still exists, and needs a resolution.
+	// QSMAX exists because otherwise a rogue piece
+	// in a field of forty pieces could take an enormous amount of
+	// CPU time.  So perhaps the number of moves a *piece* makes should
+	// be limited, but the number of moves a *player* makes should
+	// be unlimited.
+	//
+	// Another idea: allow the player to push a null move without
+	// decrementing n.
 
 	private int qs(int depth, int n, int alpha, int beta, int dvr)
 	{
@@ -1106,18 +1134,6 @@ public class AI implements Runnable
 
 		int best = -9999;
 
-		// Note: the following code snippet is faster,
-		// especially for dense bitmaps:
-		// http://lemire.me/blog/archives/2013/12/23/even-faster-bitmap-decoding/
-// int pos = 0;
-// for(int k = 0; k < bitmaps.length; ++k) {
-//    long bitset = bitmaps[k];
-//    while (bitset != 0) {
-//      long t = bitset & -bitset;
-//      output[pos++] = k * 64 +  Long.bitCount(t-1);
-//      bitset ^= t;
-//    }
-// }
 		BitGrid bg = new BitGrid();
 		b.grid.getNeighbors(1-b.bturn, bg);
 		for (int bi = 0; bi < 2; bi++) {
@@ -1179,14 +1195,15 @@ public class AI implements Runnable
 				if (tp.getColor() != 1 - b.bturn)
 					continue;
 
-				int tmpM = Move.packMove(i, t);
-				b.move(tmpM, depth);
+				int enemies = b.grid.enemyCount(tp);
+				b.move(Move.packMove(i, t), depth);
+				int v = -negQS(b.getValue() + dvr) - bvalue;
 
-		// If there is a negative capture, try fleeing
+		// If this is a negative result, try fleeing
 
-				if (-negQS(b.getValue() + dvr) < bvalue
-					&& !(fprank == Rank.BOMB || fprank == Rank.FLAG)) {
-					tryFlee = true;
+				if (v < 0) {
+					if (!(fprank == Rank.BOMB || fprank == Rank.FLAG))
+						tryFlee = true;
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
@@ -1196,18 +1213,42 @@ public class AI implements Runnable
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
 		//
-		// This code was commented out in version 9.7, because
-		// sometimes a low ranked piece like a Three or Four
-		// must protect the stealth of a One, Two or Three
-		// in the face of an oncoming known Seven.  But 3x7
-		// and 4x7 is a losing move.  There are likely other
-		// scenarios as well.  This results in a more accurate qs,
+		// So beginning with version 9.7,
+		// all losing moves were considered in qs, because sometimes
+		// an oncoming opponent piece forks two low ranked unknown
+		// player pieces.  So the lesser piece must attack the
+		// oncoming opponent piece to protect the stealth of
+		// the superior piece.  This could even be the Two to
+		// protect the One, and because the loss of the stealth
+		// of the Two is substantial, the magnitude of the loss
+		// cannot be used to determine whether the move would
+		// be worthwhile.
+		//
+		// This resulted in a more accurate qs,
 		// but with a heavy time penalty.  It is better to save
 		// time by pruning off useless moves so that qs is never
 		// even reached.
 		//
-		//			b.undo();
-		//			continue;
+		// Version 9.9 revisited this code with the
+		// theory that a losing move in qs
+		// is never worthwhile unless the opponent piece has
+		// more than one adjacent player piece.
+		//
+		// This logic may actually improve qs.  For example:
+		// R4 RS |
+		// R7 R6 |
+		// -- B5 |
+		// -- -- |
+		// Red has the move.  Before version 9.9, Red would play R6xB5,
+		// because then Blue has no attacking moves, and qs
+		// is terminated with minimal loss.  In version 9.9,
+		// R6xB5 is discarded,  allowing Blue to play B5xR6,
+		// then B5xRS, giving qs a very negative value.
+
+					if (enemies < 2) {
+						b.undo();
+						continue;
+					}
 				}
 		
 				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
@@ -1620,13 +1661,17 @@ public class AI implements Runnable
 		boolean oppMove = true;
 		if (b.pieces[b.bturn][1] == null) {
 			Piece fp = b.pieces[b.bturn][0];
-			if (b.getPiece(fp.getIndex()) != fp)
+			if (b.getPiece(fp.getIndex()) != fp) {
 				oppMove = false;
+				killerMove.setMove(-1);
+			}
 		}
 		if (b.pieces[1-b.bturn][1] == null) {
 			Piece fp = b.pieces[1-b.bturn][0];
-			if (b.getPiece(fp.getIndex()) != fp)
+			if (b.getPiece(fp.getIndex()) != fp) {
 				playerMove = false;
+				killerMove.setMove(-1);
+			}
 		}
 		if (playerMove == false && oppMove == false)
 			return 0;	// tie

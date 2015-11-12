@@ -194,6 +194,12 @@ public class Grid
 		return pieceBitGrid[1-turn].andMask(neighbor[n][i]);
 	}
 
+	public int enemyCount(Piece p)
+	{
+		int i = p.getIndex();
+		return pieceBitGrid[1-p.getColor()].andBitCount(neighbor[0][i]);
+	}
+
 	public void getNeighbors(int turn, BitGrid out)
 	{
 		pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], out);
