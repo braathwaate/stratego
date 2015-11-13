@@ -75,7 +75,6 @@ public class Board
 	protected int[] piecesInTray = new int[2];
 	protected int[] possibleUnknownMovablePieces = new int[2];
 	protected Piece[] flag = new Piece[2];  // flags
-        protected int[] unknownPiecesRemaining = new int[2];
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int guessedRankCorrect;
@@ -1748,7 +1747,6 @@ public class Board
 		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
 		int unknownBombs = unknownRankAtLarge(c, Rank.BOMB);
 		if (possibleUnknownMovablePieces[c] == 0) {
-			unknownPiecesRemaining[c]=0;
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
 					continue;
@@ -3049,13 +3047,21 @@ public class Board
 		if (p.getColor() == Settings.bottomColor
 			&& !p.isKnown()
 			&& p.getRank().toInt() <= 4) {
-			if (p.getRank().toInt() >= p.getActualRank().toInt())
+
+	// its hard to distinguish a Four from a Five,
+	// so if the AI thinks a piece is a Four and it turns
+	// out to be a Five, nothing is changed
+
+			if (p.getRank().toInt() == 4
+				&& p.getActualRank().toInt() == 5)
+				guessedRankCorrect = guessedRankCorrect;
+			else if (p.getRank().toInt() >= p.getActualRank().toInt())
 				guessedRankCorrect++;
 			else
 				guessedRankCorrect--;
 			blufferRisk = 5 - guessedRankCorrect;
 			blufferRisk = Math.max(blufferRisk, 2);
-			blufferRisk = Math.min(blufferRisk, 5);
+			blufferRisk = Math.min(blufferRisk, 4);
 		}
 		p.revealRank();
 	}

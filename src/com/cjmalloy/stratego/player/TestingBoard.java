@@ -88,6 +88,7 @@ public class TestingBoard extends Board
 	protected UndoMove lastMove;
 	protected boolean knownAIOne;
 	protected int[] unknownRank = new int[2];
+	protected int[] npieces = new int[2];
 
 	// The idea behind a foray is to discover low ranked pieces
 	// and win high ranked pieces while avoiding Bombs.
@@ -252,7 +253,6 @@ public class TestingBoard extends Board
 		hashTest[1] = boardHistory[1].hash;	// for debugging (see move)
 
 		for (int c = RED; c <= BLUE; c++) {
-			unknownPiecesRemaining[c] = 0;
 			for (int j=0;j<15;j++) {
 				planAPiece[c][j] = null;
 				planBPiece[c][j] = null;
@@ -280,7 +280,6 @@ public class TestingBoard extends Board
 				int r = rank.toInt();
 
 				if (!p.isKnown()) {
-					unknownPiecesRemaining[p.getColor()]++;
 					planBPiece[p.getColor()][r-1]=np;
 				}
 
@@ -522,16 +521,17 @@ public class TestingBoard extends Board
 		genInvincibleRank();	// depends on stealth
 		genDestFlag();
 		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
+		genPieceLists();
 
 		{
-		// If a player has an unknown piece count majority, excess
-		// expendable pieces just get in the way, as
-		// only few are needed for bluffing.  The player
-		// has the luxury of attack for the sake of random discovery.
+		// If a player has a movable piece count majority, excess
+		// expendable pieces just get in the way.
+		// The player has the luxury of attack
+		// for the sake of random discovery.
 		// So increase the stealth value of the opponent pieces
 		// to encourage discovery.
-		int u = unknownPiecesRemaining[Settings.topColor] -
-			unknownPiecesRemaining[Settings.bottomColor];
+		int u = npieces[Settings.topColor] -
+			npieces[Settings.bottomColor];
 		u = Math.min(Math.abs(u), 5);
 
 		int c;
@@ -583,7 +583,6 @@ public class TestingBoard extends Board
 		setUnmovedValues();
 
 		// targetUnknownBlockers();
-		genPieceLists();
 
 		assert flag[Settings.topColor] != null : "AI flag unknown";
 	}
@@ -652,7 +651,7 @@ public class TestingBoard extends Board
 	void genPieceLists()
 	{
 		for (int c = RED; c <= BLUE; c++) {
-			int npieces = 0;
+			npieces[c] = 0;
 			for (int y = 0; y < 10; y++)
 			for (int x = 0; x < 10; x++) {
 				Piece p = getPiece(x,Grid.yside(1-c,y));
@@ -664,10 +663,10 @@ public class TestingBoard extends Board
 					&& (rank == Rank.BOMB || rank == Rank.FLAG))
 					continue;
 
-				pieces[c][npieces++]=p;
+				pieces[c][npieces[c]++]=p;
 			}
 
-			pieces[c][npieces++]=null;	 // null terminate list
+			pieces[c][npieces[c]]=null;	 // null terminate list
 		}
 	}
 
@@ -716,6 +715,7 @@ public class TestingBoard extends Board
 	// Twos have been removed, the stealth of the One
 	// drops in half.
 	//
+	// TBD: comment is incorrect, actual values are double
 	// A One stealth value is equal to 1600 *.1 (160 +- 53 points)
 	// if both Twos and all the Threes are still on the board.
 	//
@@ -852,26 +852,7 @@ public class TestingBoard extends Board
 			&& r > invincibleRankInt[1-c])
 			v = 0;
 
-		else if (c == Settings.bottomColor) {
-
-	// If the opponent has a dangerous unknown rank,
-	// and the AI suspects which piece it is,
-	// it is best to keep it unknown, because once it becomes
-	// discovered, it will certainly go on a rampage.
-
-			if (dangerousUnknownRank != 99
-				&& r <= dangerousUnknownRank)
-				v = 0;
-			else if (r == 1)
-				v = 24;
-			else if (r == 2)
-				v = 16;
-			else if (r == 3)
-				v = 14;
-			else if (r == 4)
-				v = 6;
-			v *= blufferRisk;
-		} else {
+		else {
 			int n = 0;
 			int unknownDefenders = 0;
 			int count=6;
@@ -929,6 +910,33 @@ public class TestingBoard extends Board
 			else if (unknownDefenders > 3)
 				v -= v/3;
 			v = v / 10;
+
+			if (c == Settings.bottomColor) {
+
+	// If the opponent has a dangerous unknown rank,
+	// and the AI suspects which piece it is,
+	// it is best to keep it unknown, because once it becomes
+	// discovered, it will certainly go on a rampage.
+
+				if (dangerousUnknownRank != 99
+					&& r <= dangerousUnknownRank)
+					v = 0;
+
+	// Prior to version 9.9, opponent stealth remained constant
+	// during the game; it did not depend on remaining ranks
+	// at large like player stealth does.  This lead to the AI
+	// attacking the opponent suspected One with an invincible
+	// piece such as a Four or Five, when it would have been much
+	// better for the invincible piece to attack other unknowns
+	// rather than confirm the identity of the One.  blufferRisk
+	// helps to reduce this problem, but it does not eliminate it.
+	// So opponent stealth needs to reduced like player stealth
+	// as the game wears on and it becomes obvious which pieces
+	// are strong and which are weak.
+
+				v = (int)Math.sqrt(v);
+				v *= blufferRisk * 3 / 2;
+			}
 		}
 
 		valueStealth[c][r-1] = v;
