@@ -3061,7 +3061,7 @@ public class Board
 				guessedRankCorrect--;
 			blufferRisk = 5 - guessedRankCorrect;
 			blufferRisk = Math.max(blufferRisk, 2);
-			blufferRisk = Math.min(blufferRisk, 4);
+			blufferRisk = Math.min(blufferRisk, 5);
 		}
 		p.revealRank();
 	}

@@ -2083,15 +2083,13 @@ public class AI implements Runnable
 			if (fp == null)	// end of list
 				break;
 
-			if (!fp.isKnown())
-				continue;
 
-		// If the piece is near the flag, the target might be
-		// the AI flag rather than the chased piece,
-		// so a broad search is used.
+		// Unknown unmoved pieces are not chased
+		// (use broad search).
 
-			if (b.isNearAIFlag(fp.getIndex()))
-				continue;
+			if (!fp.isKnown()
+				&& !fp.hasMoved())
+				break;
 
 			if (!b.grid.isCloseToEnemy(Settings.topColor, fp.getIndex(), MAX_STEPS))
 				continue;
@@ -2106,28 +2104,36 @@ public class AI implements Runnable
 					|| tp.getRank() == Rank.FLAG)
 					continue;
 
+		// If the piece is near the flag, the target might be
+		// the AI flag rather than the chased piece,
+		// so a broad search is used.
+
+				if (b.isNearAIFlag(fp.getIndex())
+					&& tp.getRank() == Rank.EIGHT)
+					continue;
+
 				int steps = Grid.steps(fp.getIndex(), tp.getIndex());
 
-	// TBD: MAX_STEPS2 is only an approximation of the steps to the attacker
-	// because the attacker could be blocked by the lakes, bombs, or its
-	// own piece.
+		// TBD: MAX_STEPS2 is only an approximation of the steps to the attacker
+		// because the attacker could be blocked by the lakes, bombs, or its
+		// own piece.
 
 				if (steps > MAX_STEPS2)
 					continue;
 
-	// TBD: If Two Squares is in effect and the chased and chaser pieces
-	// are not on the same row or column, and the chased piece has
-	// an open square, the chased piece is in no danger, 
-	// because the chase piece can move back and forth
-	// until Two Squares prevents the chaser from moving.
-	// But if it has a choice of another open square, deep search
-	// is still needed to examine the flee route.
+		// TBD: If Two Squares is in effect and the chased and chaser pieces
+		// are not on the same row or column, and the chased piece has
+		// an open square, the chased piece is in no danger, 
+		// because the chase piece can move back and forth
+		// until Two Squares prevents the chaser from moving.
+		// But if it has a choice of another open square, deep search
+		// is still needed to examine the flee route.
 
 				if (b.isProtected(fp, tp, fp.getIndex()))
 					continue;
 
-	// If chased X chaser isn't a bad move, the AI
-	// isn't concerned about a chase, so continue deep search
+		// If chased X chaser isn't a bad move, the AI
+		// isn't concerned about a chase, so continue deep search
 
 				int tmpM = Move.packMove(fp.getIndex(), tp.getIndex());
 				int vm = b.getValue();
@@ -2150,8 +2156,8 @@ public class AI implements Runnable
 				}
 			} //tp
 
-	// If there are two attackers nearby, then use broad search
-	// to try to avoid becoming trapped by the two attackers.
+		// If there are two attackers nearby, then use broad search
+		// to try to avoid becoming trapped by the two attackers.
 
 			if (attackers >= 2) {
 				deepSearch = 0;
