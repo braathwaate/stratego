@@ -1608,7 +1608,12 @@ public class Board
 		return newRank;
 	}
 
-	protected void setSuspectedRank(Piece p, Rank rank, boolean maybeBluffing)
+	boolean maybeBluffing(Piece p)
+	{
+		return p.moves < SUSPECTED_RANK_AGING_DELAY;
+	}
+
+	protected void setSuspectedRank(Piece p, Rank rank)
 	{
 		if (rank == Rank.NIL || rank == Rank.UNKNOWN)
 			return;
@@ -1616,7 +1621,7 @@ public class Board
 		if (p.getRank() == Rank.UNKNOWN || p.isSuspectedRank())
 			p.setSuspectedRank(rank);
 
-		if (!maybeBluffing)
+		if (!maybeBluffing(p))
 			suspectedRank[p.getColor()][rank.toInt()-1]++;
 	}
 
@@ -1677,6 +1682,8 @@ public class Board
 				flag[p.getColor()] = p;
 		}
 
+		markExposedPieces();
+
 		for (int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -1691,10 +1698,13 @@ public class Board
 		// due to the possibility of bluffing to get at the flag.
 		// (The maybeEight status can be cleared during the search
 		// tree if a Seven or lower ranked piece attacks the unknown)
-			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0)
-				p.setMaybeEight(true);
-			else
+
+			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0
+				|| (p.isSuspectedRank()
+					&& !maybeBluffing(p)))
 				p.setMaybeEight(false);
+			else
+				p.setMaybeEight(true);
 
 			Rank rank = p.getActingRankChase();
 			if (rank == Rank.NIL)
@@ -1717,10 +1727,10 @@ public class Board
 
 			if (rank == Rank.SPY) {
 				if (hasSpy(p.getColor()))
-					setSuspectedRank(p, Rank.SPY, p.moves < SUSPECTED_RANK_AGING_DELAY);
+					setSuspectedRank(p, Rank.SPY);
 
 			} else
-				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()), p.moves < 15);
+				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()));
 
 		} // for
 
@@ -2184,9 +2194,9 @@ public class Board
 
 	int getBestGuess(int[][] maybe, int maybe_count)
 	{
-		final int nearDir[] = { 23, 22, 21, 13, 12, 11, 10, 9, 2, 1, -1, -2, -9, -10, -11, -12, -13, -21, -22, -23 };
-		int size = 99;
+		int size = 0;
 		int bestGuess = 99;
+		boolean bestGuessGuarded = false;
 		for (int i = 0; i < maybe_count; i++) {
 
 			int nb;
@@ -2203,7 +2213,7 @@ public class Board
 				Piece p = getPiece(maybe[i][nb]);
 				if (!p.isKnown()
 					&& p.getActingRankChase() != Rank.NIL) {
-					nb = 99;
+					nb = 10;
 					break;
 				}
 			}
@@ -2219,21 +2229,66 @@ public class Board
 				nb++;
 			}
 
+
+		// The AI also looks at possible sentries
+		// near the structures.  If the opponent is leaving
+		// a structure undefended, it likely is a ruse,
+		// regardless of its composition.
+		//
+		// A structure is guarded when a movable sentry
+		// can reach the flag structure before any possible attacker.
+		// Yet if the attacker is far away, it is difficult
+		// to tell which structure could hold the flag, because the
+		// sentry could defend any number of structures.  So unless
+		// the attacker is close, the flag structure is difficult
+		// to discern.  So the AI looks for close-by
+		// guards(G) in the following pattern:
+		//
+		// |G G		G G G
+		// |B G		G B G
+		// |F B		B F B
+		// |xxx 	xxxxx
+		//
+		// Once an AI attacker is in reach of multiple structures,
+		// the AI needs to focus on the one that is actively defended.
+		// What usually happens now, is that a sentry is drawn off
+		// the flag structure to thwart the attacker, so then
+		// the pattern no longer matches.  This makes it look like
+		// the flag structure is unguarded, and thus the AI attacks
+		// the structure that it can get to, which
+		// is always the ruse.
+		//
+		// TBD: So the AI also needs to look for a defender between the flag
+		// structure and an AI unknown or Eight.  If there is a defender,
+		// the flag structure is still guarded, even if it there are no
+		// sentries adjacent to the flag structure.
+
+			boolean guarded = false;
+			final int nearDir[] = { 23, 22, 21, 12, 11, 10, -10, -11, -12, -21, -22, -23 };
 			for (int d : nearDir) {
 				int k = maybe[start][0] + d;
 				if (k < 0 || k > 120 || !Grid.isValid(k))
 					continue;
 				Piece p = getPiece(k);
-				if (p == null
-					|| p.getColor() != getPiece(maybe[start][0]).getColor())
+				if (p == null)
 					continue;
 
-		// The AI also looks at possible defenders
-		// near the structures.  If the opponent is leaving
-		// a structure undefended, it likely is a ruse.
+		// Note that no check is made for the color of piece
+		// surrounding the flag structure.
+		// This is because once the AI is able to penetrate,
+		// perhaps with superior pieces, the sentries will
+		// be forced away.  For example,
+		// | R8 R1 --
+		// | BB B3 BB
+		// | BF BB B?
+		// |xxxxxxxxx
+		//
+		// After R1xB3, the sentry is gone.  This does not
+		// mean that the flag is elsewhere.  So the AI
+		// must continue with R8xBB and R8xBF.
 
 				else if (p.getRank() != Rank.BOMB) {
-					nb--;
+					guarded = true;
 				}
 			}
 
@@ -2247,9 +2302,12 @@ public class Board
 		// So the AI looks for a combination of small size and
 		// large number of defenders.
 
-			if (nb < size) {
-				size = nb;
+			if (size == 0
+				|| !bestGuessGuarded
+				|| nb < size) {
 				bestGuess = start;
+				size = nb;
+				bestGuessGuarded = guarded;
 			}
 		} // i
 		return bestGuess;
@@ -2632,15 +2690,36 @@ public class Board
 		// first move was not forced, and in order to force
 		// Blue to move back down, Red Nine would have to move
 		// up one square, subjecting it to attack by Blue Four.
+		//
+		// Compare with the following two squares attack.
+		//
+		// |-- R3 --
+		// |-- -- --
+		// |-- B4 B?
+		// |-- -- B?
+		// |xxxxxxxxxxx
+		// Blue Four moves to the left.
+		// Now if Red Three moves to the left, and
+		// then Blue Four tries to move back right,
+		// isPossibleTwoSquares should return true.
+		// (Thus Blue Four is seen to be trapped in very few ply).
+		// 
 
 		// Determine if the player move is forced.
 		// Opponent and player pieces not alternating
 		// in the same column or row?
-		if ((oppmove1.getToX() != Grid.getX(from)
-			&& oppmove1.getToY() != Grid.getY(from))
-			|| (oppmove1.getFromX() != Grid.getX(to)
-			&& oppmove1.getFromY() != Grid.getY(to)))
-			return false;
+		int xdiff = Grid.getX(to) - Grid.getX(from);
+		int ydiff = Grid.getY(to) - Grid.getY(from);
+		if (xdiff != 0) {
+			if (oppmove1.getFromX() != Grid.getX(to)
+				|| oppmove1.getToX() != Grid.getX(from))
+				return false;
+		}
+		if (ydiff != 0) {
+			if (oppmove1.getFromY() != Grid.getY(to)
+				|| oppmove1.getToY() != Grid.getY(from))
+				return false;
+		}
 
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)
@@ -3066,6 +3145,105 @@ public class Board
 		p.revealRank();
 	}
 
+
+	// Unknown pieces at the front of the lanes at the start
+	// of the game or that freely move into a lane across
+	// from an opponent unknown piece while the opponent
+	// still has a healthy supply of Scouts are assigned
+	// an unknown chase rank, because the player has deliberately
+	// exposed these pieces to attack by Scouts.  This is
+	// equivalent to the piece actually having chased an unknown piece,
+	// which is indicative of weakness.
+	//
+	// While this heuristic is frequently violated by aggressive
+	// players, the AI's route to victory hinges on discovering
+	// strong opponent ranks, particularly the opponent One,
+	// and for defensive opponents, the AI has to assume that
+	// the opponent is sheltering its One; otherwise, if the AI
+	// is unsuccessful at discovering the opponent One, it
+	// will likely lose a game of attrition against a skilled opponent.
+	//
+	// However, do not override any chase rank that the piece
+	// may have already acquired during game play.
+	//
+	// Note: this heuristic is also necessary for effective bluffing,
+	// because once the opponent realizes that the AI plays
+	// defensively and shelters its One, then the opponent also
+	// will realize that an AI piece that was voluntarily exposed to
+	// the front line is not a strong piece, and therefore
+	// is unsuitable to bluff against an opponent strong piece.
+
+	void markExposedPieces()
+	{
+		final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
+		for (int x : xlanes) {
+			Piece p = getPiece(Grid.getIndex(x, Grid.yside(1-bturn, 3)));
+			if (p != null
+				&& !p.hasMoved()
+				&& p.getApparentRank() == Rank.UNKNOWN
+				&& p.getActingRankChase() == Rank.NIL)
+					p.setActingRankChaseEqual(Rank.UNKNOWN);
+		}
+
+		// If the opponent has few Eights remaining,
+		// it is marginly safer to expose low ranked pieces
+
+		if (rankAtLarge(bturn, Rank.EIGHT) < 4)
+			return;
+
+		Move m1 = getLastMove(1);
+		if (m1 == null)
+			return;
+		Piece oppPiece=m1.getPiece();
+
+		// If piece moves on the same vertical,
+		// it could be a superior piece whose blocking
+		// piece was removed, and now it is trying to
+		// escape detection.
+
+		if (m1.getToY() - m1.getFromY() == 0)
+			return;
+
+		// If an opponent piece is nearby, the piece
+		// may have been chased, or the piece may be
+		// beginning a chase, or may be responding as protection
+		// to some other threat.
+
+		if (grid.isCloseToEnemy(1-bturn,  m1.getTo(), 1))
+			return;
+
+		// If the piece already has a rank or a chase rank,
+		// the chase rank is retained
+
+		if (oppPiece.getApparentRank() != Rank.UNKNOWN
+			|| oppPiece.getActingRankChase() != Rank.NIL)
+			return;
+
+		// bturn is current player color, so determines
+		// the direction of the players field and
+		// is the color of the possible Scout piece
+
+		int dir;
+		if (bturn == Settings.topColor)
+			dir = -11;
+		else
+			dir = 11;
+
+		for (int i = m1.getTo()+dir; ; i += dir) {
+			Piece p = getPiece(i);
+			if (p != null) {
+				if (p.getColor() != bturn)
+					break;
+				if (p.getApparentRank() != Rank.UNKNOWN
+					&& p.getApparentRank() != Rank.NINE)
+					break;
+				oppPiece.setActingRankChaseEqual(Rank.UNKNOWN);
+				break;
+			}
+		}
+
+		// TBD: check if the oppPiece unblocked a lane
+		// and exposed another piece to attack
+	}
+
 }
-
-

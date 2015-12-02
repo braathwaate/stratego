@@ -2135,12 +2135,25 @@ public class AI implements Runnable
 		// If chased X chaser isn't a bad move, the AI
 		// isn't concerned about a chase, so continue deep search
 
-				int tmpM = Move.packMove(fp.getIndex(), tp.getIndex());
 				int vm = b.getValue();
-				b.move(tmpM, 0);
+				b.move(Move.packMove(fp.getIndex(), tp.getIndex()) , 0);
 				vm = b.getValue() - vm;
 				b.undo();
 				if (vm >= -5)
+					continue;
+
+		// If chaser X chased isn't a good move, the chaser
+		// isn't likely to chase.  For example, 8?x3 (LOSES) is a bad move
+		// for the AI because bluffing using non-expendable pieces
+		// is discouraged.  So the check above falls through to here.
+		// But 3x8? (WINS) is also a bad move for the opponent,
+		// losing 1/2 of the value of an unknown piece (see valueBluff).
+
+				vm = b.getValue();
+				b.move(Move.packMove(tp.getIndex(), fp.getIndex()) , 0);
+				vm = b.getValue() - vm;
+				b.undo();
+				if (vm > 0)
 					continue;
 
 				attackers++;
