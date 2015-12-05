@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.9.8][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.8/stratego_v0.9.8.jar
+[Stratego player v0.9.9][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.9/stratego_v0.9.9.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -52,7 +52,6 @@ whereas lesser AI pieces are eager to sacrifice themselves if the loss
 leads to key opponent piece discovery that assists in winning the game.
 
 A primary goal of the AI is to keep its low ranked pieces unknown
-and unmoved
 while it tries to discover the ranks of the opponent's low ranked pieces,
 primarily the opponent's One.
 As the opponent's low ranked pieces become known,
@@ -111,7 +110,7 @@ R? -- R7 |
 ```
 Red has the move.  Without pointless move reduction, it would take many ply to determine that Red Seven can successfully win Blue Eight.  But with pointless move reduction it only takes a maximum of 8 ply.  This is because after Red Seven moves up, Blue Eight moves left, Red Seven moves left, it is pointless for Blue Eight to move back, because Blue began the Two Squares sequence; moving back cannot change the outcome. So Blue must play some other move.  This is four ply.  Then Red Seven approaches again and the sequence repeats.  Thus the attack is seen to be successful in only 8 ply (not 9, because quiescent search awards the capture at 8 ply).<br><br>This Two Squares case is already coded.  But often the opponent has a pointless chase elsewhere on the board.  By considering the pointless chase, it pushes the player's successful attack past the horizon of the search tree.  So pointless moves need to be removed from the search tree.
 ## Heuristic.
-This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  One issue is how much to weight suspected pieces given a bluffing opponent.
+This has been tuned with countless runs against other bots.  Yet there still much room for improvement.  The heuristic works well against a conservative opponent that doesn't bluff because the AI soon discovers the opponent ranks.  But against an aggressive opponent, the AI (or any player) quickly gains a piece count deficit, and the opponent can turn this into a win, even with a lack of superior pieces.  Indeed, this is the essence of the game of Stratego.  Careful aggression where the player makes educated guesses about the location of the opponents superior pieces, bombs and flag is often rewarded.
 ## Suspected Rank Analysis.
 This the most potent area for improvement, as it is how human players win.  Humans are able to evaluate unknown opponent pieces and make good decisions that violate worst case scenarios.  The AI deviates only slightly from worst case scenarios, but this gives it significant advantage over other bots which rely on worst case scenarios and completely miss how the AI can obliterate the opponent's pieces without the pieces clearly known.  Yet against a skilled human opponent, the AI is a patsy. Why?  Because humans much more easily guess the rank of the opponent unknown pieces.  This human ability needs to be distilled into algorithms that gives the AI the same advantage.
 

@@ -1450,6 +1450,41 @@ public class AI implements Runnable
 			return;
 		}
 
+		// The transposition table cannot be used if the current position
+		// results from moves leading to a possible Two Squares ending.
+		// That is because it is the order of the moves that is important,
+		// and therefore the value of the position depends on whether the
+		// moves were issued in the proper order to result in a
+		// possible Two Squares ending.  For example,
+		// BB -- BB -- |
+		// -- -- -- BB |
+		// R3 -- B4 -- |
+		// -------------
+		// Red has the move.  Two Squares is possible after R3 moves right,
+		// B4 moves up, R3 moves up. B4 moving down is then disallowed by
+		// isPossibleTwoSquares(), so the value of the position to Red is
+		// the win of Blue Four.
+		//
+		// But this is the same position as R3 moves up, B4 moves up,
+		// R3 moves right.  B4 moving down is allowed.  So if this latter
+		// position is stored in the transposition table, and is retrieved for
+		// the value of the first position, Red would not be awarded
+		// the win of Blue Four.
+		//
+		// Vice versa, if the first position were stored, and the value
+		// retrieved for the latter position, the AI would erroneously
+		// believe it had a Two Squares ending when it really didn't.
+		//
+		// The solution is to not use the value from the transposition
+		// for positions resulting from chase moves, but the
+		// best move is useful in most cases and harmless in others.
+
+		if (entryType == TTEntry.Flags.EXACT) {
+			UndoMove m = b.getLastMove(1);
+			if (m != null && b.grid.hasAttack(m.getPiece()))
+				entryType = TTEntry.Flags.BESTMOVE;
+		}
+
 		entry.type = searchType;
 		entry.flags = entryType;
 		entry.moveRoot = moveRoot;
@@ -1558,40 +1593,8 @@ public class AI implements Runnable
 
 		assert hashOrig == b.getHash() : "hash changed";
 
-		// The transposition table cannot be used if the current position
-		// results from moves leading to a possible Two Squares ending.
-		// That is because it is the order of the moves that is important,
-		// and therefore the value of the position depends on whether the
-		// moves were issued in the proper order to result in a
-		// possible Two Squares ending.  For example,
-		// BB -- BB -- |
-		// -- -- -- BB |
-		// R3 -- B4 -- |
-		// -------------
-		// Red has the move.  Two Squares is possible after R3 moves right,
-		// B4 moves up, R3 moves up. B4 moving down is then disallowed by
-		// isPossibleTwoSquares(), so the value of the position to Red is
-		// the win of Blue Four.
-		//
-		// But this is the same position as R3 moves up, B4 moves up,
-		// R3 moves right.  B4 moving down is allowed.  So if this latter
-		// position is stored in the transposition table, and is retrieved for
-		// the value of the first position, Red would not be awarded
-		// the win of Blue Four.
-		//
-		// Vice versa, if the first position were stored, and the value
-		// retrieved for the latter position, the AI would erroneously
-		// believe it had a Two Squares ending when it really didn't.
-		//
-		// The solution is to not use the value from the transposition
-		// for positions resulting from chase moves, but the
-		// best move is useful in most cases and harmless in others.
-
 		TTEntry.Flags entryType;
-		UndoMove m = b.getLastMove(1);
-		if (m != null && b.grid.hasAttack(m.getPiece()))
-			entryType = TTEntry.Flags.BESTMOVE;
-		else if (vm <= alphaOrig)
+		if (vm <= alphaOrig)
 			entryType = TTEntry.Flags.UPPERBOUND;
 		else if (vm >= beta)
 			entryType = TTEntry.Flags.LOWERBOUND;
@@ -2089,7 +2092,17 @@ public class AI implements Runnable
 
 			if (!fp.isKnown()
 				&& !fp.hasMoved())
-				break;
+				continue;
+
+		// Nines are not chased.
+		// 1. They can run away fast
+		// 2. They are not worth very much
+		// 3. They may be chasing opponent pieces
+		//	(such as a Spy or unknown One)
+		//	and deep search eliminates those moves
+
+			if (fp.getRank() == Rank.NINE)
+				continue;
 
 			if (!b.grid.isCloseToEnemy(Settings.topColor, fp.getIndex(), MAX_STEPS))
 				continue;
