@@ -62,7 +62,6 @@ public class AI implements Runnable
 	static final int ATTACK = 1;
 	static final int APPROACH = 2;
 	static final int FLEE = 3;
-	static final int LOSES = 4;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -84,6 +83,7 @@ public class AI implements Runnable
 		KM,	// killer move
 		TE,	// transposition table entry
 		IMMOBILE,
+		LOSES,
 		OK
 	}
 
@@ -367,12 +367,8 @@ public class AI implements Runnable
 				t += d;
 				p = b.getPiece(t);
 			};
-			if (p.getColor() == 1 - fpcolor) {
-				int mo = LOSES;
-				if (b.isNineTarget(p))
-					mo = ATTACK;
-				addMove(moveList.get(mo), i, t);
-			}
+			if (p.getColor() == 1 - fpcolor)
+				addMove(moveList.get(ATTACK), i, t);
 		} // dir
 	}
 
@@ -425,16 +421,12 @@ public class AI implements Runnable
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
 
-			if (tp == null) {
+			if (tp == null)
 				addMove(moveList.get(FLEE), i, t);
-			} else if (tp != Grid.water && tp.getColor() != fpcolor) {
-				if (b.isLosingMove(fp, tp))
-					addMove(moveList.get(LOSES), i, t);
-				else
-					addMove(moveList.get(ATTACK), i, t);
+			else if (tp.getColor() == 1 - fpcolor)
+				addMove(moveList.get(ATTACK), i, t);
 
 					
-			}
 		} // d
 	}
 
@@ -451,15 +443,9 @@ public class AI implements Runnable
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
 
-			if (tp == null || tp == Grid.water)
-				continue;
-
-			if (tp.getColor() != fpcolor) {
-				if (b.isLosingMove(fp, tp))
-					addMove(moveList.get(LOSES), i, t);
-				else
-					addMove(moveList.get(ATTACK), i, t);
-			}
+			if (tp != null
+				&& tp.getColor() == 1 - fpcolor)
+				addMove(moveList.get(ATTACK), i, t);
 		} // d
 	}
 
@@ -580,15 +566,14 @@ public class AI implements Runnable
 
 		if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
 
-		// Known bombs are removed from pieces[] but
-		// a bomb or flag could become known in the search
-		// tree.  We need to generate moves for suspected
+		// Known bombs or flags are not movable pieces (see Grid.java)
+
+			assert !fp.isKnown() : "Known " + logPiece(fp) + " " + logFlags(fp) + " at " + i + " ?";
+
+		// We need to generate moves for suspected
 		// bombs because the bomb might actually be
 		// some other piece, but once the bomb becomes
 		// known, it ceases to move.
-
-			if (fp.isKnown())
-				return false;
 
 		// Yet an unknown bomb or suspected bomb is so unlikely to have
 		// any impact (except for attack on first move),
@@ -711,7 +696,7 @@ public class AI implements Runnable
 
 	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
 	{
-		for (int i = 0; i <= LOSES; i++)
+		for (int i = 0; i <= FLEE; i++)
 			moveList.add(new ArrayList<Integer>());
 
 		boolean isPruned = false;
@@ -721,17 +706,24 @@ public class AI implements Runnable
 			&& n >= 2)
 			genSafe(unsafeGrid);
 
-		for (Piece fp : b.pieces[turn]) {
-			if (fp == null)	// end of list
-				break;
+		// Scan the board for movable pieces
 
-		// if the piece is no longer on the board, ignore it
+		BitGrid bg = new BitGrid();
+		b.grid.getMovablePieces(turn, bg);
 
-			if (b.getPiece(fp.getIndex()) != fp)
-				continue;
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg.get(bi);
+			while (data != 0) {
+				int ntz = Long.numberOfTrailingZeros(data);
+				int i = k + ntz;
+				data ^= (1l << ntz);
 
-			if (!b.grid.hasMove(fp))
-				continue;
+				Piece fp = b.getPiece(i);
 
 		// FORWARD PRUNING
 		// deep chase search
@@ -793,7 +785,8 @@ public class AI implements Runnable
 
 			if (getMoves(ns, moveList, fp, unsafeGrid))
 					isPruned = true;
-		}
+		} // data
+		} // bi
 
 		return isPruned;
 	}
@@ -842,7 +835,8 @@ public class AI implements Runnable
 
 		for (int n = 1; n < MAX_PLY; n++) {
 
-		Move killerMove = new Move(null, -1);
+			Move killerMove = new Move(null, -1);
+			Move returnMove = new Move(null, -1);
 
 			rootMoveList = new ArrayList<ArrayList<Integer>>();
 			boolean isPruned = getMoves(rootMoveList, n, 0, Settings.topColor);
@@ -881,7 +875,7 @@ public class AI implements Runnable
 			getMoves(moveList, -n, 0, Settings.topColor);
 			int bestPrunedMoveValue = -9999;
 			int bestPrunedMove = 0;
-			for (int mo = 0; mo <= LOSES; mo++)
+			for (int mo = 0; mo <= FLEE; mo++)
 			for (int move : moveList.get(mo)) {
 				logMove(2, move, 0);
 				MoveType mt = makeMove(n, 0, move);
@@ -898,7 +892,7 @@ public class AI implements Runnable
 		// moves to be considered (because QS does not currently
 		// consider scout moves).
 		// 
-					int vm = -negamax(1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
+					int vm = -negamax(1, -9999, 9999, 1, killerMove, returnMove, depthValueReduction(1)); 
 					if (vm > bestPrunedMoveValue) {
 						bestPrunedMoveValue = vm;
 						bestPrunedMove = move;
@@ -915,7 +909,7 @@ public class AI implements Runnable
 			}
 
 		boolean hasMove = false;
-		for (int mo = 0; mo <= LOSES; mo++)
+		for (int mo = 0; mo <= FLEE; mo++)
 			if (rootMoveList.get(mo).size() != 0) {
 				hasMove = true;
 				break;
@@ -927,7 +921,7 @@ public class AI implements Runnable
 		}
 
 		log(DETAIL, "\n>>> pick best move");
-		int vm = negamax(n, -9999, 9999, 0, killerMove, 0); 
+		int vm = negamax(n, -9999, 9999, 0, killerMove, returnMove, 0); 
 		completedDepth = n;
 
 		// To negate the horizon effect where the ai
@@ -973,7 +967,7 @@ public class AI implements Runnable
 		// and can lose a lessor piece by drawing the attacker
 		// away.  Fortunately, this does not occur in play often.
 
-		int bestMovePly = killerMove.getMove();
+		int bestMovePly = returnMove.getMove();
 		int bestMovePlyValue = vm;
 
 		log("\n<<< pick best move");
@@ -999,7 +993,7 @@ public class AI implements Runnable
 
 			logMove(n+2, bestMovePly, b.getValue());
 			MoveType mt = makeMove(n, 0, bestMovePly);
-			vm = -negamax(n+1, -9999, 9999, 1, killerMove, depthValueReduction(1)); 
+			vm = -negamax(n+1, -9999, 9999, 1, killerMove, returnMove, depthValueReduction(1)); 
 			b.undo();
 			log(DETAIL, " " + negQS(vm));
 
@@ -1135,7 +1129,17 @@ public class AI implements Runnable
 		int best = -9999;
 
 		BitGrid bg = new BitGrid();
-		b.grid.getNeighbors(1-b.bturn, bg);
+
+	// Find the neighbors of opponent pieces (1 - b.turn)
+
+		b.grid.getMovableNeighbors(1-b.bturn, bg);
+
+		// As qs is defined, if there are no neighbors,
+		// qs is the current value of the board
+
+		if (bg.get(0) == 0 && bg.get(1) == 0)
+			return bvalue;
+
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
 			if (bi == 0)
@@ -1149,18 +1153,7 @@ public class AI implements Runnable
 				data ^= (1l << ntz);
 
 				Piece fp = b.getPiece(i);
-
-		// Known bombs are removed from pieces[] but
-		// a bomb could become known in the search
-		// tree.  We need to generate moves for suspected
-		// bombs because the bomb might actually be
-		// some other piece, but once the bomb becomes
-		// known, it ceases to move.
-
-			Rank fprank = fp.getRank();
-			if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
-				&& fp.isKnown())
-			 	continue;
+				Rank fprank = fp.getRank();
 
 		// TBD: Far attacks by nines or unknown pieces
 		// are not handled.  This would improve the
@@ -1195,9 +1188,9 @@ public class AI implements Runnable
 				if (tp.getColor() != 1 - b.bturn)
 					continue;
 
-				int enemies = b.grid.enemyCount(tp);
+				int enemies = b.grid.movableEnemyCount(tp);
 				b.move(Move.packMove(i, t), depth);
-				int v = -negQS(b.getValue() + dvr) - bvalue;
+				int v = -negQS(b.getValue() + dvr - bvalue);
 
 		// If this is a negative result, try fleeing
 
@@ -1207,9 +1200,7 @@ public class AI implements Runnable
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
-		// The main search throws these into the LOSES
-		// bucket, hoping that they will get pruned off.
-		// But it has to evaluate them because of the rare
+		// But it had to evaluate them because of the rare
 		// case when a valuable piece is cornered and has to
 		// sacrifice a lesser piece to clear an escape.
 		//
@@ -1317,19 +1308,6 @@ public class AI implements Runnable
 
 	private int qscache(int depth, int alpha, int beta, int dvr)
 	{
-		BitGrid bg = new BitGrid();
-		b.grid.getNeighbors(bg);
-		int valueB = b.getValue();
-
-		// As qs is defined, if there are no neighbors,
-		// qs is valueB
-
-		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return negQS(valueB + dvr);
-
-		// valueBluff() checks for a prior move capture,
-		// so qscache is invalid in this case
-
 		return qs(depth, QSMAX, alpha, beta, dvr);
 /*
 
@@ -1502,7 +1480,7 @@ public class AI implements Runnable
 	// Part 1: check transposition table and qs
 	// Part 2: check killer move and if necessary, iterate through movelist
 
-	private int negamax(int n, int alpha, int beta, int depth, Move killerMove, int dvr) throws InterruptedException
+	private int negamax(int n, int alpha, int beta, int depth, Move killerMove, Move returnMove, int dvr) throws InterruptedException
 	{
 		if (bestMove != 0
 			&& stopTime != 0
@@ -1524,7 +1502,6 @@ public class AI implements Runnable
 		TTEntry entry = ttable[index];
 		int ttmove = -1;
 		TTEntry.SearchType searchType;
-		int bestmove = -1;
 		if (deepSearch != 0)
 			searchType = TTEntry.SearchType.DEEP;
 		else
@@ -1545,7 +1522,9 @@ public class AI implements Runnable
 				&& (searchType == entry.type
 					|| entry.type == TTEntry.SearchType.BROAD)) {
 				if (entry.flags == TTEntry.Flags.EXACT) {
-					killerMove.setMove(entry.bestMove);
+					returnMove.setMove(entry.bestMove);
+					if (entry.bestMove != 0)
+						killerMove.setMove(entry.bestMove);
 					log(DETAIL, " exact " + index + " " + negQS(entry.bestValue) + " " + negQS(entry.bestValue + dvr));
 					return entry.bestValue + dvr;
 				}
@@ -1554,7 +1533,9 @@ public class AI implements Runnable
 				else if (entry.flags== TTEntry.Flags.UPPERBOUND)
 					beta = Math.min(beta, entry.bestValue + dvr);
 				if (alpha >= beta) {
-					killerMove.setMove(entry.bestMove);
+					returnMove.setMove(entry.bestMove);
+					if (entry.bestMove != 0)
+						killerMove.setMove(entry.bestMove);
 					log(DETAIL, " cutoff " + index + " " + negQS(entry.bestValue) + " " +  negQS(entry.bestValue + dvr));
 					return entry.bestValue + dvr;
 				}
@@ -1589,7 +1570,7 @@ public class AI implements Runnable
 		if (depth == 0 && ttmove == 0)
 			ttmove = -1;
 
-		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove, dvr);
+		vm = negamax2(n, alpha, beta, depth, killerMove, ttmove, returnMove, dvr);
 
 		assert hashOrig == b.getHash() : "hash changed";
 
@@ -1602,9 +1583,9 @@ public class AI implements Runnable
 			entryType = TTEntry.Flags.EXACT;
 
 		// save each move at each ply for PV
-		saveTTEntry(n, n, searchType, entryType, vm, dvr, killerMove.getMove());
+		saveTTEntry(n, n, searchType, entryType, vm, dvr, returnMove.getMove());
 		// save value of position at hash 0 (see saveTTEntry())
-		saveTTEntry(0, n, searchType, entryType, vm, dvr, killerMove.getMove());
+		saveTTEntry(0, n, searchType, entryType, vm, dvr, returnMove.getMove());
 
 		return vm;
 	}
@@ -1656,32 +1637,25 @@ public class AI implements Runnable
 		return (to == from);
 	}
 
-	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove, int dvr) throws InterruptedException
+	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove, Move returnMove, int dvr) throws InterruptedException
 	{
 		// The player with the last movable piece on the board wins
 
-		boolean playerMove = true;
-		boolean oppMove = true;
-		if (b.pieces[b.bturn][1] == null) {
-			Piece fp = b.pieces[b.bturn][0];
-			if (b.getPiece(fp.getIndex()) != fp) {
-				oppMove = false;
-				killerMove.setMove(-1);
-			}
-		}
-		if (b.pieces[1-b.bturn][1] == null) {
-			Piece fp = b.pieces[1-b.bturn][0];
-			if (b.getPiece(fp.getIndex()) != fp) {
-				playerMove = false;
-				killerMove.setMove(-1);
-			}
-		}
-		if (playerMove == false && oppMove == false)
+		boolean playerMove = (b.grid.movablePieceCount(b.bturn) != 0);
+		boolean oppMove = (b.grid.movablePieceCount(1-b.bturn) != 0);
+
+		if (playerMove == false && oppMove == false) {
+			returnMove.setMove(-1);
 			return 0;	// tie
-		else if (oppMove == false)
+		}
+		else if (oppMove == false) {
+			returnMove.setMove(-1);
 			return -9999;	// win
-		else if (playerMove == false)
+		}
+		else if (playerMove == false) {
+			returnMove.setMove(-1);
 			return 9999;	// loss
+		}
 
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
@@ -1703,7 +1677,7 @@ public class AI implements Runnable
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 
 				long h = b.getHash();
 				b.undo();
@@ -1714,7 +1688,9 @@ public class AI implements Runnable
 
 				if (alpha >= beta) {
 					hh[ttMove]+=n;
-					killerMove.setMove(ttMove);
+					returnMove.setMove(ttMove);
+					if (ttMove != 0)
+						killerMove.setMove(ttMove);
 					return vm;
 				}
 
@@ -1726,10 +1702,12 @@ public class AI implements Runnable
 		}
 
 		// Try the killer move before move generation
-		// to save time if the killer move causes ab pruning.
+		// to save time if the killer move causes ab pruning
+		// and skips the expensive move generation operation.
+
 		int km = killerMove.getMove();
+		assert km != 0 : "Killer move cannot be null move";
 		if (km != -1
-			&& km != 0 // null move legal only if pruned
 			&& km != ttMove
 			&& isValidMove(km) 
 			&& (Grid.isAdjacent(km)
@@ -1739,7 +1717,7 @@ public class AI implements Runnable
 			if (mt == MoveType.OK
 				|| mt == MoveType.CHASER
 				|| mt == MoveType.CHASED) {
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 				long h = b.getHash();
 				b.undo();
 				log(DETAIL, " " + negQS(vm) + " " + MoveType.KM);
@@ -1753,6 +1731,7 @@ public class AI implements Runnable
 
 				if (alpha >= beta) {
 					hh[km]+=n;
+					returnMove.setMove(km);
 					return bestValue;
 				}
 			} else
@@ -1784,25 +1763,9 @@ public class AI implements Runnable
 				addMove(moveList.get(APPROACH), 0);
 		}
 
-		for (int mo = 0; mo <= LOSES; mo++) {
 
-			// It is tempting to discard moves in LOSES.
-			// This works if LOSES is always a loss.
-			// But there could be some cases where LOSES is
-			// actually a win.  TBD: fix this
-			// Here is an example:
-			// R4 -- R? --
-			// R? B? -- --
-			// -- xx xx --
-			// Unknown Blue was chasing Red Four and had
-			// a suspected rank of Three.  But then it
-			// got trapped by unknown Red pieces.  This
-			// gave it a chase rank of Unknown.  That
-			// makes it fair game to attack with Red Four.
-			// B?xR4 is LOSES, but then Blue actually plays
-			// B?xR4.
-			// if (mo == LOSES && depth != 0)
-			//	continue;
+		outerloop:
+		for (int mo = 0; mo <= FLEE; mo++) {
 
 			ArrayList<Integer> ml = moveList.get(mo);
 			for (int i = 0; i < ml.size(); i++) {
@@ -1823,7 +1786,7 @@ public class AI implements Runnable
 					continue;
 				}
 
-				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, dvr + depthValueReduction(depth+1));
+				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 
 				long h = b.getHash();
 
@@ -1839,15 +1802,24 @@ public class AI implements Runnable
 				alpha = Math.max(alpha, vm);
 
 				if (alpha >= beta) {
-					hh[bestmove]+=n;
-					killerMove.setMove(bestmove);
-					return vm;
+					assert bestValue == vm : "bestvalue not vm?";
+					break outerloop;
 				}
 			} // moveList
 		} // move order
 
 		hh[bestmove]+=n;
-		killerMove.setMove(bestmove);
+
+		returnMove.setMove(bestmove);
+
+		// A null move cannot be a killer move, because
+		// a null move is valid only if the movelist is pruned,
+		// and that cannot be determined until a new movelist
+		// is generated.  (killer move bypasses move generation).
+
+		if (bestmove != 0)
+			killerMove.setMove(bestmove);
+
 		return bestValue;
 	}
 
@@ -1892,20 +1864,30 @@ public class AI implements Runnable
 		if (b.isTwoSquares(tryMove))
 			return MoveType.TWO_SQUARES;
 
+		Piece tp = b.getPiece(Move.unpackTo(tryMove));
+		int enemies = 0;
+		if (tp != null)
+			enemies = b.grid.movableEnemyCount(tp);
+		int bvalue = b.getValue();
+
 		// AI always abides by Two Squares rule
 		// even if box is not checked (AI plays nice).
 
 		if (Settings.twoSquares
 			|| b.bturn == Settings.topColor) {
 
-			if (b.isChased(tryMove)) {
+	// Note that a possible two squares result can occur
+	// even if the piece does not have an adjacent attacker.
+	// This can occur if a Nine is trying to attack from afar,
+	// or simply if the piece is moving back and forth
+	// aimlessly.
+
+			if (b.isPossibleTwoSquares(tryMove))
+				return MoveType.POSS_TWO_SQUARES;
 
 	// Piece is being chased, so repetitive moves OK
-	// but can it lead to a two squares result?
 
-				if (b.isPossibleTwoSquares(tryMove))
-					return MoveType.POSS_TWO_SQUARES;
-
+			if (b.isChased(tryMove)) {
 				b.move(tryMove, depth);
 				mt = MoveType.CHASED;
 			} else if (b.bturn == Settings.topColor) {
@@ -1933,6 +1915,27 @@ public class AI implements Runnable
 				b.move(tryMove, depth);
 		} else
 			b.move(tryMove, depth);
+
+	// Losing captures are discarded (see qs())
+	//
+	// Note: A losing capture may be necessary to protect
+	// some other piece, even if the other piece isn't directly forked.
+	// For example,
+	// xxxxxxxx
+	// | RF RB
+	// | RB --
+	// | -- RB
+	// | B8 R2
+	// Red Two is unknown.  R2?xB? is a losing move because Red Two
+	// does not want to lose stealth.  But it does not capture Blue
+	// Eight, it risks losing the game.
+
+		if (tp != null
+			&& enemies < 2
+			&& -negQS(b.getValue() - bvalue) < 0) {
+			b.undo();
+			return MoveType.LOSES;
+		}
 
 		return mt;
 	}
@@ -2082,10 +2085,24 @@ public class AI implements Runnable
 	{
 		final int MAX_STEPS = 2;
 		final int MAX_STEPS2 = 4;
-		for (Piece fp : b.pieces[Settings.topColor]) {
-			if (fp == null)	// end of list
-				break;
 
+		BitGrid bg = new BitGrid();
+		b.grid.getMovablePieces(Settings.topColor, bg);
+
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg.get(bi);
+
+		while (data != 0) {
+			int ntz = Long.numberOfTrailingZeros(data);
+			int i = k + ntz;
+			data ^= (1l << ntz);
+
+			Piece fp = b.getPiece(i);
 
 		// Unknown unmoved pieces are not chased
 		// (use broad search).
@@ -2108,9 +2125,23 @@ public class AI implements Runnable
 				continue;
 
 			int attackers = 0;
-			for (Piece tp : b.pieces[Settings.bottomColor]) {
-				if (tp == null)	// end of list
-					break;
+
+			BitGrid tbg = new BitGrid();
+			b.grid.getMovablePieces(Settings.bottomColor, tbg);
+
+			for (int tbi = 0; tbi < 2; tbi++) {
+				int tk;
+				if (tbi == 0)
+					tk = 2;
+				else
+					tk = 66;
+				long tdata = tbg.get(tbi);
+				while (tdata != 0) {
+					int tntz = Long.numberOfTrailingZeros(tdata);
+					int ti = tk + tntz;
+					tdata ^= (1l << tntz);
+
+					Piece tp = b.getPiece(ti);
 
 				if (tp.getRank() == Rank.UNKNOWN
 					|| tp.getRank() == Rank.BOMB
@@ -2149,7 +2180,7 @@ public class AI implements Runnable
 		// isn't concerned about a chase, so continue deep search
 
 				int vm = b.getValue();
-				b.move(Move.packMove(fp.getIndex(), tp.getIndex()) , 0);
+				b.move(Move.packMove(fp.getIndex(), tp.getIndex()) , 0, true);
 				vm = b.getValue() - vm;
 				b.undo();
 				if (vm >= -5)
@@ -2163,7 +2194,7 @@ public class AI implements Runnable
 		// losing 1/2 of the value of an unknown piece (see valueBluff).
 
 				vm = b.getValue();
-				b.move(Move.packMove(tp.getIndex(), fp.getIndex()) , 0);
+				b.move(Move.packMove(tp.getIndex(), fp.getIndex()) , 0, true);
 				vm = b.getValue() - vm;
 				b.undo();
 				if (vm > 0)
@@ -2180,7 +2211,8 @@ public class AI implements Runnable
 					deepSearch = 2*steps-1;
 
 				}
-			} //tp
+			} //tp data
+			} //tp bi
 
 		// If there are two attackers nearby, then use broad search
 		// to try to avoid becoming trapped by the two attackers.
@@ -2189,7 +2221,8 @@ public class AI implements Runnable
 				deepSearch = 0;
 				return;
 			}
-		} //fp
+		} // bp data
+		} // fp bi
 
 		if (deepSearch != 0)
 			log("Deep search (" + deepSearch + ") in effect");

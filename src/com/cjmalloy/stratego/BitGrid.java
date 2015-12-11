@@ -109,18 +109,23 @@ public class BitGrid
 	//
 	// This function returns 0 if there are no neighboring bits.
 
-	public void getNeighbors(BitGrid in, BitGrid out)
+	static public void getNeighbors(long low, long high, long inlow, long inhigh, BitGrid out)
 	{
 		out.low |= ((low << 1) 
 			| (low >>> 1)
 			| (low << 11)
 			| (low >>> 11)
-			| ((high & 0x7fe) << 53)) & in.low;
+			| ((high & 0x7fe) << 53)) & inlow;
 
 		out.high |= ((high << 1)
 			| (high >>> 1)
 			| (high << 11)
 			| (high >>> 11)
-			| (low >>> 53)) & in.high;
+			| (low >>> 53)) & inhigh;
+	}
+
+	public void getNeighbors(BitGrid in, BitGrid out)
+	{
+		getNeighbors(low, high, in.low, in.high, out);
 	}
 }

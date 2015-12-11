@@ -236,6 +236,9 @@ public class Board
 			Piece tp = getPiece(m.getTo());
 			moveHistory(fp, tp, m.getMove());
 
+			clearPiece(m.getFrom());
+			clearPiece(m.getTo());
+
 			fp.setShown(true);
 			revealRank(fp);
 			revealRank(tp);
@@ -245,30 +248,32 @@ public class Board
 			}
 
 			int result = fp.getRank().winFight(tp.getRank());
-			if (result == 1)
-			{
-				moveToTray(m.getTo());
+
+		// Attacker wins:
+
+			if (result == 1) {
+				moveToTray(tp);
 				setPiece(fp, m.getTo());
-				clearPiece(m.getFrom());
 			}
-			else if (result == -1)
-			{
-				moveToTray(m.getFrom());
-				moveToTray(m.getTo());
-			}
-			else 
-			{
+
+		// Tie:
+
+			else if (result == -1) {
+				moveToTray(fp);
+				moveToTray(tp);
+
+		// Defender wins:
+
+			} else {
+				moveToTray(fp);
 				if (Settings.bNoMoveDefender ||
 						tp.getRank() == Rank.BOMB)
-					moveToTray(m.getFrom());
-				else if (fp.getRank() == Rank.NINE)
-					scoutLose(m);
+					setPiece(tp, m.getTo());
+
+		// Setting: Defender moves to attacker's square
+
 				else
-				{
-					moveToTray(m.getFrom());
 					setPiece(tp, m.getFrom());
-					clearPiece(m.getTo());
-				}
 			}
 			genChaseRank(fp.getColor());
 			genFleeRank(fp, tp, m.getMove());	// depends on suspected rank
@@ -1782,10 +1787,16 @@ public class Board
 		// - if a bomb is known and not suspected, it is a bomb.
 		// - if a bomb is known and suspected, it could be either.
 		// This happens in possibleFlag().
+		//
+		// Note: makeKnown() clears suspected rank, so it is
+		// set again as needed.  But the Bomb rank needs to be set
+		// before makeKnown() because makeKnown will then clear
+		// the movable piece grid.
 
 				p.makeKnown();
-
+				grid.clearMovablePiece(p);
 				Rank rank = p.getRank();
+
 				if (c == Settings.topColor)
 					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai pieces not bomb or flag?";
 				else if (unknownBombs != 0) {
@@ -2243,11 +2254,11 @@ public class Board
 		// the attacker is close, the flag structure is difficult
 		// to discern.  So the AI looks for close-by
 		// guards(G) in the following pattern:
-		//
-		// |G G		G G G
-		// |B G		G B G
-		// |F B		B F B
-		// |xxx 	xxxxx
+		// |G G		  G G G
+		// |G G		  G G G
+		// |B G	G	G G B G G
+		// |F B		  B F B
+		// |xxx 	xxxxxxxxx
 		//
 		// Once an AI attacker is in reach of multiple structures,
 		// the AI needs to focus on the one that is actively defended.
@@ -2264,9 +2275,14 @@ public class Board
 		// sentries adjacent to the flag structure.
 
 			boolean guarded = false;
-			final int nearDir[] = { 23, 22, 21, 12, 11, 10, -10, -11, -12, -21, -22, -23 };
+			final int nearDir[] = { 32, 33, 34, 23, 22, 21, 13, 12, 11, 10, 9 };
 			for (int d : nearDir) {
-				int k = maybe[start][0] + d;
+				int k = maybe[start][0];
+				if (k < 56)
+					k += d;
+				else
+					k -= d;
+					
 				if (k < 0 || k > 120 || !Grid.isValid(k))
 					continue;
 				Piece p = getPiece(k);
@@ -2360,14 +2376,18 @@ public class Board
 		// bluff against lower ranked pieces.  This code
 		// works for both AI and opponent bomb patterns.
 
-					if (maybe_count == 1)
+					if (maybe_count == 1) {
 						p.makeKnown();
+						grid.clearMovablePiece(p);
+					}
 					p.setSuspectedRank(Rank.BOMB);
 
 				}
 			} else if (p.getRank() == Rank.BOMB
-				&& maybe_count == 1)
+				&& maybe_count == 1) {
 					p.makeKnown();
+					grid.clearMovablePiece(p);
+				}
 		} // j
 		if (i < maybe_count - 1
 			&& maybe[i][0] + 1 == maybe[i+1][0])
@@ -2411,32 +2431,34 @@ public class Board
 		return false;
 	}
 
-	public void moveToTray(int i)
+	public void moveToTray(Piece p)
 	{
-		assert getPiece(i) != null : "getPiece(i) null?";
+		p.kill();
 
-		getPiece(i).kill();
-
-		remove(i);
+		remove(p);
 	}
 	
-	public boolean remove(int i)
+	public void remove(int i)
 	{
-		if (getPiece(i) == null)
-			return false;
-		
-		tray.add(getPiece(i));
+		Piece p = getPiece(i);
+		if (p == null)
+			return;
+		remove(p);
 		clearPiece(i);
+	}
+
+	public void remove(Piece p)
+	{
+		tray.add(p);
 		Collections.sort(tray,new Comparator<Piece>(){
 				     public int compare(Piece p1,Piece p2){
 					return p1.getRank().toInt() - p2.getRank().toInt();
 				     }});
-		return true;
 	}
 
-	public boolean remove(Spot s)
+	public void remove(Spot s)
 	{
-		return remove(grid.getIndex(s.getX(), s.getY()));
+		remove(grid.getIndex(s.getX(), s.getY()));
 	}
 
 	// Three Moves on Two Squares: Two Square Rule.
@@ -2935,34 +2957,6 @@ public class Board
 		Collections.sort(tray);
 	}
 
-
-	private void scoutLose(Move m)
-	{
-		Spot tmp = getScoutLooseFrom(m);
-
-		moveToTray(m.getFrom());
-		setPiece(getPiece(m.getTo()), tmp);
-		clearPiece(m.getTo());
-	}
-	
-	private Spot getScoutLooseFrom(Move m)
-	{
-		if (m.getFromX() == m.getToX())
-		{
-			if (m.getFromY() < m.getToY())
-				return new Spot(m.getToX(), m.getToY() - 1);
-			else
-				return new Spot(m.getToX(), m.getToY() + 1);
-		}
-		else //if (m.getFromY() == m.getToY())
-		{
-			if (m.getFromX() < m.getToX())
-				return new Spot(m.getToX() - 1, m.getToY());
-			else
-				return new Spot(m.getToX() + 1, m.getToY());
-		}
-	}
-	
 	protected boolean validAttack(Move m)
 	{
 		if (!Grid.isValid(m.getTo()) || !Grid.isValid(m.getFrom()))
@@ -3182,7 +3176,7 @@ public class Board
 				&& !p.hasMoved()
 				&& p.getApparentRank() == Rank.UNKNOWN
 				&& p.getActingRankChase() == Rank.NIL)
-					p.setActingRankChaseEqual(Rank.UNKNOWN);
+					p.setActingRankChaseLess(Rank.UNKNOWN);
 		}
 
 		// If the opponent has few Eights remaining,

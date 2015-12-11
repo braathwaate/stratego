@@ -37,9 +37,11 @@ public class Grid
 	// of all the pieces, masks can be used to answer these questions.
 
 	protected BitGrid pieceBitGrid[] = new BitGrid[2];
+	protected BitGrid movablePieceBitGrid[] = new BitGrid[2];
 	static private boolean[] isWater = new boolean[133];
 	static public final int NEIGHBORS = 5;
 	static protected BitGrid neighbor[][] = new BitGrid[NEIGHBORS][121];
+	static protected BitGrid waterGrid = new BitGrid();
 
 	static {
 		setWater(2,4);
@@ -87,8 +89,10 @@ public class Grid
 
 	public Grid() 
 	{
-		for (int i = 0; i < 2; i++)
+		for (int i = 0; i < 2; i++) {
 			pieceBitGrid[i] = new BitGrid();
+			movablePieceBitGrid[i] = new BitGrid();
+		}
 
 		for (int i = 0; i < grid.length; i++)
 			if (isWater[i])
@@ -100,6 +104,7 @@ public class Grid
 		grid = g.grid.clone();
 		for (int i = 0; i < 2; i++) {
 			pieceBitGrid[i] = new BitGrid(g.pieceBitGrid[i]);
+			movablePieceBitGrid[i] = new BitGrid(g.movablePieceBitGrid[i]);
 		}
 
 	}
@@ -138,11 +143,17 @@ public class Grid
 	{
 		grid[i] = p;
 		pieceBitGrid[p.getColor()].setBit(i);
+		if (!((p.getRank() == Rank.BOMB
+			|| p.getRank() == Rank.FLAG)
+			&& p.isKnown()))
+			movablePieceBitGrid[p.getColor()].setBit(i);
 	}
 
 	static private void setWater(int i) 
 	{
 		isWater[i] = true;
+		if (i >= 2 && i <= 129)
+			waterGrid.setBit(i);
 	}
 
 	static private void setWater(int x, int y) 
@@ -155,6 +166,15 @@ public class Grid
 		grid[i] = null;
 		pieceBitGrid[0].clearBit(i);
 		pieceBitGrid[1].clearBit(i);
+		movablePieceBitGrid[0].clearBit(i);
+		movablePieceBitGrid[1].clearBit(i);
+	}
+
+	public void clearMovablePiece(Piece p) 
+	{
+		int i = p.getIndex();
+		movablePieceBitGrid[0].clearBit(i);
+		movablePieceBitGrid[1].clearBit(i);
 	}
 
 	public void setPiece(int x, int y, Piece p) 
@@ -194,26 +214,42 @@ public class Grid
 		return pieceBitGrid[1-turn].andMask(neighbor[n][i]);
 	}
 
-	public int enemyCount(Piece p)
+	public int movableEnemyCount(Piece p)
 	{
 		int i = p.getIndex();
-		return pieceBitGrid[1-p.getColor()].andBitCount(neighbor[0][i]);
+		return movablePieceBitGrid[1-p.getColor()].andBitCount(neighbor[0][i]);
 	}
 
-	public void getNeighbors(int turn, BitGrid out)
+	public void getMovableNeighbors(int turn, BitGrid out)
 	{
-		pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], out);
+		pieceBitGrid[turn].getNeighbors(movablePieceBitGrid[1-turn], out);
 	}
 
-	public void getNeighbors(BitGrid out)
+	public void getMovablePieces(int turn, BitGrid out)
 	{
-		BitGrid out1 = new BitGrid();
-		pieceBitGrid[0].getNeighbors(pieceBitGrid[1], out1);
-		pieceBitGrid[1].getNeighbors(pieceBitGrid[0], out1);
 
-		BitGrid out2 = new BitGrid(pieceBitGrid[0].low | pieceBitGrid[1].low, pieceBitGrid[0].high | pieceBitGrid[1].high);
+	// Note: this is a workaround the silly Java restriction that all
+	// classes are created with new.  Here we just want to create
+	// a temporary BitGrid composed of open squares and call
+	// BitGrid.getNeighbors to find the movable pieces.  
+	// In C, we would create the structure on the stack, and
+	// the code would look obvious.  But to avoid heap allocation
+	// in this heavily used function,
+	// the members of BitGrid (2 longs) are created on the stack
+	// individually.
 
-		out1.getNeighbors(out2, out);
+		long low = ~(pieceBitGrid[turn].low | waterGrid.low);
+		long high = ~(pieceBitGrid[turn].high | waterGrid.high);
+		BitGrid.getNeighbors(low, high,
+			movablePieceBitGrid[turn].low,
+			movablePieceBitGrid[turn].high, out);
+	}
+
+	// in this heavily used function,
+	public int movablePieceCount(int turn)
+	{
+		return Long.bitCount(movablePieceBitGrid[turn].get(0))
+			+ Long.bitCount(movablePieceBitGrid[turn].get(1));
 	}
 
 	// isAdjacent is the same as steps() == 1 but perhaps faster
