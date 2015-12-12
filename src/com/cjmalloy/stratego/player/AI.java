@@ -1190,7 +1190,7 @@ public class AI implements Runnable
 
 				int enemies = b.grid.movableEnemyCount(tp);
 				b.move(Move.packMove(i, t), depth);
-				int v = -negQS(b.getValue() + dvr - bvalue);
+				int v = -negQS(b.getValue() + dvr) - bvalue;
 
 		// If this is a negative result, try fleeing
 

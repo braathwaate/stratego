@@ -159,7 +159,7 @@ public class TestingBoard extends Board
 	// • Bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
 	// • An unsuspected Spy is equal to the value of a
-	//	Colonel.  However, once the Spy is suspected,
+	//	Major.  However, once the Spy is suspected,
 	//	it has limited value except in certain reduced piece
 	//	endgames with Ones.
 	// • The Nine is the next lowest valued piece on the board.  However,
@@ -213,7 +213,7 @@ public class TestingBoard extends Board
 		VALUE_SEVEN,	// 7 Sergeant
 		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
-		VALUE_THREE,	// Spy value with opponent One still on board
+		VALUE_FOUR,	// Spy value with opponent One still on board
 		0,	// Bomb (valued by code)
 		1000,	// Flag (valued by code)
 		0,	// Unknown (valued by code, minimum piece value)
@@ -504,27 +504,6 @@ public class TestingBoard extends Board
 		genDestFlag();
 		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
 
-		{
-		// If a player has a movable piece count majority, excess
-		// expendable pieces just get in the way.
-		// The player has the luxury of attack
-		// for the sake of random discovery.
-		// So increase the stealth value of the opponent pieces
-		// to encourage discovery.
-		int u = grid.movablePieceCount(Settings.topColor) -
-			grid.movablePieceCount(Settings.bottomColor);
-		u = Math.min(Math.abs(u), 5);
-
-		int c;
-		if (u > 0)
-			c = Settings.bottomColor;
-		else
-			c = Settings.topColor;
-	
-		for (int r = 1; r < 10; r++)	
-			valueStealth[c][r-1] = valueStealth[c][r-1] * 10 / (10 - u);
-		}
-
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -652,17 +631,16 @@ public class TestingBoard extends Board
 	// Twos have been removed, the stealth of the One
 	// drops in half.
 	//
-	// TBD: comment is incorrect, actual values are double
-	// A One stealth value is equal to 1600 *.1 (160 +- 53 points)
+	// A One stealth value is equal to 3200 *.1 (320 +- 106 points)
 	// if both Twos and all the Threes are still on the board.
 	//
-	// A Two stealth value is equal to 1000 *.1 (100 +- 33 points)
+	// A Two stealth value is equal to 1000 *.1 (200 +- 66 points)
 	// if all Threes and two of the Fours are still on the board.
 	//
-	// A Three stealth value is equal to 600 *.1 (60 +- 20 points)
+	// A Three stealth value is equal to 1200 *.1 (120 +- 40 points)
 	// if six Fours are still on the board.
 	//
-	// A Four stealth value is equal to 300 * .1 (30 +- 10 points)
+	// A Four stealth value is equal to 600 * .1 (60 +- 20 points)
 	// if six Fives are still on the board.
 	//
 	// Stealth value for pieces (6-9) derives not from opponent piece value,
@@ -870,6 +848,15 @@ public class TestingBoard extends Board
 	// So opponent stealth needs to reduced like player stealth
 	// as the game wears on and it becomes obvious which pieces
 	// are strong and which are weak.
+	//
+	// Initial values
+	// 1: 120
+	// 2: 96
+	// 3: 72
+	// 4: 48
+	//
+	// Note: Stealth values are modified based on movable piece
+	// count (see below)
 
 				v = (int)Math.sqrt(v);
 				v *= blufferRisk * 3 / 2;
@@ -900,6 +887,25 @@ public class TestingBoard extends Board
 					unknownRank[c] = rank;
 
 		} // color
+
+		// If a player has a movable piece count majority, excess
+		// expendable pieces just get in the way.
+		// The player has the luxury of attack
+		// for the sake of random discovery.
+		// So increase the stealth value of the opponent pieces
+		// to encourage discovery.
+		int u = grid.movablePieceCount(Settings.topColor) -
+			grid.movablePieceCount(Settings.bottomColor);
+		u = Math.min(Math.abs(u/2), 5);
+
+		int c;
+		if (u > 0)
+			c = Settings.bottomColor;
+		else
+			c = Settings.topColor;
+	
+		for (int r = 1; r < 10; r++)	
+			valueStealth[c][r-1] = valueStealth[c][r-1] * 10 / (10 - u);
 	}
 
 	void valuePieces()
@@ -943,8 +949,8 @@ public class TestingBoard extends Board
 	// Note that the AI stealth values are used because the
 	// opponent stealth values are lower (explained elsewhere).
 	// They are reduced to 80% because the AI really doesn't want
-	// to trade its Three (200 pts) just to discover the opponent One 
-	// (213 pts stealth), but it certainly would trade the Three
+	// to trade its Three (400 pts) just to discover the opponent One 
+	// (426 pts stealth), but it certainly would trade the Three
 	// to discover the opponent One and gain a minor piece (or more) in
 	// the trade.  The important point is that the trade makes
 	// the unknown AI Two invincible, giving it a good shot at
@@ -2975,7 +2981,7 @@ public class TestingBoard extends Board
 			lowestUnknownExpendableRank = 10;
 
 
-		foray[4] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+		foray[4] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
@@ -2986,9 +2992,10 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)*3
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 4;
+			) > 4)
+				|| (dangerousUnknownRank < 4);
 
-		foray[5] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+		foray[5] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
@@ -2999,7 +3006,8 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 12;
+			) > 12)
+				|| (dangerousUnknownRank < 5);
 
 		// One exception to the rule that the AI piece loses its value
 		// in an unknown exchange is at the start of the game when
@@ -3029,7 +3037,7 @@ public class TestingBoard extends Board
 		// attacker.  The probability of winning one piece is
 		// about 60%.
 
-		foray[6] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+		foray[6] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
@@ -3040,11 +3048,12 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 5;
+			) > 5)
+				|| (dangerousUnknownRank < 6);
 		if (foray[6] && lowestUnknownExpendableRank == 5)
 			lowestUnknownExpendableRank = 6;
 
-		foray[7] = (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
+		foray[7] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
 			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)*2
@@ -3055,7 +3064,8 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 5;
+			) > 5)
+				|| (dangerousUnknownRank < 7);
 
 		// The AI prefers to retain its Scouts for bluffing or
 		// for directed attack on suspected ranks,
