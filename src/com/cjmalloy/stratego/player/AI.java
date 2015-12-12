@@ -1188,7 +1188,7 @@ public class AI implements Runnable
 				if (tp.getColor() != 1 - b.bturn)
 					continue;
 
-				int enemies = b.grid.movableEnemyCount(tp);
+				int enemies = b.grid.enemyCount(tp);
 				b.move(Move.packMove(i, t), depth);
 				int v = -negQS(b.getValue() + dvr) - bvalue;
 
@@ -1235,6 +1235,10 @@ public class AI implements Runnable
 		// is terminated with minimal loss.  In version 9.9,
 		// R6xB5 is discarded,  allowing Blue to play B5xR6,
 		// then B5xRS, giving qs a very negative value.
+		//
+		// Note that a forked piece can also be a nonmovable
+		// piece such as a bomb or flag which may require
+		// a losing move to protect it.
 
 					if (enemies < 2) {
 						b.undo();
@@ -1867,7 +1871,7 @@ public class AI implements Runnable
 		Piece tp = b.getPiece(Move.unpackTo(tryMove));
 		int enemies = 0;
 		if (tp != null)
-			enemies = b.grid.movableEnemyCount(tp);
+			enemies = b.grid.enemyCount(tp);
 		int bvalue = b.getValue();
 
 		// AI always abides by Two Squares rule
