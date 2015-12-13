@@ -297,20 +297,92 @@ public class TestingBoard extends Board
 		// but after trayRank and knownRank are calculated
 		// because genSuspectedRank depends on unknownRankAtLarge()
 		genSuspectedRank();
+		genUnknownExpendableRankAtLarge();
+		adjustPieceValues();
+		genDangerousRanks();
+		genForay();	// depends on sumValues, dangerousUnknownRank
 
-		genForay();
-
-		// The number of expendable ranks still at large
-		// determines the risk of discovery of low ranked pieces.
-		// If there are few expendable pieces remaining,
-		// the AI can be more aggressive with its unknown low ranked
-		// pieces.
-		for (int c = RED; c <= BLUE; c++) {
-			nUnknownExpendableRankAtLarge[c] = 0;
-			for (int r = 5; r <= 9; r++)
-				nUnknownExpendableRankAtLarge[c] += unknownRankAtLarge(c, r);
+		// Destination Value Matrices
+		//
+		// Note: at depths >8 moves (16 ply),
+		// these matrices may not necessary
+		// because these pieces will find their targets in the 
+		// move tree.  However, they would still be useful in pruning
+		// the move tree.
+		for (int c = RED; c <= BLUE; c++)
+		for (int rank = 0; rank < 15; rank++) {
+			planA[c][rank][0][0] = 0;
+			for (int j=12; j <= 120; j++) {
+				planA[c][rank][0][j] = DEST_VALUE_NIL;
+				planA[c][rank][1][j] = 0;
+				planB[c][rank][0][j] = DEST_VALUE_NIL;
+				planB[c][rank][1][j] = 0;
+			}
 		}
 
+		// valuePieces should be called after all individual
+		// piece values have been determined.
+		// Destination Value Matrices depends on piece values
+		// so that needs to be called later.
+
+		valuePieces();
+		genValueStealth();	// depends on valuePieces
+		genInvincibleRank();	// depends on stealth
+		genDestFlag();
+		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
+
+		for (int i=12;i<=120;i++) {
+			if (!Grid.isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if (p == null)
+				continue;
+			Rank rank = p.getRank();
+			if (rank == Rank.BOMB || rank == Rank.FLAG)
+				continue;
+
+			if (rank == Rank.ONE
+				&& p.getColor() == Settings.topColor)
+				knownAIOne = p.isKnown();
+
+		// Encourage lower ranked pieces to find pieces
+		// of higher ranks.
+		//
+		// Note: this is a questionable heuristic
+		// because the ai doesn't know what to do once
+		// the piece reaches its destination.
+		// However, the position can evolve into one
+		// where material can be gained.
+			chase(p);
+
+		}
+		attackLanes();
+
+		// keep a piece of a high rank in motion,
+		// preferably a 6, 7 or 9 to discover unknown pieces.
+		// 5s are also drawn towards unknown pieces, but they
+		// are more skittish and therefore blocked by moving
+		// unknown pieces.
+		needExpendableRank(Settings.topColor);
+
+		// setunmovedValues depends on neededRank:
+		// chase(), needExpendableRank()
+		setUnmovedValues();
+
+		// targetUnknownBlockers();
+
+		assert flag[Settings.topColor] != null : "AI flag unknown";
+	}
+
+	int missingValue(int c, int r)
+	{
+		if (r == 10 || rankAtLarge(c, r) != 0)
+			return values[1-c][r-1];
+		return Math.min(values[1-c][r-1], missingValue(c, r+1));
+	}
+
+	void adjustPieceValues()
+	{
 		for (int c = RED; c <= BLUE; c++) {
 
 		// If a player no longer has any pieces of rank N
@@ -447,7 +519,24 @@ public class TestingBoard extends Board
 			}
 
 		} // color
+	}
 
+	void genUnknownExpendableRankAtLarge()
+	{
+		// The number of expendable ranks still at large
+		// determines the risk of discovery of low ranked pieces.
+		// If there are few expendable pieces remaining,
+		// the AI can be more aggressive with its unknown low ranked
+		// pieces.
+		for (int c = RED; c <= BLUE; c++) {
+			nUnknownExpendableRankAtLarge[c] = 0;
+			for (int r = 5; r <= 9; r++)
+				nUnknownExpendableRankAtLarge[c] += unknownRankAtLarge(c, r);
+		}
+	}
+
+	void genDangerousRanks()
+	{
 		lowestUnknownNotSuspectedRank = invincibleRankInt[Settings.topColor];
 
 		// dangerousUnknownRank is set when an opponent
@@ -474,86 +563,7 @@ public class TestingBoard extends Board
 					dangerousKnownRank = rank;
 
 			}
-
-		// Destination Value Matrices
-		//
-		// Note: at depths >8 moves (16 ply),
-		// these matrices may not necessary
-		// because these pieces will find their targets in the 
-		// move tree.  However, they would still be useful in pruning
-		// the move tree.
-		for (int c = RED; c <= BLUE; c++)
-		for (int rank = 0; rank < 15; rank++) {
-			planA[c][rank][0][0] = 0;
-			for (int j=12; j <= 120; j++) {
-				planA[c][rank][0][j] = DEST_VALUE_NIL;
-				planA[c][rank][1][j] = 0;
-				planB[c][rank][0][j] = DEST_VALUE_NIL;
-				planB[c][rank][1][j] = 0;
-			}
-		}
-
-		// valuePieces should be called after all individual
-		// piece values have been determined.
-		// Destination Value Matrices depends on piece values
-		// so that needs to be called later.
-
-		valuePieces();
-		genValueStealth();	// depends on valuePieces
-		genInvincibleRank();	// depends on stealth
-		genDestFlag();
-		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
-
-		for (int i=12;i<=120;i++) {
-			if (!Grid.isValid(i))
-				continue;
-			Piece p = getPiece(i);
-			if (p == null)
-				continue;
-			Rank rank = p.getRank();
-			if (rank == Rank.BOMB || rank == Rank.FLAG)
-				continue;
-
-			if (rank == Rank.ONE
-				&& p.getColor() == Settings.topColor)
-				knownAIOne = p.isKnown();
-
-		// Encourage lower ranked pieces to find pieces
-		// of higher ranks.
-		//
-		// Note: this is a questionable heuristic
-		// because the ai doesn't know what to do once
-		// the piece reaches its destination.
-		// However, the position can evolve into one
-		// where material can be gained.
-			chase(p);
-
-		}
-		attackLanes();
-
-		// keep a piece of a high rank in motion,
-		// preferably a 6, 7 or 9 to discover unknown pieces.
-		// 5s are also drawn towards unknown pieces, but they
-		// are more skittish and therefore blocked by moving
-		// unknown pieces.
-		needExpendableRank(Settings.topColor);
-
-		// setunmovedValues depends on neededRank:
-		// chase(), needExpendableRank()
-		setUnmovedValues();
-
-		// targetUnknownBlockers();
-
-		assert flag[Settings.topColor] != null : "AI flag unknown";
 	}
-
-	int missingValue(int c, int r)
-	{
-		if (r == 10 || rankAtLarge(c, r) != 0)
-			return values[1-c][r-1];
-		return Math.min(values[1-c][r-1], missingValue(c, r+1));
-	}
-
 
 	void needExpendableRank(int c)
 	{
@@ -2981,19 +2991,19 @@ public class TestingBoard extends Board
 			lowestUnknownExpendableRank = 10;
 
 
-		foray[4] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE)
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR)
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)*4
-			- unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2
-			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
-			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)*3
-			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 4)
-				|| (dangerousUnknownRank < 4);
+		int f;
+		f = unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE);
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT);
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SEVEN);
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.SIX);
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FIVE);
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.FOUR);
+		f -= unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.THREE)*4;
+		f -= unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.TWO)*2;
+		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4;
+		f -= unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)*3;
+		f += isWinning(Settings.bottomColor)/VALUE_FIVE;
+		foray[4] = (f > 4) || (dangerousUnknownRank < 4);
 
 		foray[5] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
