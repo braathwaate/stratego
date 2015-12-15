@@ -58,10 +58,9 @@ public class AI implements Runnable
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private ArrayList<ArrayList<Integer>> rootMoveList = null;
 	// static move ordering
-	static final int WINS = 0;
-	static final int ATTACK = 1;
-	static final int APPROACH = 2;
-	static final int FLEE = 3;
+	static final int ATTACK = 0;
+	static final int APPROACH = 1;
+	static final int FLEE = 2;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -83,7 +82,7 @@ public class AI implements Runnable
 		KM,	// killer move
 		TE,	// transposition table entry
 		IMMOBILE,
-		LOSES,
+		NEG,	// pointless attack (negative value)
 		OK
 	}
 
@@ -357,16 +356,37 @@ public class AI implements Runnable
 			if (p != null
 				&& p.getColor() != 1 - fpcolor)
 				continue;
+
+			int vbest = -1;
+			int tbest = -1;
 			while (p == null) {
 
 		// NOTE: FORWARD PRUNING
-		// generate scout far moves only for attacks when depth > 1
+		// generate scout far moves only for attacks
+		// or maximum plan score.  In the following example,
+		// the AI should generate the 3 move sequence
+		// for Red to capture the Blue flag, but no other far moves:
+		// -- RB RF RB R9
+		// -- -- RB -- --
+		// -- -- R7 -- --
+		// -- -- -- -- --
+		// -- -- xx xx --
+		// -- -- xx xx --
+		// -- -- -- BB --
+		// -- -- -- B3 --
+		// -- -- -- B7 --
+		// BF BB -- -- --
 
-				if (depth <= 1)
-				 	addMove(moveList.get(FLEE), i, t);
+				int v = b.planValue(fp, i, t, depth);
+				if (v > 0 && v > vbest) {
+					tbest = t;
+					vbest = v;
+				}
 				t += d;
 				p = b.getPiece(t);
 			};
+			if (tbest > 0)
+				addMove(moveList.get(APPROACH), i, tbest);
 			if (p.getColor() == 1 - fpcolor)
 				addMove(moveList.get(ATTACK), i, t);
 		} // dir
@@ -404,10 +424,9 @@ public class AI implements Runnable
 				p = b.getPiece(t);
 				// addMove(moveList.get(FLEE), i, t);
 			} while (p == null);
-			if (p.getColor() == 1 - fpcolor
-				&& b.isNineTarget(p)) {
-				addMove(moveList.get(WINS), i, t);
-			} // attack
+
+			if (p.getColor() == 1 - fpcolor)
+				addMove(moveList.get(ATTACK), i, t);
 		}
 	}
 
@@ -415,7 +434,6 @@ public class AI implements Runnable
 	{
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
-		Rank fprank = fp.getRank();
 
 		for (int d : dir ) {
 			int t = i + d ;
@@ -437,7 +455,6 @@ public class AI implements Runnable
 
 		int i = fp.getIndex();
 		int fpcolor = fp.getColor();
-		Rank fprank = fp.getRank();
 
 		for (int d : dir ) {
 			int t = i + d ;
@@ -1154,6 +1171,7 @@ public class AI implements Runnable
 
 				Piece fp = b.getPiece(i);
 				Rank fprank = fp.getRank();
+				int enemies = b.grid.enemyCount(fp);
 
 		// TBD: Far attacks by nines or unknown pieces
 		// are not handled.  This would improve the
@@ -1187,8 +1205,6 @@ public class AI implements Runnable
 
 				if (tp.getColor() != 1 - b.bturn)
 					continue;
-
-				int enemies = b.grid.enemyCount(tp);
 				b.move(Move.packMove(i, t), depth);
 				int v = -negQS(b.getValue() + dvr) - bvalue;
 
@@ -1239,8 +1255,26 @@ public class AI implements Runnable
 		// Note that a forked piece can also be a nonmovable
 		// piece such as a bomb or flag which may require
 		// a losing move to protect it.
+		//
+		// Version 9.10 has a new theory.  If the attacker does not
+		// survive and the result is negative, then the move
+		// is pointless.  This should make no difference in qs
+		// from 9.9, but now the theory is used in makeMove()
+		// as well, which allows it to permit attacks such as:
+		// xxxxxxxx
+		// | RF RB
+		// | RB --
+		// | -- RB
+		// | B? R2
+		// Red Two is unknown.  R2?xB? is a losing move because Red Two
+		// does not want to lose stealth.  But if it does not capture
+		// Unknown Blue, it risks losing the game.
+		//
+		// Also, if the attacker has multiple enemies, perhaps
+		// it is trapped, and is forced into a losing move.
 
-					if (enemies < 2) {
+					if (tp == b.getPiece(t)	// lost the attack
+						&& enemies < 2) {
 						b.undo();
 						continue;
 					}
@@ -1868,10 +1902,7 @@ public class AI implements Runnable
 		if (b.isTwoSquares(tryMove))
 			return MoveType.TWO_SQUARES;
 
-		Piece tp = b.getPiece(Move.unpackTo(tryMove));
-		int enemies = 0;
-		if (tp != null)
-			enemies = b.grid.enemyCount(tp);
+		int enemies = b.grid.enemyCount(b.getPiece(Move.unpackFrom(tryMove)));
 		int bvalue = b.getValue();
 
 		// AI always abides by Two Squares rule
@@ -1921,24 +1952,18 @@ public class AI implements Runnable
 			b.move(tryMove, depth);
 
 	// Losing captures are discarded (see qs())
-	//
-	// Note: A losing capture may be necessary to protect
-	// some other piece, even if the other piece isn't directly forked.
-	// For example,
-	// xxxxxxxx
-	// | RF RB
-	// | RB --
-	// | -- RB
-	// | B8 R2
-	// Red Two is unknown.  R2?xB? is a losing move because Red Two
-	// does not want to lose stealth.  But it does not capture Blue
-	// Eight, it risks losing the game.
 
-		if (tp != null
-			&& enemies < 2
+		if (enemies < 2
 			&& -negQS(b.getValue() - bvalue) < 0) {
-			b.undo();
-			return MoveType.LOSES;
+			
+			UndoMove m = b.getLastMove(1);
+			if (m.tp != null) {
+				Piece tp = b.getPiece(Move.unpackTo(tryMove));
+				if (tp == m.tp) {	// lost the attack
+					b.undo();
+					return MoveType.NEG;
+				}
+			}
 		}
 
 		return mt;

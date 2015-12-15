@@ -1155,22 +1155,6 @@ public class TestingBoard extends Board
 			if (p == planAPiece[color][rank-1])
 				continue;
 
-		// If the opponent has a known invincible rank,
-		// it will be hellbent on obliterating all moved pieces,
-		// so movement of additional pieces is heavily discouraged.
-		//
-		// However, this can lead to draws, so eventually the AI
-		// must sparingly move additional pieces, such as Eights
-		// to attack flag structures or mid ranked pieces needed
-		// to attack other opponent pieces.
-		//
-		// TBD: check if the AI has a fighting chance
-
-			if (color == Settings.topColor
-				&& rank > dangerousKnownRank
-				&& rnd.nextInt(30) != 0)
-				unmovedValue[i] -= VALUE_MOVED*2;
-
 		// genDestFlag() tries to keep structures intact by
 		// setting unmovedValue[].  Yet if the piece is a non-expendable
 		// piece and it is needed, break up structure.
@@ -1212,6 +1196,22 @@ public class TestingBoard extends Board
 		// real structure.
 
 				unmovedValue[i] += -VALUE_MOVED -values[color][rank]/100;
+		// If the opponent has a known invincible rank,
+		// it will be hellbent on obliterating all moved pieces,
+		// so movement of additional pieces is heavily discouraged.
+		//
+		// However, this can lead to draws, so eventually the AI
+		// must sparingly move additional pieces, such as Eights
+		// to attack flag structures or mid ranked pieces needed
+		// to attack other opponent pieces.
+		//
+		// TBD: check if the AI has a fighting chance
+
+			if (color == Settings.topColor
+				&& rank > dangerousKnownRank
+				&& rnd.nextInt(30) != 0)
+				unmovedValue[i] -= VALUE_MOVED*2;
+
 		} // i
 
 		// Encourage movement of front line pieces
@@ -1445,8 +1445,16 @@ public class TestingBoard extends Board
 
 			if (p.isSuspectedRank()
 				&& (chasedRank <= 3
-					|| chasedRank == Rank.SPY.toInt()))
+					|| chasedRank == Rank.SPY.toInt())) {
 				chaseWithExpendable(p, i);
+
+		// Chase with Nines
+		// (GUARDED_OPEN because they can slide past guards)
+
+				genPlanA(destTmp[GUARDED_OPEN], 1-p.getColor(), 9, DEST_PRIORITY_CHASE);
+				genPlanB(destTmp[GUARDED_OPEN], 1-p.getColor(), 9, DEST_PRIORITY_CHASE);
+		}
+
 		// Chase the piece with the same rank IF both ranks are known
 		// and the attacker is winning.
 		//
@@ -3121,7 +3129,7 @@ public class TestingBoard extends Board
 		neededRank[color][rank-1] = true;
 	}
 
-	public int planv(int [][] plan, int from, int to, int depth)
+	protected int planv(int [][] plan, int from, int to, int depth)
 	{
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
@@ -3143,29 +3151,13 @@ public class TestingBoard extends Board
 		// 3 2 3 4	3 5 3 2
 		// chase	neededNear
 		//
-		// A piece is rewarded only if the from square
-		// is 1 greater than the to square.  So if a piece
-		// moves to a neededNear square and hence is penalized,
-		// it is penalized again if it moves back to its
-		// original spot.  This is necessary to prevent
-		// needless back and forth chases.
-		//
-		// Note: Scout far moves are always penalized, because
-		// the difference in value between the from and to squares is
-		// not 1.
-		//
 		// Note: adjacent squares in flee plans are not restricted
 		// to a difference of 1 (could be 0).
 
-				if (priority == DEST_PRIORITY_FLEE)
-					return (vfrom - vto) * priority;
-				else if (priority >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
+				if (priority >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
 					return 0;
 
-				else if (vfrom == vto + 1)
-					return priority;
-				else
-					return -priority - 1;
+				return (vfrom - vto) * priority;
 
 			} // to-priority == from-priority
 
@@ -3444,11 +3436,21 @@ public class TestingBoard extends Board
 		// hanging so that the opponent cannot unrelentingly chase
 		// the vulnerable piece, preventing the AI from accumulating
 		// its chase points.  So flee moves are rewarded as well.
+		//
+		// Note: this should discourage back-and-forth chases,
+		// because the chased piece keeps gaining points
 
 			if (m2 != null && Grid.isAdjacent(from, m2.getTo()))
 				vm++;
 
-			vm += planValue(fp, from, to, depth);
+			int v = planValue(fp, from, to, depth);
+
+		// Scouts go too fast, so limit the points
+
+			if (unknownScoutFarMove)
+				v = Math.max(v, 1);
+
+			vm += v;
 			fp.moves++;
 			setPiece(fp, to);
 
