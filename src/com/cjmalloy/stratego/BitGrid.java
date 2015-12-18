@@ -100,6 +100,30 @@ public class BitGrid
 			|| ((low & b.low) ^ b.low) != 0;
 	}
 
+	// This grows the bits in the bit map
+	// For example,
+	// in:		out:
+	// 1 1 0 0	1 1 1 0
+	// 0 0 1 0	1 1 0 0
+	// 0 0 0 0	0 0 0 0
+
+	static public void grow(long low, long high, BitGrid out)
+	{
+		out.low =  low
+			| (low << 1) 
+			| (low >>> 1)
+			| (low << 11)
+			| (low >>> 11)
+			| ((high & 0x7fe) << 53);
+
+		out.high = high
+			| (high << 1)
+			| (high >>> 1)
+			| (high << 11)
+			| (high >>> 11)
+			| (low >>> 53);
+	}
+
 	// This returns the neighboring bits
 	// For example,
 	// 1 1 0 0	0 0 0 0
@@ -111,17 +135,9 @@ public class BitGrid
 
 	static public void getNeighbors(long low, long high, long inlow, long inhigh, BitGrid out)
 	{
-		out.low |= ((low << 1) 
-			| (low >>> 1)
-			| (low << 11)
-			| (low >>> 11)
-			| ((high & 0x7fe) << 53)) & inlow;
-
-		out.high |= ((high << 1)
-			| (high >>> 1)
-			| (high << 11)
-			| (high >>> 11)
-			| (low >>> 53)) & inhigh;
+		grow(low, high, out);
+		out.low &= inlow;
+		out.high &= inhigh;
 	}
 
 	public void getNeighbors(BitGrid in, BitGrid out)

@@ -59,8 +59,8 @@ public class AI implements Runnable
 	private ArrayList<ArrayList<Integer>> rootMoveList = null;
 	// static move ordering
 	static final int ATTACK = 0;
-	static final int APPROACH = 1;
-	static final int FLEE = 2;
+	static final int FLEE = 1;
+	static final int FAR = 2;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -386,9 +386,9 @@ public class AI implements Runnable
 				p = b.getPiece(t);
 			};
 			if (tbest > 0)
-				addMove(moveList.get(APPROACH), i, tbest);
+				addMove(moveList.get(FAR), i, tbest);
 			if (p.getColor() == 1 - fpcolor)
-				addMove(moveList.get(ATTACK), i, t);
+				addMove(moveList.get(FAR), i, t);
 		} // dir
 	}
 
@@ -422,11 +422,10 @@ public class AI implements Runnable
 			do {
 				t += d;
 				p = b.getPiece(t);
-				// addMove(moveList.get(FLEE), i, t);
 			} while (p == null);
 
 			if (p.getColor() == 1 - fpcolor)
-				addMove(moveList.get(ATTACK), i, t);
+				addMove(moveList.get(FAR), i, t);
 		}
 	}
 
@@ -466,126 +465,19 @@ public class AI implements Runnable
 		} // d
 	}
 
-	public boolean getApproachMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp, BitGrid unsafeGrid)
-	{
-		boolean isPruned = false;
-		int i = fp.getIndex();
-		int fpcolor = fp.getColor();
-
-		// if the piece is close enough, the move is allowed
-		// 
-		boolean allowAll =
-			!(Math.abs(n/2) < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, i, Math.abs(n/2)));
-
-		// If a valuable piece can be attacked by a far scout move,
-		// it should be allowed to flee (or another
-		// piece should be allowed to block).  The difficulty
-		// is how to determine if the valuable piece is vulnerable.
-		//
-		// Prior to version 9.6, all moves by valuable pieces
-		// were allowed:
-		// 	allowAll = allowAll || (fpcolor == Settings.topColor
-		//			&& unknownNinesAtLarge > 0
-		//			&& b.isNineTarget(fp)));
-		//
-		// This is a significant waste of time if the piece
-		// isn't vulnerable, for instance, a valuable piece
-		// on the back row with other pieces in front.
-		// This code also did not consider blocking moves.  And
-		// it pointless to react to a future scout far move
-		// when n=1, because qs() does not consider scout far moves.
-		//
-		// In version 9.6, a BitGrid of the squares that can
-		// be attacked by opponent scouts is created when n >= 2.
-		// A move is considered only if it is a valuable piece
-		// moving to a safe square or a non-valuable piece moves
-		// to a non-safe square (blocking move).
-
-		boolean isValuable =
-			fpcolor == Settings.topColor
-			&& b.isNineTarget(fp)
-			&& unsafeGrid.testBit(i+11);
-
-		for (int d : dir ) {
-			int t = i + d ;
-			Piece tp = b.getPiece(t);
-			if (tp != null)
-				continue;
-
-		// NOTE: FORWARD TREE PRUNING
-		// If a piece is too far to reach the enemy,
-		// there is no point in generating moves for it,
-		// because the value is determined only by pre-processing,
-		// (unless an unknown valuable piece can be attacked
-		// from far away by a Nine or the player piece is absolutely
-		// necessary for defense of an immobile piece or a clump
-		// of high ranked pieces. Otherwise the enemy is too far
-		// away to result in material change for a one-on-one
-		// attack.  (It almost always takes more than one attacker
-		// or a clump of defenders to affect material balance).
-		// For example,
-		// RF RB -- RB
-		// RB -- -- R7
-		// -- -- -- --
-		// -- -- -- --
-		// -- -- xx xx
-		// B8 -- xx xx
-		//
-		// Red has the move.  But no moves will be generated
-		// for it because it is too far from Blue Eight
-		// to result in a material change, i.e. R7xR8 is
-		// avoidable.
-		//
-		// But Blue Eight is threatening to attack the bomb
-		// structure. And obviously the bombs and flags cannot
-		// simply run away.
-		//
-		// Pre-processing determined that R7 moving left
-		// is essential to protect the bomb structure, so
-		// assigned the highest pre-processing value.  This will
-		// mean that the move will be picked as the best
-		// pruned off move and then added to the root move list.
-
-			if (n > 0) {
-				if (n >= 2
-					&& !allowAll
-					&& ((isValuable && !unsafeGrid.testBit(t))
-						|| (!isValuable && unsafeGrid.testBit(t))))
-					addMove(moveList.get(APPROACH), i, t);
-				else if (!allowAll
-					&& (n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, n/2)))
-					isPruned = true;
-				else
-					addMove(moveList.get(APPROACH), i, t);
-			} else if (n < 0) {
-				if (!allowAll
-					&& (-n/2 < Grid.NEIGHBORS && !b.grid.isCloseToEnemy(fpcolor, t, -n/2)))
-					addMove(moveList.get(APPROACH), i, t);
-				else
-					isPruned = true;
-			}
-
-		} // d
-
-		return isPruned;
-	}
-
 	// n > 0: prune off inactive moves
 	// n = 0; no pruning
 	// n < 0: prune off active moves
 
-	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp, BitGrid unsafeGrid)
+	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, Piece fp)
 	{
-		boolean isPruned = false;
-		int i = fp.getIndex();
-
 		Rank fprank = fp.getRank();
 
 		if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
 
 		// Known bombs or flags are not movable pieces (see Grid.java)
 
-			assert !fp.isKnown() : "Known " + logPiece(fp) + " " + logFlags(fp) + " at " + i + " ?";
+			assert !fp.isKnown() : "Known " + logPiece(fp) + " " + logFlags(fp) + " at " + fp.getIndex() + " ?";
 
 		// We need to generate moves for suspected
 		// bombs because the bomb might actually be
@@ -668,79 +560,47 @@ public class AI implements Runnable
 				if (n > 2)
 					n = 2;
 			}
-
-			return getApproachMoves(n, moveList, fp, unsafeGrid);
-
-		} else if (n < 0) {
-
-		// always return false to avoid null move
-
-			int fpcolor = fp.getColor();
-			assert fpcolor == Settings.topColor : "n<0 code only for AI";
-			getApproachMoves(n, moveList, fp, unsafeGrid);
-			return false;
-		} else {
-			getAllMoves(moveList, fp);
 		}
 
+		getAllMoves(moveList, fp);
+		return false;
+	}
+
+	boolean genSafe(int i, boolean unsafe, BitGrid unsafeGrid)
+	{
+		Piece p = b.getPiece(i);
+		if (p != null) {
+			if (p.getColor() != Settings.bottomColor) {
+				if (unsafe
+					&& p.getColor() == Settings.topColor
+					&& b.isNineTarget(p))
+					return true;
+				return false;
+			} else if (p.getRank() != Rank.UNKNOWN
+				&& p.getRank() != Rank.NINE)
+				genSafe(i - 11, false, unsafeGrid);
+			else
+				genSafe(i - 11, true, unsafeGrid);
+		} else if (genSafe(i - 11, unsafe, unsafeGrid)) {
+			unsafeGrid.setBit(i);
+			return true;
+		}
 		return false;
 	}
 
 	void genSafe(BitGrid unsafeGrid)
 	{
 		final int[] lanes = { 111, 112, 115, 116, 119, 120 };
-		for (int lane : lanes) {
-			boolean unsafe = false;
-			int i = lane;
-			for (i = lane; ; i -= 11) {
-				Piece p = b.getPiece(i);
-				if (p != null) {
-					if (p.getColor() != Settings.bottomColor)
-						break;
-					if (p.getRank() != Rank.UNKNOWN
-						&& p.getRank() != Rank.NINE) {
-						unsafe = false;
-						continue;
-					}
-					unsafe = true;
-					continue;
-				}
-				if (unsafe)
-					unsafeGrid.setBit(i);
-			}
-		}
+		for (int lane : lanes)
+			genSafe(lane, false, unsafeGrid);
 	}
 
 	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
 	{
-		for (int i = 0; i <= FLEE; i++)
+		for (int i = 0; i <= FAR; i++)
 			moveList.add(new ArrayList<Integer>());
 
 		boolean isPruned = false;
-		BitGrid unsafeGrid = new BitGrid();
-		if (turn == Settings.topColor
-			&& unknownNinesAtLarge > 0
-			&& n >= 2)
-			genSafe(unsafeGrid);
-
-		// Scan the board for movable pieces
-
-		BitGrid bg = new BitGrid();
-		b.grid.getMovablePieces(turn, bg);
-
-		for (int bi = 0; bi < 2; bi++) {
-			int k;
-			if (bi == 0)
-				k = 2;
-			else
-				k = 66;
-			long data = bg.get(bi);
-			while (data != 0) {
-				int ntz = Long.numberOfTrailingZeros(data);
-				int i = k + ntz;
-				data ^= (1l << ntz);
-
-				Piece fp = b.getPiece(i);
 
 		// FORWARD PRUNING
 		// deep chase search
@@ -779,33 +639,143 @@ public class AI implements Runnable
 		// such as heading into a trap beyond the search
 		// horizon, and then the chase resumes.)
 
-			int ns = n;
-			if (deepSearch != 0) {
-				if (n >= 0)
-					ns = Math.min(n, deepSearch);
-				else
-					ns = Math.max(n, -deepSearch);
-			}
+		int ns = n;
+		if (deepSearch != 0) {
+			if (n >= 0)
+				ns = Math.min(n, deepSearch);
+			else
+				ns = Math.max(n, -deepSearch);
+		}
 
+		// NOTE: FORWARD TREE PRUNING
+		// If a piece is too far to reach the enemy,
+		// there is no point in generating moves for it,
+		// because the value is determined only by pre-processing,
+		// (unless an unknown valuable piece can be attacked
+		// from far away by a Nine or the player piece is absolutely
+		// necessary for defense of an immobile piece or a clump
+		// of high ranked pieces. Otherwise the enemy is too far
+		// away to result in material change for a one-on-one
+		// attack.  (It almost always takes more than one attacker
+		// or a clump of defenders to affect material balance).
+		// For example,
+		// RF RB -- RB
+		// RB -- -- R7
+		// -- -- -- --
+		// -- -- -- --
+		// -- -- xx xx
+		// B8 -- xx xx
+		//
+		// Red has the move.  But no moves will be generated
+		// for it because it is too far from Blue Eight
+		// to result in a material change, i.e. R7xR8 is
+		// avoidable.
+		//
+		// But Blue Eight is threatening to attack the bomb
+		// structure. And obviously the bombs and flags cannot
+		// simply run away.
+		//
+		// Pre-processing determined that R7 moving left
+		// is essential to protect the bomb structure, so
+		// assigned the highest pre-processing value.  This will
+		// mean that the move will be picked as the best
+		// pruned off move and then added to the root move list.
+
+		// If a valuable piece can be attacked by a far scout move,
+		// it should be allowed to flee (or another
+		// piece should be allowed to block).  The difficulty
+		// is how to determine if the valuable piece is vulnerable.
+		//
+		// Prior to version 9.6, all moves by valuable pieces
+		// were allowed:
+		// 	allowAll = allowAll || (fpcolor == Settings.topColor
+		//			&& unknownNinesAtLarge > 0
+		//			&& b.isNineTarget(fp)));
+		//
+		// This is a significant waste of time if the piece
+		// isn't vulnerable, for instance, a valuable piece
+		// on the back row with other pieces in front.
+		// This code also did not consider blocking moves.  And
+		// it pointless to react to a future scout far move
+		// when n=1, because qs() does not consider scout far moves.
+
+		// In version 9.6, a BitGrid of the squares that can
+		// be attacked by opponent scouts is created when n >= 2.
+		// The algorithm was slightly modified for speed in 9.10.
+		// Now all moves for any piece adjacent to these squares are
+		// considered.  This includes a valuable piece
+		// moving to a safe square or a non-valuable piece moves
+		// to a non-safe square (blocking move).
+
+		BitGrid unsafeGrid = new BitGrid();
+		if (turn == Settings.topColor
+			&& unknownNinesAtLarge > 0
+			&& n >= 2)
+			genSafe(unsafeGrid);
+
+		// Scan the board for movable pieces inside the active area
+
+		BitGrid bg = new BitGrid();
+		if (n == 0)
+			b.grid.getMovablePieces(turn, bg);
+		else if (n > 0) {
+			b.grid.getMovablePieces(turn, n, unsafeGrid, bg);
+			BitGrid bgp = new BitGrid();
+			b.grid.getPrunedMovablePieces(turn, n, unsafeGrid, bgp);
+			if (bgp.get(0) != 0 || bgp.get(1) != 0)
+				isPruned = true;
+		} else {
+			b.grid.getPrunedMovablePieces(turn, -n, unsafeGrid, bg);
+			BitGrid bgu = new BitGrid();
+			b.grid.getMovablePieces(turn, -n, unsafeGrid, bgu);
+			if (bgu.get(0) != 0 || bgu.get(1) != 0)
+				isPruned = true;
+		}
+
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg.get(bi);
+			while (data != 0) {
+				int ntz = Long.numberOfTrailingZeros(data);
+				int i = k + ntz;
+				data ^= (1l << ntz);
+
+				Piece fp = b.getPiece(i);
+
+				if (getMoves(ns, moveList, fp))
+					isPruned = true;
+			} // data
+		} // bi
+
+		return isPruned;
+	}
+
+
+	private void getScoutMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
+	{
 		// TBD: check for suspected rank; if no suspected rank,
 		// then skip AI Nine far moves
 
-			if (n >= 0
-				&& !(deepSearch != 0 && turn == Settings.topColor)) {
+		if (n >= 0
+			&& !(deepSearch != 0 && turn == Settings.topColor))
+			for (Piece fp : b.scouts[turn]) {
+
+		// if the piece is gone from the board, continue
+
+				if (b.getPiece(fp.getIndex()) != fp)
+					continue;
+
 				Rank fprank = fp.getRank();
 				if (fprank == Rank.NINE)
 					getScoutFarMoves(depth, moveList, fp);
 
-				else if (unknownNinesAtLarge > 0 && fprank == Rank.UNKNOWN)
+				else if (fprank == Rank.UNKNOWN)
 					getAttackingScoutFarMoves(depth, moveList, fp);
 			}
-
-			if (getMoves(ns, moveList, fp, unsafeGrid))
-					isPruned = true;
-		} // data
-		} // bi
-
-		return isPruned;
 	}
 
 	private void getBestMove() throws InterruptedException
@@ -919,7 +889,7 @@ public class AI implements Runnable
 				} else
 					log(DETAIL, " " + mt);
 			}
-			addMove(rootMoveList.get(APPROACH), bestPrunedMove);
+			addMove(rootMoveList.get(FLEE), bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
 			log(PV, "\n" + logMove(b, n, bestPrunedMove));
 			log(DETAIL, "\n<< pick best pruned move\n");
@@ -1491,15 +1461,13 @@ public class AI implements Runnable
 		// retrieved for the latter position, the AI would erroneously
 		// believe it had a Two Squares ending when it really didn't.
 		//
-		// The solution is to not use the value from the transposition
-		// for positions resulting from chase moves, but the
+		// The solution is to not store the value in the transposition
+		// table for positions resulting from chase moves, but the
 		// best move is useful in most cases and harmless in others.
 
-		if (entryType == TTEntry.Flags.EXACT) {
-			UndoMove m = b.getLastMove(1);
-			if (m != null && b.grid.hasAttack(m.getPiece()))
-				entryType = TTEntry.Flags.BESTMOVE;
-		}
+		UndoMove m = b.getLastMove(1);
+		if (m != null && b.grid.hasAttack(m.getPiece()))
+			entryType = TTEntry.Flags.BESTMOVE;
 
 		entry.type = searchType;
 		entry.flags = entryType;
@@ -1686,11 +1654,11 @@ public class AI implements Runnable
 			returnMove.setMove(-1);
 			return 0;	// tie
 		}
-		else if (oppMove == false) {
+		else if (playerMove == false) {
 			returnMove.setMove(-1);
 			return -9999;	// win
 		}
-		else if (playerMove == false) {
+		else if (oppMove == false) {
 			returnMove.setMove(-1);
 			return 9999;	// loss
 		}
@@ -1787,9 +1755,6 @@ public class AI implements Runnable
 		// implementation: selection sort
 
 		ArrayList<ArrayList<Integer>> moveList = null;
-
-		// Use rootMoveList for a chase because it
-		// is heavily pruned.
 		if (depth == 0)
 			moveList = rootMoveList;
 		else {
@@ -1798,12 +1763,21 @@ public class AI implements Runnable
 			// FORWARD PRUNING
 			// Add null move
 			if (isPruned)
-				addMove(moveList.get(APPROACH), 0);
+				addMove(moveList.get(FLEE), 0);
 		}
 
-
 		outerloop:
-		for (int mo = 0; mo <= FLEE; mo++) {
+		for (int mo = 0; mo <= FAR; mo++) {
+
+		// Scout far moves are expensive to generate and
+		// because of the loss of stealth are often
+		// bad moves, so these are generated last, hoping
+		// that they will get pruned off by alpha-beta.
+		// They are generated separately because they are
+		// not forward pruned based on enemy distance like other moves.
+
+			if (mo == FAR)
+				getScoutMoves(moveList, n, depth, b.bturn);
 
 			ArrayList<Integer> ml = moveList.get(mo);
 			for (int i = 0; i < ml.size(); i++) {

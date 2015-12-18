@@ -989,7 +989,6 @@ public class Board
 		// The AI makes the assumption that unknown Blue is probably
 		// Blue One in this case, although obviously it could be wrong.
 
-
 			Move m = getLastMove();
 			if (m.getPiece() == chased)
 				return;
@@ -1019,6 +1018,25 @@ public class Board
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
 		int open = 0;
+
+		// If a piece moved adjacent to the chased piece,
+		// and the chased piece has more than one adjacent
+		// unknown piece, it is more likely that the piece
+		// that actively moved adjacent to the chase piece
+		// is the protector.
+
+		boolean activeProtector = false;
+		UndoMove um1 = getLastMove(1);
+		if (Grid.isAdjacent(um1.getTo(), i)) {
+			open++;	// adjacent square was open
+			Piece p = um1.getPiece();
+			if (p.getRank() == Rank.UNKNOWN
+				&& p.getActingRankFleeLow() != chaser.getRank()) {
+				unknownProtector = p;
+				activeProtector = true;
+			}
+		}
+
 		for (int d : dir) {
 			int j = i + d;
 			if (!Grid.isValid(j))
@@ -1044,7 +1062,6 @@ public class Board
 		// check if the open square was occupied by the
 		// piece that just moved
 
-				UndoMove um1 = getLastMove(1);
 				if (j == um1.getFrom())
 					continue;
 
@@ -1074,12 +1091,6 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-		// check if the square was open before the last move
-
-			UndoMove um1 = getLastMove(1);
-			if (j == um1.getTo())
-				open++;
-
 			if (p.getRank() != Rank.UNKNOWN) {
 				if (chaserRank != Rank.UNKNOWN) {
 					if (p.getRank().toInt() < chaserRank.toInt()
@@ -1092,8 +1103,9 @@ public class Board
 						knownProtector = p;
 				}
 
-			} else if (unknownProtector != null) {
-				// more than one unknown protector
+			// more than one unknown protector?
+
+			} else if (unknownProtector != null)
 				return;
 
 		// If the protector fled from the chaser,
@@ -1101,13 +1113,14 @@ public class Board
 		// -- -- R4 --
 		// xx B5 -- xx
 		// xx -- B? xx
-		// Red moves down and forks Blue Five and unknown Blue.
+		// Red Four moves down and forks Blue Five and unknown Blue.
 		// Unknown Blue moves left.  Unknown Blue is not a protector.
 
-			} else if (p.getActingRankFleeLow() != chaser.getRank())
+			else if (p.getActingRankFleeLow() != chaser.getRank()
+				&& !activeProtector)
 				
 				unknownProtector = p;
-		}
+		} // dir
 
 		if (unknownProtector != null) {
 

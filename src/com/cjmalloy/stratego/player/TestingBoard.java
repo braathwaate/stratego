@@ -87,6 +87,13 @@ public class TestingBoard extends Board
 	protected boolean knownAIOne;
 	protected int[] unknownRank = new int[2];
 
+// Silly Java warning:
+// Java won't let you declare a typed list array like
+// public ArrayList<Piece>[] scouts = new ArrayList<Piece>()[2];
+// and then it warns if you created a non-typed list array.
+@SuppressWarnings("unchecked")
+	public ArrayList<Piece>[] scouts = (ArrayList<Piece>[])new ArrayList[2];
+
 	// The idea behind a foray is to discover low ranked pieces
 	// and win high ranked pieces while avoiding Bombs.
 	// Low ranks are usually positioned behind the lakes and high
@@ -331,6 +338,8 @@ public class TestingBoard extends Board
 		genDestFlag();
 		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
 
+		scouts[0] = new ArrayList<Piece>();
+		scouts[1] = new ArrayList<Piece>();
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -341,9 +350,14 @@ public class TestingBoard extends Board
 			if (rank == Rank.BOMB || rank == Rank.FLAG)
 				continue;
 
-			if (rank == Rank.ONE
+			else if (rank == Rank.ONE
 				&& p.getColor() == Settings.topColor)
 				knownAIOne = p.isKnown();
+
+			else if (rank == Rank.NINE
+				|| (unknownRankAtLarge(p.getColor(), Rank.NINE) != 0
+					&& rank == Rank.UNKNOWN))
+				scouts[p.getColor()].add(p);
 
 		// Encourage lower ranked pieces to find pieces
 		// of higher ranks.
@@ -3571,14 +3585,14 @@ public class TestingBoard extends Board
 		// loss of the AI piece, if the opponent rank is
 		// lower than suspected.
 
-				if (tp.hasMoved()
-					&& isInvincible(fp)) {
-					if  (isWinning(Settings.topColor) > 0
-						&& !tp.isKnown()
-						&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
-						vm -= 10;
-					else
-						vm += stealthValue(tp) - stealthValue(fp);
+					if (tp.hasMoved()
+						&& isInvincible(fp)) {
+						if  (isWinning(Settings.topColor) > 0
+							&& !tp.isKnown()
+							&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
+							vm -= 10;
+						else
+							vm += stealthValue(tp) - stealthValue(fp);
 		// If the defender is known, and either the attacker is known
 		// or the AI is the attacker (AI knows its own pieces)
 		// then, this is a known even exchange based on actual values.
@@ -3588,66 +3602,32 @@ public class TestingBoard extends Board
 		// worth less than opponent ranks, encouraging it to
 		// make an even exchange.
 
-				} else if (tp.isKnown()
-					&& fp.isKnown())
-					vm += actualValue(tp) - fpvalue;
-
+					} else if (tp.isKnown()
+						&& fp.isKnown())
+						vm += actualValue(tp) - fpvalue;
 
 		// If the defender is an unknown AI piece,
-		// then an attacker (not an invincible attacker, see above)
-		// doesn't really know that the exchange is even.
-		// The attacker sees only an unknown gain
-		// but the potential loss of its piece.
-		// Thus the result is negative for the opponent,
-		// unless the opponent piece is known and is
-		// likely to attack.
+                // then an attacker (not an invincible attacker, see above)
+                // doesn't really know that the exchange is even.
+                // The attacker sees only an unknown gain
+                // but the potential loss of its piece.
+                //
+                // Yet this result relies on an effective bluff.
+                // If the exchange occurs in the flag area, for example,
+                // the attacker may attack anyway.
+                //
+                // Furthermore, if it is not an effective bluff,
+                // then R?xB must equal BxR?, because both pieces
+                // are removed from the board, so the transposition
+                // table will return an identical result regardless
+		// of the direction of attack.
 		//
-		// TBD.  If the target piece has not moved, it is even
-		// more negative.
-		//
-		// By crediting the opponent with only apparentWinValue
-		// but subtracting the opponents entire value, the
-		// result is always very negative, especially for
-		// lower ranked pieces that are inherently less reckless
-		// (less risk of attack).  This can be somewhat surprising
-		// because the AI assumes that an attacker might
-		// not attack its unknown pieces.  For example:
-		// --------------
-		// | R5 R9 RB R6
-		// | RB B5 R5 R4
-		// | -- -- --
-		// All pieces are unknown except for Blue Five and the
-		// Red Bomb to the left of Blue Five.  Known Blue Five has
-		// just moved upwards to position itself between unknown
-		// Red Five and known Red Bomb.  So one might guess that
-		// it is inevitable that Blue Five will attack either
-		// unknown Red Nine or unknown Red Five, so why doesn't
-		// the AI play R5xB5 to prevent the capture of the Nine?
-		// 
-		// But R5xB5 is negative (-19) because it loses stealth
-		// as well as moving an unmoved piece that is part
-		// of a structure that could be seen as a bomb structure.
-		// Losing the Nine is only (-10) because it is not
-		// a foregone conclusion; the AI is guessing that even if
-		// Red Nine *is* attacked, maybe unknown Red Bomb to its
-		// right will also be attacked, and the AI will come out
-		// ahead.
-		//
-		// Lastly, where this code comes into play, the AI is
-		// unconcerned about B5xR5, because it too is not
-		// a foregone conclusion.
-					else {
-						if (!fp.isKnown())
-							vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
+		// (If it is an effective bluff, the bluffing
+		// piece survives, and thus the transposition table
+		// returns a correct result).
 
-
-						if (!tp.isKnown())
-							vm += apparentWinValue(fp,
-								fprank,
-								unknownScoutFarMove,
-								tp,
-								actualValue(tp))
-								- values[Settings.bottomColor][tprank.toInt()];
+					else if (!tp.isKnown())
+						vm += actualValue(tp) - fpvalue;
 
 		// If the AI piece is known and the opponent is unknown,
 		// it may mean that the AI has guessed wrong,
@@ -3676,8 +3656,10 @@ public class TestingBoard extends Board
 
 					else {	// tp is known AI piece
 						assert !fp.isKnown() : "fp is known?";
+						vm -= valueStealth[Settings.bottomColor][tprank.toInt()-1];
+
 		// While the AI always gains the stealth value of the
-		// unknown opponent piece, it may have guess wrong.
+		// unknown opponent piece, it may have guessed wrong.
 		//
 		// Note: the bluffing factor (br) changes the outcome
 		// because it affects both stealth and riskOfLoss.
@@ -3694,7 +3676,6 @@ public class TestingBoard extends Board
 		// Note: riskOfLoss can be zero if the suspected rank fled.
 
 						vm += riskOfLoss(tp, fp)/6;
-					}
 					}
 
 		// Unknown AI pieces also have bluffing value

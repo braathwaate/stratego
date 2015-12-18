@@ -245,7 +245,90 @@ public class Grid
 			movablePieceBitGrid[turn].high, out);
 	}
 
-	// in this heavily used function,
+	public void getMovablePieces(int turn, int n, BitGrid unsafe, BitGrid out)
+	{
+	// get the enemy piece bit grid
+
+		long elow = pieceBitGrid[1-turn].low;
+		long ehigh = pieceBitGrid[1-turn].high;
+
+	// grow it
+
+		for (int i = 0; i <= n/2; i++) {
+			BitGrid.grow(elow, ehigh, out);
+			elow = out.low & ~waterGrid.low;
+			ehigh = out.high & ~waterGrid.high;
+		}
+
+	// get the open spaces
+
+		long low = ~(pieceBitGrid[turn].low | waterGrid.low);
+		long high = ~(pieceBitGrid[turn].high | waterGrid.high);
+
+		BitGrid.getNeighbors(low, high,
+			movablePieceBitGrid[turn].low,
+			movablePieceBitGrid[turn].high, out);
+
+	// intersect it with the movable pieces
+	// so pieces outside of the enemy area are cleared
+
+		elow &= out.low;
+		ehigh &= out.high;
+
+	// add in the unsafe squares which are open squares that
+	// are considered at all depths
+
+		BitGrid.getNeighbors(unsafe.low, unsafe.high,
+			movablePieceBitGrid[turn].low,
+			movablePieceBitGrid[turn].high, out);
+
+		out.low |= elow;
+		out.high |= ehigh;
+
+	}
+
+	public void getPrunedMovablePieces(int turn, int n, BitGrid unsafe, BitGrid out)
+	{
+	// get the enemy piece bit grid
+
+		long elow = pieceBitGrid[1-turn].low;
+		long ehigh = pieceBitGrid[1-turn].high;
+
+	// grow it
+
+		for (int i = 0; i <= n/2; i++) {
+			BitGrid.grow(elow, ehigh, out);
+			elow = out.low & ~waterGrid.low;
+			ehigh = out.high & ~waterGrid.high;
+		}
+
+	// find the open spaces
+
+		long low = ~(pieceBitGrid[turn].low | waterGrid.low);
+		long high = ~(pieceBitGrid[turn].high | waterGrid.high);
+
+		BitGrid.getNeighbors(low, high,
+			movablePieceBitGrid[turn].low,
+			movablePieceBitGrid[turn].high, out);
+
+	// intersect the space outside the enemy area with the open spaces
+	// so the neighors inside that space are cleared
+
+		elow = ~elow & out.low;
+		ehigh = ~ehigh & out.high;
+
+	// remove the unsafe squares which are open squares that
+	// are considered at all depths
+
+		BitGrid.getNeighbors(unsafe.low, unsafe.high,
+			movablePieceBitGrid[turn].low,
+			movablePieceBitGrid[turn].high, out);
+
+		out.low = ~out.low & elow;
+		out.high = ~out.high & ehigh;
+	}
+
+
 	public int movablePieceCount(int turn)
 	{
 		return Long.bitCount(movablePieceBitGrid[turn].get(0))
