@@ -202,11 +202,15 @@ public class Grid
 			|| pieceBitGrid[1].andMask(neighbor[0][i]) ;
 	}
 
-	// same is isCloseToEnemy(0);
+	// same is isCloseToEnemy(turn, i, 0);
+	public boolean hasAttack(int turn, int i)
+	{
+		return pieceBitGrid[1-turn].andMask(neighbor[0][i]);
+	}
+
 	public boolean hasAttack(Piece p)
 	{
-		int i = p.getIndex();
-		return pieceBitGrid[1-p.getColor()].andMask(neighbor[0][i]);
+		return hasAttack(p.getColor(), p.getIndex());
 	}
 
 	public boolean isCloseToEnemy(int turn, int i, int n)
