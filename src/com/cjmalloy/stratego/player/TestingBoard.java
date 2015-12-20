@@ -207,7 +207,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_FIVE = 100;
 	private static final int VALUE_SIX = 50;
 	private static final int VALUE_SEVEN = 36;
-	private static final int VALUE_EIGHT = 60;
+	private static final int VALUE_EIGHT = 30;	// variable
 	private static final int VALUE_NINE = 28;
 	private static final int [] startValues = {
 		0,
@@ -763,8 +763,18 @@ public class TestingBoard extends Board
 
 		if (r == 5)
 			v = 16;
-		else if (r >= 6 && r <= 9)
+		else if (r >= 6 && r <= 9) {
 			v = 10 + (r - 6) * 6;
+
+		// Eight stealth is higher when there is still a
+		// bombed structure on the board because it is easier
+		// for an unknown Eight to approach than a known Eight,
+		// given that the player has multiple unknown pieces.
+
+			if (r == 8
+				&& maybe_count[1-c] != 0)
+				v = 50;
+		}
 
 		// Spy stealth depends on whether the Spy is
 		// suspected.  If the location of the Spy has not been guessed,
@@ -2224,15 +2234,6 @@ public class TestingBoard extends Board
 
 		if (!bombed) {
 
-		// A non-bombed flag is worth about a known Three.
-		// So this is like having a known Three that cannot
-		// move, so the ai can only act defensively.
-		// But it should not risk a Three to save the flag
-		// because loss of superior rank during the endgame
-		// would mean eventual loss anyway, and remember,
-		// the flag really is not known.
-
-			setFlagValue(pflag);
 		// opponent color eights are now expendable
 
 			setExpendableEights(Settings.bottomColor);
@@ -2278,11 +2279,6 @@ public class TestingBoard extends Board
 
 		else if (rankAtLarge(1-color, Rank.EIGHT) != 0) {
 
-		// Flag value is worth more than an Eight.
-		// (because we always want an eight to take the
-		// flag rather than the protecting bombs.)
-
-			setFlagValue(pflag);
 			flagBombTarget(pflag);
 
 			if (pflag.isKnown() && Grid.getY(flagi) == 0) {
@@ -2322,8 +2318,6 @@ public class TestingBoard extends Board
 		if (pflag == null)
 			continue;
 
-		setFlagValue(pflag);
-
                 // revalue eights
                 // (Note: maybe_count == 0 calls setExpendableEights even
                 // if there are not any left.  This is necessary because
@@ -2354,6 +2348,10 @@ public class TestingBoard extends Board
                         values[1-c][Rank.EIGHT.toInt()]
                                 += (30 - lowerRankCount[c][8])*2;
 		}
+
+		// Note:Flag value depends on opponent Eight value above
+
+		setFlagValue(pflag);
 
 		// Making the flag known eliminates the flag
 		// from the piece move lists, which means that
@@ -4713,7 +4711,7 @@ public class TestingBoard extends Board
 		assert lowestUnknownExpendableRank != 0 : "unknownValue: unknown rank should be known.";
 
 		int tpvalue = 0;
-		int r = fp.getRank().toInt();
+		int fprank = fp.getRank().toInt();
 
 		// Note: Acting Rank Chase is an
 		// unreliable predictor of actual rank.
@@ -4759,8 +4757,10 @@ public class TestingBoard extends Board
 		// the AI can expect to receive more stealth value
 		// in an unknown exchange.
 
+		int r = fprank-1;	// gains the stealth of one rank lower
+
 		if (lowestUnknownExpendableRank < 5)
-			r = Math.min(r-1, lowestUnknownExpendableRank);
+			r = Math.min(r, lowestUnknownExpendableRank);
 
 		// As the opponent uses up its expendable ranks,
 		// it becomes more likely that the unknown piece
@@ -4769,7 +4769,7 @@ public class TestingBoard extends Board
 		// different from an AI Five, and hence should receive
 		// the same stealth value as an AI Five.
 
-		else if (r >= 5 && lowestUnknownExpendableRank >= r)
+		else if (fprank >= 5 && lowestUnknownExpendableRank >= r)
 			r = 4;	// results in Four stealth
 
 		// unknownValue() should be more positive than LOSES.
@@ -4779,7 +4779,7 @@ public class TestingBoard extends Board
 		// the result is UNK and it gains the stealth value of a Five
 		// plus a nominal amount.
 
-		else if (r > 6) {
+		else if (fprank > 6) {
 
 		// A high ranked AI piece should prefer:
 		// (1) a suspected Four (or lower rank)
@@ -4796,12 +4796,10 @@ public class TestingBoard extends Board
 		// Five stealth (8) and Four stealth (15).
 
 			if (chaseRank == Rank.UNKNOWN)
-				tpvalue -= (r - 6);
+				tpvalue -= (fprank - 6);
 
 			r = 5;	// results in Five stealth
 		}
-		else
-			r--;	// gains the stealth of one rank lower
 
 		// Version 9.7 introduced blufferRisk, which causes
 		// the stealth value of suspected pieces to be reduced
@@ -4820,19 +4818,7 @@ public class TestingBoard extends Board
 		if (r == 0)
 			tpvalue += valueStealth[tp.getColor()][0];
 		else 
-			tpvalue += valueStealth[tp.getColor()][r-1] + (9-r)*4;
-
-		// In an effort to prevent draws,
-		// unknowns are worth more the more they move.
-		// Sixes, Sevens and Nines probably don't last very
-		// long, so this creates a bonus for attacking more
-		// valuable pieces.
-
-		// Version 9.3 commented out because it
-		// breaks qs caching due to tp.moves being
-		// factored in rather than just the ranks.
-		//if (isWinning(Settings.topColor) > 0)
-		//	tpvalue += Math.min(tp.moves / 2, 20);
+			tpvalue += valueStealth[tp.getColor()][r-1] + (9-fprank)*4;
 
 		return tpvalue;
 	}
@@ -5486,11 +5472,10 @@ public class TestingBoard extends Board
 		int min = 9999;
 		for (int r = 1; r <= 10; r++)
 			if (rankAtLarge(1-color, r) != 0)
-				if (values[1-color][r] < min)
-					min = values[1-color][r];
+				if (pieceValue(1-color, r) < min)
+					min = pieceValue(1-color, r);
 
-		if (min + 10 > v)
-			v =  min + 10;
+		v = Math.min(v, min + VALUE_NINE);
 
 		values[color][Rank.FLAG.toInt()] = v;
 	}

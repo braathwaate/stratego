@@ -1105,7 +1105,10 @@ public class Board
 
 			// more than one unknown protector?
 
-			} else if (unknownProtector != null)
+			} else if (activeProtector)
+				continue;
+
+			else if (unknownProtector != null)
 				return;
 
 		// If the protector fled from the chaser,
@@ -1116,8 +1119,7 @@ public class Board
 		// Red Four moves down and forks Blue Five and unknown Blue.
 		// Unknown Blue moves left.  Unknown Blue is not a protector.
 
-			else if (p.getActingRankFleeLow() != chaser.getRank()
-				&& !activeProtector)
+			else if (p.getActingRankFleeLow() != chaser.getRank())
 				
 				unknownProtector = p;
 		} // dir
@@ -2358,7 +2360,7 @@ public class Board
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
-		for (int i = bestGuess; i < maybe_count; i++) {
+		for (int i = bestGuess; i < Math.min(bestGuess+3, maybe_count); i++) {
 		for (int j = 1; maybe[i][j] != 0; j++) {
 			assert Grid.isValid(maybe[i][j]) : maybe[i][j] + " is not valid ";
 			Piece p = getPiece(maybe[i][j]);

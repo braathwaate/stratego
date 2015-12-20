@@ -503,13 +503,6 @@ public class AI implements Runnable
 			return false;
 		}
 
-		if (n > 0) {
-
-			if (b.grid.hasAttack(fp)) {
-				getAllMoves(moveList, fp);
-				return false;
-			}
-
 		// FORWARD PRUNING:
                 // Unmoved unknown AI pieces really aren't very
                 // scary to the opponent, unless they can attack
@@ -542,8 +535,9 @@ public class AI implements Runnable
                 // the unknown piece was the last piece moved by
                 // the opponent.
 
-			if (fprank == Rank.UNKNOWN
-                                && fp != lastMovedPiece) {
+		if (n > 1
+			&& fprank == Rank.UNKNOWN
+			&& fp != lastMovedPiece) {
 
 		// Deep search reduces an the ability for an AI piece
 		// to flee before an unknown opponent reaches it.
@@ -553,13 +547,12 @@ public class AI implements Runnable
 		// and then the AI piece moves its other pieces into
 		// an area where they can be forked by an unknown piece.
 
-				if (deepSearch != 0
-					&& n >= deepSearch)
-					return true;
+			if (deepSearch != 0
+				&& n >= deepSearch)
+				return true;
 
-				if (n > 2)
-					n = 2;
-			}
+			if (n > 2)
+				return true;
 		}
 
 		getAllMoves(moveList, fp);
@@ -757,25 +750,51 @@ public class AI implements Runnable
 
 	private void getScoutMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
 	{
-		// TBD: check for suspected rank; if no suspected rank,
-		// then skip AI Nine far moves
+		// TBD: check for a valuable AI suspected rank;
+		// if there is no suspected AI rank remaining,
+		// then skip AI Scout far moves
 
-		if (n >= 0
-			&& !(deepSearch != 0 && turn == Settings.topColor))
-			for (Piece fp : b.scouts[turn]) {
+		// Prior to Version 9.10, the AI pruned off all AI Scout
+		// far moves during a deep search.  The idea was to
+		// focus the search on the superior pieces to prevent
+		// a large loss of material.
+
+		// However, the reason to consider far moves during deep search
+		// is if the opponent flag is in danger, because the
+		// opponent deep search attacker might be blocking access
+		// to the flag.  For example:
+		// -- -- xx xx R9 --
+		// -- -- xx xx -- --
+		// -- -- -- -- -- --
+		// -- -- R8 -- -- --
+		// -- -- -- -- B4 --
+		// -- -- -- BB BF BB
+		// The proximity of Red Eight to Blue Four invokes the
+		// deep search code, because increased search depth
+		// is often needed to respond to potential attacks.
+		// But Blue Four is pinned in this case to Blue Flag
+		// and cannot attack.
+		//
+		// Version 9.10 sped move generation by moving Scout moves
+		// after all other moves and limited far moves
+		// to attacks and the optimal pre-processor squares.
+		// So the decision was made to allow AI Far moves during
+		// deep search if this costs only a small time penalty.
+
+		for (Piece fp : b.scouts[turn]) {
 
 		// if the piece is gone from the board, continue
 
-				if (b.getPiece(fp.getIndex()) != fp)
-					continue;
+			if (b.getPiece(fp.getIndex()) != fp)
+				continue;
 
-				Rank fprank = fp.getRank();
-				if (fprank == Rank.NINE)
-					getScoutFarMoves(depth, moveList, fp);
+			Rank fprank = fp.getRank();
+			if (fprank == Rank.NINE)
+				getScoutFarMoves(depth, moveList, fp);
 
-				else if (fprank == Rank.UNKNOWN)
-					getAttackingScoutFarMoves(depth, moveList, fp);
-			}
+			else if (fprank == Rank.UNKNOWN)
+				getAttackingScoutFarMoves(depth, moveList, fp);
+		}
 	}
 
 	private void getBestMove() throws InterruptedException
