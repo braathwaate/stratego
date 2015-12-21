@@ -741,7 +741,7 @@ public class Board
 	// To solve this, we need to add an actingRankApproach
 	// and rely on this instead of last move.
 
-	void setDirectChaseRank(Piece chaser, Piece chased)
+	void setDirectChaseRank(Piece chaser, Piece chased, int i)
 	{
 		Move m = getLastMove();
 		if (m.getPiece() != chased)
@@ -794,6 +794,30 @@ public class Board
 		// within the allotted number of moves, the chase rank
 		// matures, and from then on the AI believes that the
 		// chase piece was the actual chaser.
+		//
+		// In version 9.10, the code was restored,
+		// with the idea that if a neighboring piece has exactly
+		// the same chase rank (or a known rank of one less),
+		// then no chase rank should be assigned.   For example,
+		// R2 --
+		// B? B1
+		// Unknown Blue has just approached Red Two, but it is
+		// protected by Blue One.  Unknown Blue should not
+		// earn a chase rank of Two.
+
+		for (int d : dir) {
+			int j =  i + d;
+			Piece p = getPiece(j);
+			if (p == null
+				|| p.getColor() != chased.getColor())
+				continue;
+
+			if (p.isKnown()) {
+				if (p.getRank().toInt() + 1 == chaser.getRank().toInt())
+					return;
+			} else if (p.getActingRankChase() == chaser.getRank())
+				return;
+		}
 		
 		if (chased.isKnown())
 			return;
@@ -922,7 +946,7 @@ public class Board
 		// In version 9.6, direct chase rank no longer
 		// depends on protecting pieces
 
-		setDirectChaseRank(chaser, chased);
+		setDirectChaseRank(chaser, chased, i);
 
 		Rank chasedRank = chased.getApparentRank();
 		Rank chaserRank = chaser.getApparentRank();
@@ -2222,7 +2246,7 @@ public class Board
 	{
 		int size = 0;
 		int bestGuess = 99;
-		boolean bestGuessGuarded = false;
+		int bestGuessGuards = 0;
 		for (int i = 0; i < maybe_count; i++) {
 
 			int nb;
@@ -2289,7 +2313,7 @@ public class Board
 		// the flag structure is still guarded, even if it there are no
 		// sentries adjacent to the flag structure.
 
-			boolean guarded = false;
+			int guards = 0;
 			final int nearDir[] = { 32, 33, 34, 23, 22, 21, 13, 12, 11, 10, 9 };
 			for (int d : nearDir) {
 				int k = maybe[start][0];
@@ -2318,9 +2342,8 @@ public class Board
 		// mean that the flag is elsewhere.  So the AI
 		// must continue with R8xBB and R8xBF.
 
-				else if (p.getRank() != Rank.BOMB) {
-					guarded = true;
-				}
+				else if (p.getRank() != Rank.BOMB)
+					guards++;
 			}
 
 		// Note: If there is a corner bomb structure (2 bombs) and
@@ -2334,11 +2357,11 @@ public class Board
 		// large number of defenders.
 
 			if (size == 0
-				|| !bestGuessGuarded
+				|| guards > bestGuessGuards
 				|| nb < size) {
 				bestGuess = start;
 				size = nb;
-				bestGuessGuarded = guarded;
+				bestGuessGuards = guards;
 			}
 		} // i
 		return bestGuess;

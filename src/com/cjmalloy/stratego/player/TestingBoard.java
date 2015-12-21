@@ -4683,7 +4683,7 @@ public class TestingBoard extends Board
 
 		assert !(fp.isKnown() && fp.getRank() == Rank.UNKNOWN
 			|| tp.isKnown() && tp.getRank() == Rank.UNKNOWN)
-			: "Exit " + fp.getRank() + "X" + tp.getRank();
+			: "Exit known:" + fp.isKnown() + " " + fp.getRank() + "X known:" + tp.isKnown() + tp.getRank();
 
 		} // else attack
 

@@ -56,7 +56,7 @@ public class AI implements Runnable
 	static final int PV = 1;
 	static final int DETAIL = 2;
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
-	private ArrayList<ArrayList<Integer>> rootMoveList = null;
+	private ArrayList<Integer>[] rootMoveList = null;
 	// static move ordering
 	static final int ATTACK = 0;
 	static final int FLEE = 1;
@@ -309,7 +309,7 @@ public class AI implements Runnable
 		addMove(moveList, Move.packMove(f, t));
 	}
 
-	void getScoutFarMoves(int depth, ArrayList<ArrayList<Integer>> moveList, int i) {
+	void getScoutFarMoves(int n, int depth, ArrayList<Integer> moveList, int i) {
 		Piece fp = b.getPiece(i);
 		for (int d : dir ) {
 			int t = i + d ;
@@ -355,10 +355,17 @@ public class AI implements Runnable
 				t += d;
 				p = b.getPiece(t);
 			};
-			if (tbest > 0)
-				addMove(moveList.get(FAR), i, tbest);
+
+		// If n is 1 and the move is not an attack,
+		// then the scout move cannot be the best move
+		// because it has run out of moves to reach its target.
+
+			if (tbest > 0
+				&& n > 1)
+				addMove(moveList, i, tbest);
+
 			if (p.getColor() == 1 - b.bturn)
-				addMove(moveList.get(FAR), i, t);
+				addMove(moveList, i, t);
 		} // dir
 	}
 
@@ -378,7 +385,7 @@ public class AI implements Runnable
 	// that the opponent can only take the Spy immediately rather than
 	// first taking the material and then taking the Spy later.
 
-	void getAttackingScoutFarMoves(ArrayList<ArrayList<Integer>> moveList, int i)
+	void getAttackingScoutFarMoves(ArrayList<Integer> moveList, int i)
 	{
 		for (int d : dir ) {
 			int t = i + d ;
@@ -392,26 +399,26 @@ public class AI implements Runnable
 			} while (p == null);
 
 			if (p.getColor() == 1 - b.bturn)
-				addMove(moveList.get(FAR), i, t);
+				addMove(moveList, i, t);
 		}
 	}
 
-	public void getAllMoves(ArrayList<ArrayList<Integer>> moveList, int i)
+	public void getAllMoves(ArrayList<Integer>[] moveList, int i)
 	{
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
 
 			if (tp == null)
-				addMove(moveList.get(FLEE), i, t);
+				addMove(moveList[FLEE], i, t);
 			else if (tp.getColor() == 1 - b.bturn)
-				addMove(moveList.get(ATTACK), i, t);
+				addMove(moveList[ATTACK], i, t);
 
 					
 		} // d
 	}
 
-	public void getAttackMoves(ArrayList<ArrayList<Integer>> moveList, int i)
+	public void getAttackMoves(ArrayList<Integer> moveList, int i)
 	{
 		for (int d : dir ) {
 			int t = i + d ;
@@ -419,7 +426,7 @@ public class AI implements Runnable
 
 			if (tp != null
 				&& tp.getColor() == 1 - b.bturn)
-				addMove(moveList.get(ATTACK), i, t);
+				addMove(moveList, i, t);
 		} // d
 	}
 
@@ -427,7 +434,7 @@ public class AI implements Runnable
 	// n = 0; no pruning
 	// n < 0: prune off active moves
 
-	public boolean getMoves(int n, ArrayList<ArrayList<Integer>> moveList, int i)
+	public boolean getMoves(int n, ArrayList<Integer>[] moveList, int i)
 	{
 		Piece fp = b.getPiece(i);
 		Rank fprank = fp.getRank();
@@ -459,7 +466,7 @@ public class AI implements Runnable
                 // attack.
 
 			if (b.grid.hasAttack(b.bturn, i))
-				getAttackMoves(moveList, i);
+				getAttackMoves(moveList[ATTACK], i);
 			return false;
 		}
 
@@ -636,10 +643,11 @@ public class AI implements Runnable
 		return false;
 	}
 
-	private boolean getMoves(BitGrid bg, ArrayList<ArrayList<Integer>> moveList, int n)
+	private boolean getMoves(BitGrid bg, ArrayList<Integer>[] moveList, int n)
 	{
+
 		for (int i = 0; i <= FAR; i++)
-			moveList.add(new ArrayList<Integer>());
+			moveList[i] = new ArrayList<Integer>();
 
 		// FORWARD PRUNING
 		// deep chase search
@@ -707,14 +715,14 @@ public class AI implements Runnable
 		return isPruned;
 	}
 
-	private boolean getMoves(ArrayList<ArrayList<Integer>> moveList, int n)
+	private boolean getMoves(ArrayList<Integer>[] moveList, int n)
 	{
 		BitGrid bg = new BitGrid();
 		boolean isPruned = getMovablePieces(n, bg);
 		return getMoves(bg, moveList, n) || isPruned;
 	}
 
-	private void getScoutMoves(ArrayList<ArrayList<Integer>> moveList, int n, int depth, int turn)
+	private void getScoutMoves(ArrayList<Integer> moveList, int n, int depth, int turn)
 	{
 		// TBD: check for a valuable AI suspected rank;
 		// if there is no suspected AI rank remaining,
@@ -757,13 +765,18 @@ public class AI implements Runnable
 
 			Rank fprank = fp.getRank();
 			if (fprank == Rank.NINE)
-				getScoutFarMoves(depth, moveList, i);
+				getScoutFarMoves(n, depth, moveList, i);
 
 			else if (fprank == Rank.UNKNOWN)
 				getAttackingScoutFarMoves(moveList, i);
 		}
 	}
 
+// Silly Java warning:
+// Java won't let you declare a typed list array like
+// public ArrayList<Piece>[] scouts = new ArrayList<Piece>()[2];
+// and then it warns if you created a non-typed list array.
+@SuppressWarnings("unchecked")
 	private void getBestMove() throws InterruptedException
 	{
 		int tmpM = 0;
@@ -808,7 +821,7 @@ public class AI implements Runnable
 			Move killerMove = new Move(null, -1);
 			Move returnMove = new Move(null, -1);
 
-			rootMoveList = new ArrayList<ArrayList<Integer>>();
+			rootMoveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 			boolean isPruned = getMoves(rootMoveList, n);
 			if (isPruned) {
 
@@ -841,12 +854,12 @@ public class AI implements Runnable
 		// Alternatively, look at the planA/B matrices to
 		// determine direction.  Or use windowing.
 
-			ArrayList<ArrayList<Integer>> moveList = new ArrayList<ArrayList<Integer>>();
+			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 			getMoves(moveList, -n);
 			int bestPrunedMoveValue = -9999;
 			int bestPrunedMove = 0;
 			for (int mo = 0; mo <= FLEE; mo++)
-			for (int move : moveList.get(mo)) {
+			for (int move : moveList[mo]) {
 				logMove(2, move, 0);
 				MoveType mt = makeMove(n, 0, move);
 				if (mt == MoveType.OK
@@ -872,7 +885,7 @@ public class AI implements Runnable
 				} else
 					log(DETAIL, " " + mt);
 			}
-			addMove(rootMoveList.get(FLEE), bestPrunedMove);
+			addMove(rootMoveList[FLEE], bestPrunedMove);
 			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
 			log(PV, "\n" + logMove(b, n, bestPrunedMove));
 			log(DETAIL, "\n<< pick best pruned move\n");
@@ -880,7 +893,7 @@ public class AI implements Runnable
 
 		boolean hasMove = false;
 		for (int mo = 0; mo <= FLEE; mo++)
-			if (rootMoveList.get(mo).size() != 0) {
+			if (rootMoveList[mo].size() != 0) {
 				hasMove = true;
 				break;
 			}
@@ -1096,11 +1109,11 @@ public class AI implements Runnable
 		if (n < 1)
 			return bvalue;
 
-		int best = -9999;
-
 		BitGrid bg = new BitGrid();
 
-	// Find the neighbors of opponent pieces (1 - b.turn)
+		// Find the neighbors of opponent pieces (1 - b.turn)
+		// (In other words, find the player's movable pieces
+		// that are under direct attack).
 
 		b.grid.getMovableNeighbors(1-b.bturn, bg);
 
@@ -1109,6 +1122,21 @@ public class AI implements Runnable
 
 		if (bg.get(0) == 0 && bg.get(1) == 0)
 			return bvalue;
+
+		// If the opponent move was null and the player move
+		// is null, then the result is the same as if neither
+		// player move was null.  This can be thought of as
+		// a simple transposition cache.  It also prevents
+		// the search continuing ad infinitem.
+
+		int best = -9999;
+		if (b.getLastMove() == null)
+			best = bvalue;
+		else {
+			b.pushNullMove();
+			best = -qs(depth+1, n-1, -beta, -alpha, dvr);
+			b.undo();
+		}
 
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
@@ -1148,24 +1176,22 @@ public class AI implements Runnable
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
 		//
-			boolean tryFlee = false;
 			for (int d : dir ) {
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp == null)
+				if (tp != null
+					&& tp.getColor() != 1 - b.bturn)
 					continue;
 
-				if (tp.getColor() != 1 - b.bturn)
+				if (tp == null
+				 	&& (fprank == Rank.BOMB || fprank == Rank.FLAG))
 					continue;
+
 				b.move(Move.packMove(i, t), depth);
 				int v = -negQS(b.getValue() + dvr) - bvalue;
 
-		// If this is a negative result, try fleeing
-
-				if (v < 0) {
-					if (!(fprank == Rank.BOMB || fprank == Rank.FLAG))
-						tryFlee = true;
+				if (tp != null && v < 0) {
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
@@ -1250,51 +1276,10 @@ public class AI implements Runnable
 				if (alpha >= beta)
 					return vm;
 			} // dir
-
-			if (tryFlee)
-			for (int d : dir ) {
-				int t = i + d;	
-
-				Piece tp = b.getPiece(t); // defender
-				if (tp != null)
-					continue;
-
-				int tmpM = Move.packMove(i, t);
-				b.move(tmpM, depth);
-				int vm = -qs(depth+1, n-1, -beta, -alpha, dvr + depthValueReduction(depth+1));
-				b.undo();
-				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
-
-		// Save worthwhile attack (vm > best)
-		// (if vm < best, the player will play
-		// some other move)
-
-				if (vm > best)
-					best = vm;
-
-				alpha = Math.max(alpha, vm);
-
-				if (alpha >= beta)
-					return vm;
-			} // dir
-
 		} // data
 		} // bi
 
-		// If the opponent move was null and the player move
-		// is null, then the result is the same as if neither
-		// player move was null.  This can be thought of as
-		// a simple transposition cache.  It also prevents
-		// the search continuing ad infinitem.
-
-		if (b.getLastMove() == null)
-			return Math.max(best, bvalue);
-
-		b.pushNullMove();
-		int vm = -qs(depth+1, n-1, -beta, -alpha, dvr);
-		b.undo();
-
-		return	Math.max(vm, best);
+		return best;
 	}
 
 	private int negQS(int qs)
@@ -1546,6 +1531,11 @@ public class AI implements Runnable
 		return (to == from);
 	}
 
+// Silly Java warning:
+// Java won't let you declare a typed list array like
+// public ArrayList<Piece>[] scouts = new ArrayList<Piece>()[2];
+// and then it warns if you created a non-typed list array.
+@SuppressWarnings("unchecked")
 	private int negamax2(int n, int alpha, int beta, int depth, Move killerMove, int ttMove, Move returnMove, int dvr) throws InterruptedException
 	{
 		// The player with the last movable piece on the board wins
@@ -1657,7 +1647,7 @@ public class AI implements Runnable
 		//
 		// implementation: selection sort
 
-		ArrayList<ArrayList<Integer>> moveList = null;
+		ArrayList<Integer>[] moveList = null;
 		if (depth == 0)
 			moveList = rootMoveList;
 		else {
@@ -1670,7 +1660,7 @@ public class AI implements Runnable
 		// pruning, then the move generation is skipped,
 		// saving a heap of time.
 
-			if (isPruned) {
+			if (isPruned && ttMove != 0) {
 
 			logMove(n, 0, b.getValue());
 			MoveType mt = makeMove(n, depth, 0);
@@ -1685,6 +1675,10 @@ public class AI implements Runnable
 
 				log(DETAIL, " " + negQS(vm) + " " + MoveType.OK);
 
+				if (vm > bestValue) {
+					bestValue = vm;
+					bestmove = 0;
+				}
 				alpha = Math.max(alpha, vm);
 
 				if (alpha >= beta) {
@@ -1692,19 +1686,18 @@ public class AI implements Runnable
 					returnMove.setMove(0);
 					return vm;
 				}
-
-				bestValue = vm;
-				bestmove = 0;
 			} else
 				log(DETAIL, " " + mt);
 			}
 
-			moveList = new ArrayList<ArrayList<Integer>>();
+			moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 
 			// FORWARD PRUNING
 			// Add null move if not processed already
-			if (getMoves(bg, moveList, n) && !isPruned)
-				addMove(moveList.get(FLEE), 0);
+			if (getMoves(bg, moveList, n)
+				&& !isPruned
+				&& ttMove != 0)
+				addMove(moveList[FLEE], 0);
 		}
 
 		outerloop:
@@ -1718,9 +1711,9 @@ public class AI implements Runnable
 		// not forward pruned based on enemy distance like other moves.
 
 			if (mo == FAR)
-				getScoutMoves(moveList, n, depth, b.bturn);
+				getScoutMoves(moveList[mo], n, depth, b.bturn);
 
-			ArrayList<Integer> ml = moveList.get(mo);
+			ArrayList<Integer> ml = moveList[mo];
 			for (int i = 0; i < ml.size(); i++) {
 				int max = sortMove(ml, i);
 
