@@ -2082,7 +2082,8 @@ public class TestingBoard extends Board
 			if (!Grid.isValid(bi))
 				continue;
 			Piece bp = getPiece(bi);
-			assert (bp != null && bp.getRank() == Rank.BOMB) : "flagBombTarget() called on non-bombed flag";
+			if (bp == null || bp.getRank() != Rank.BOMB)
+				continue;
 
 			//
 			// check all possible approaches to bomb
@@ -2270,14 +2271,15 @@ public class TestingBoard extends Board
 			defendFlag(flag[Settings.topColor]);
 		}
 
-		// Always protect the flag bomb structure, even if the flag
+		// Always protect any remaining bombs in the
+		// the flag bomb structure, even if the flag
 		// is not known (i.e multiple structures remaining)
 		// because the opponent can make a lucky guess,
 		// especially if the opponent has expendable eights
 		// that it can sacrifice by throwing them at multiple
 		// structures (just like the AI does).
 
-		else if (rankAtLarge(1-color, Rank.EIGHT) != 0) {
+		if (rankAtLarge(1-color, Rank.EIGHT) != 0) {
 
 			flagBombTarget(pflag);
 

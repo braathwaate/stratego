@@ -1,5 +1,5 @@
 PKG=com/cjmalloy/stratego
-VER=stratego_v0.9.10
+VER=stratego_v0.10.0
 
 all: $(VER).zip
 

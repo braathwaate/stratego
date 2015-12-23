@@ -76,7 +76,6 @@ public class AI implements Runnable
 	enum MoveType {
 		TWO_SQUARES,
 		POSS_TWO_SQUARES,
-		CHASED,
 		CHASER,
 		REPEATED,
 		KM,	// killer move
@@ -862,9 +861,7 @@ public class AI implements Runnable
 			for (int move : moveList[mo]) {
 				logMove(2, move, 0);
 				MoveType mt = makeMove(n, 0, move);
-				if (mt == MoveType.OK
-					|| mt == MoveType.CHASER
-					|| mt == MoveType.CHASED) {
+				if (mt == MoveType.OK) {
 
 		// Note: negamax(0) isn't deep enough because scout far moves
 		// can cause a move outside the active area to be very bad.
@@ -1235,7 +1232,7 @@ public class AI implements Runnable
 		// piece such as a bomb or flag which may require
 		// a losing move to protect it.
 		//
-		// Version 9.10 has a new theory.  If the attacker does not
+		// Version 10.0 has a new theory.  If the attacker does not
 		// survive and the result is negative, then the move
 		// is pointless.  This should make no difference in qs
 		// from 9.9, but now the theory is used in makeMove()
@@ -1288,6 +1285,30 @@ public class AI implements Runnable
 			return qs;
 		else
 			return -qs;
+	}
+
+	boolean endOfSearch(int depth)
+	{
+		if (depth == 0)
+			return false;
+
+		UndoMove um1 = b.getLastMove(1);
+		UndoMove um2 = b.getLastMove(2);
+
+		// If the opponent move was null and the player move
+		// is null, then the result is the same as if neither
+		// player move was null.  This can be thought of as
+		// a simple transposition cache.
+
+		if (um1 == null && um2 == null)
+			return true;
+
+		if (um1 != null
+			&& um1.tp != null
+			&& um1.tp.getRank() == Rank.FLAG)
+			return true;
+
+		return false;
 	}
 
 	void saveTTEntry(int hashN, int n, TTEntry.SearchType searchType, TTEntry.Flags entryType, int vm, int dvr, int bestmove)
@@ -1447,11 +1468,7 @@ public class AI implements Runnable
 		}
 
 		int vm;
-		if (n < 1
-			|| (depth != 0
-				&& b.getLastMove() != null
-				&& b.getLastMove().tp != null
-				&& b.getLastMove().tp.getRank() == Rank.FLAG)) {
+		if (n < 1 || endOfSearch(depth)) {
 			vm = qs(depth, QSMAX, alpha, beta, dvr);
 			// save value of position at hash 0 (see saveTTEntry())
 			saveTTEntry(0, n, searchType, TTEntry.Flags.EXACT, vm, dvr, -1);
@@ -1558,7 +1575,7 @@ public class AI implements Runnable
 
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
-		int bestmove = 0;
+		int bestmove = -1;
 
 		if (ttMove != -1) {
 
@@ -1572,9 +1589,7 @@ public class AI implements Runnable
 
 			logMove(n, ttMove, b.getValue());
 			MoveType mt = makeMove(n, depth, ttMove);
-			if (mt == MoveType.OK
-				|| mt == MoveType.CHASER
-				|| mt == MoveType.CHASED) {
+			if (mt == MoveType.OK) {
 
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 
@@ -1613,9 +1628,7 @@ public class AI implements Runnable
 				|| isValidScoutMove(km))) {
 			logMove(n, km, b.getValue());
 			MoveType mt = makeMove(n, depth, km);
-			if (mt == MoveType.OK
-				|| mt == MoveType.CHASER
-				|| mt == MoveType.CHASED) {
+			if (mt == MoveType.OK) {
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 				long h = b.getHash();
 				b.undo();
@@ -1664,9 +1677,7 @@ public class AI implements Runnable
 
 			logMove(n, 0, b.getValue());
 			MoveType mt = makeMove(n, depth, 0);
-			if (mt == MoveType.OK
-				|| mt == MoveType.CHASER
-				|| mt == MoveType.CHASED) {
+			if (mt == MoveType.OK) {
 
 				int vm = -negamax(n-1, -beta, -alpha, depth + 1, kmove, returnMove, dvr + depthValueReduction(depth+1));
 
@@ -1725,9 +1736,7 @@ public class AI implements Runnable
 
 				logMove(n, max, b.getValue());
 				MoveType mt = makeMove(n, depth, max);
-				if (!(mt == MoveType.OK
-					|| mt == MoveType.CHASER
-					|| mt == MoveType.CHASED)) {
+				if (!(mt == MoveType.OK)) {
 					log(DETAIL, " " + mt);
 					continue;
 				}
@@ -1754,7 +1763,15 @@ public class AI implements Runnable
 			} // moveList
 		} // move order
 
-		hh[bestmove]+=n;
+		// It is possible bestmove can equal -1 if the player
+		// has a piece that can move, but moving it is illegal,
+		// such in the case of two squares, or was eliminated
+		// by the NEG capture heuristic.
+		// TBD: if a NEG capture is the only move available,
+		// then it should be allowed.
+
+		if (bestmove != -1)
+			hh[bestmove]+=n;
 
 		returnMove.setMove(bestmove);
 
@@ -1779,8 +1796,6 @@ public class AI implements Runnable
 		// so calls to isRepeatedPosition() are also pruned off,
 		// saving a heap of time.
 
-		MoveType mt = MoveType.OK;
-
 		if (tryMove == 0) {
 
 		// A null move does not change the board
@@ -1790,7 +1805,7 @@ public class AI implements Runnable
 		// the outcome is different if the player is different.
 		// So set a new hash and reset it after the move.
 			b.pushNullMove();
-			return mt;
+			return MoveType.OK;
 		}
 
 		// Immobile Pieces
@@ -1832,7 +1847,6 @@ public class AI implements Runnable
 
 			if (b.isChased(tryMove)) {
 				b.move(tryMove, depth);
-				mt = MoveType.CHASED;
 			} else if (b.bturn == Settings.topColor) {
 
 				if (b.isTwoSquaresChase(tryMove)) {
@@ -1841,7 +1855,6 @@ public class AI implements Runnable
 		// (until Two Squares Rule kicks in)
 
 					b.move(tryMove, depth);
-					mt = MoveType.CHASER;
 				} else {
 
 	// Because isRepeatedPosition() is more restrictive
@@ -1874,7 +1887,7 @@ public class AI implements Runnable
 			}
 		}
 
-		return mt;
+		return MoveType.OK;
 	}
 
 	private long getHash(int d)
