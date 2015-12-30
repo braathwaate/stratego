@@ -45,10 +45,6 @@ public enum Rank
 	static public final int EVEN = -1;
 	static public final int UNK = -2;
 	static public final int LOSES = 0;
-	public int toInt()
-	{
-		return ordinal();
-	}
 
 	static public Rank toRank(int rank)
 	{
@@ -65,7 +61,7 @@ public enum Rank
 	{	
 		final int[] ranks = {0, 1, 1, 2, 3, 4, 4, 4, 5, 8, 1, 6, 1};
 
-		return ranks[rank.toInt()];
+		return ranks[rank.ordinal()];
 	}
 
 
@@ -99,7 +95,7 @@ public enum Rank
 		if (this == Rank.SPY & defend == Rank.ONE)
 				return WINS;
 		
-		if (toInt() < defend.toInt())
+		if (ordinal() < defend.ordinal())
 			return WINS;
 		return LOSES;
 	}

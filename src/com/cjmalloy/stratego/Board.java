@@ -474,7 +474,7 @@ public class Board
 				[p.getColor()]
 				[p.getStateFlags()]
 				[p.hasMoved() ? 1 : 0]
-				[p.getRank().toInt()-1]
+				[p.getRank().ordinal()-1]
 				[i];
 		} else {
 			Rank rank = p.getRank();
@@ -485,7 +485,7 @@ public class Board
 				[p.getColor()]
 				[p.getStateFlags()]
 				[p.hasMoved() ? 1 : 0]
-				[rank.toInt()-1]
+				[rank.ordinal()-1]
 				[i];
 		}
 	}
@@ -521,7 +521,7 @@ public class Board
 				&& p.getColor() == chaserPiece.getColor()
 				&& ((p.getApparentRank() == Rank.UNKNOWN
 					&& !isInvincibleDefender(chasedPiece))
-					|| p.getApparentRank().toInt() < chasedPiece.getApparentRank().toInt())) {
+					|| p.getApparentRank().ordinal() < chasedPiece.getApparentRank().ordinal())) {
 				return true;
 			}
 		}
@@ -649,7 +649,7 @@ public class Board
 			Rank rank = op.getApparentRank();
 
 			if (delayPiece == null
-				|| rank.toInt() < delayPiece.getApparentRank().toInt())
+				|| rank.ordinal() < delayPiece.getApparentRank().ordinal())
 				delayPiece = op;
 
 		}
@@ -677,7 +677,7 @@ public class Board
 				if (rank == Rank.BOMB
 					|| (delayPiece != null
 						&& op != delayPiece
-						&& rank.toInt() >= delayPiece.getApparentRank().toInt()))	// new in version 9.5
+						&& rank.ordinal() >= delayPiece.getApparentRank().ordinal()))	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
@@ -768,7 +768,7 @@ public class Board
 		// or the protector:
 		//	|| unknownProtector != null
 		//	|| (knownProtector != null
-		//		&& knownProtector.getRank().toInt() < chaser.getRank().toInt()))
+		//		&& knownProtector.getRank().ordinal() < chaser.getRank().ordinal()))
 		//
 		// Then in TestingBoard, the chase piece acquired a
 		// temporary suspected rank so that the AI would treat
@@ -813,7 +813,7 @@ public class Board
 				continue;
 
 			if (p.isKnown()) {
-				if (p.getRank().toInt() + 1 == chaser.getRank().toInt())
+				if (p.getRank().ordinal() + 1 == chaser.getRank().ordinal())
 					return;
 			} else if (p.getActingRankChase() == chaser.getRank())
 				return;
@@ -873,14 +873,14 @@ public class Board
 		// of suspected ranks a challenge.
 
 		if (arank == Rank.UNKNOWN
-			&& chaser.getApparentRank().toInt() <= 5)
+			&& chaser.getApparentRank().ordinal() <= 5)
 		 	return;
 
 		if (arank == Rank.NIL 
 			|| (chaser.getApparentRank() == Rank.UNKNOWN
-				&& arank.toInt() >= 5
+				&& arank.ordinal() >= 5
 				&& !isInvincible(chased))
-			|| arank.toInt() > chaser.getApparentRank().toInt()
+			|| arank.ordinal() > chaser.getApparentRank().ordinal()
 
 		// If an unknown piece has IS_LESS set (because it protected
 		// a piece) and then chases an AI piece,  clear IS_LESS
@@ -970,7 +970,7 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-			if (chasedRank.toInt() >= 5)	// or UNKNOWN
+			if (chasedRank.ordinal() >= 5)	// or UNKNOWN
 				return;
 
 		// If the chaser piece is Unknown,
@@ -1022,7 +1022,7 @@ public class Board
 		// Set the direct chase rank (when ranks are equal
 		// and the the chased is unknown and suspected)
 
-		} else if (chasedRank.toInt() <= chaserRank.toInt()
+		} else if (chasedRank.ordinal() <= chaserRank.ordinal()
 			|| chasedRank == Rank.FLAG
 			|| chasedRank == Rank.BOMB) {
 			if (chaser.isKnown()) {
@@ -1117,13 +1117,13 @@ public class Board
 
 			if (p.getRank() != Rank.UNKNOWN) {
 				if (chaserRank != Rank.UNKNOWN) {
-					if (p.getRank().toInt() < chaserRank.toInt()
+					if (p.getRank().ordinal() < chaserRank.ordinal()
 						|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE)
 						return;
 				} else {
 					assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
 					if (knownProtector == null
-						|| p.getRank().toInt() < knownProtector.getRank().toInt())
+						|| p.getRank().ordinal() < knownProtector.getRank().ordinal())
 						knownProtector = p;
 				}
 
@@ -1273,7 +1273,7 @@ public class Board
 		// should gain a chase rank of Five.
 
 			if (m.getPiece() != unknownProtector
-				&& chaser.getApparentRank().toInt() >= 5
+				&& chaser.getApparentRank().ordinal() >= 5
 				&& !chased.isKnown())
 				return;
 
@@ -1292,7 +1292,7 @@ public class Board
 		// its mission was to  attack unknown Red, regardless
 		// of the consequence.
 
-			if (chased.getApparentRank().toInt() >= 5
+			if (chased.getApparentRank().ordinal() >= 5
 				&& chased == m.getPiece()
 				&& m.tp != null)
 				return;
@@ -1303,7 +1303,7 @@ public class Board
 
 		// strong unknown protector confirmed
 
-			int r = chased.getApparentRank().toInt();
+			int r = chased.getApparentRank().ordinal();
 
 		// One cannot be protected.
 			if (r == 1)
@@ -1312,7 +1312,7 @@ public class Board
 			int attackerRank = 0;
 
 			if (chaser.isKnown()) {
-				attackerRank = chaser.getRank().toInt();
+				attackerRank = chaser.getRank().ordinal();
 				assert attackerRank < r : "known chaser " + attackerRank + "  must chase unknown or lower rank, not " + chased.getRank();
 				r = attackerRank - 1;
 			} else {
@@ -1354,7 +1354,7 @@ public class Board
 		// known piece is protector
 
 			if (knownProtector != null
-				&& (knownProtector.getRank().toInt() <= r
+				&& (knownProtector.getRank().ordinal() <= r
 					|| (knownProtector.getRank() == Rank.SPY && r == 0)))
 				return;
 
@@ -1389,7 +1389,7 @@ public class Board
 			if (arank == Rank.SPY)
 				rank = Rank.SPY;
 
-			if (arank == Rank.NIL || arank.toInt() > r)
+			if (arank == Rank.NIL || arank.ordinal() > r)
 				unknownProtector.setActingRankChaseLess(rank);
 
 		} // unknown protector
@@ -1479,7 +1479,7 @@ public class Board
 
 					if (!chased.isKnown()
 						&& chased2.isKnown()
-						&& chased2.getRank().toInt() <= 4)
+						&& chased2.getRank().ordinal() <= 4)
 						break;
 
 		// Unknown chaser can be assigned a chase rank.
@@ -1549,7 +1549,7 @@ public class Board
 
 	protected int unknownNotSuspectedRankAtLarge(int color, Rank rank)
 	{
-		return unknownNotSuspectedRankAtLarge(color, rank.toInt());
+		return unknownNotSuspectedRankAtLarge(color, rank.ordinal());
 	}
 
 	protected int suspectedRankAtLarge(int color, int r)
@@ -1559,7 +1559,7 @@ public class Board
 
 	protected int suspectedRankAtLarge(int color, Rank rank)
 	{
-		return suspectedRankAtLarge(color, rank.toInt());
+		return suspectedRankAtLarge(color, rank.ordinal());
 	}
 
 	// The usual Stratego attack strategy is one rank lower.
@@ -1567,7 +1567,7 @@ public class Board
 	protected Rank getChaseRank(Piece p, Rank rank, boolean rankLess)
 	{
 		int color = p.getColor();
-		int r = rank.toInt();
+		int r = rank.ordinal();
 		assert color == Settings.bottomColor : "getChaseRank() only for opponent pieces";
 		Rank newRank = Rank.UNKNOWN;
 
@@ -1666,7 +1666,7 @@ public class Board
 			p.setSuspectedRank(rank);
 
 		if (!maybeBluffing(p))
-			suspectedRank[p.getColor()][rank.toInt()-1]++;
+			suspectedRank[p.getColor()][rank.ordinal()-1]++;
 	}
 
 	//
@@ -1694,7 +1694,7 @@ public class Board
 		// add in the tray pieces to trayRank
 		for (int i=0;i<getTraySize();i++) {
 			Piece p = getTrayPiece(i);
-			int r = p.getRank().toInt();
+			int r = p.getRank().ordinal();
 			trayRank[p.getColor()][r-1]++;
 			piecesInTray[p.getColor()]++;
 		}
@@ -1716,7 +1716,7 @@ public class Board
 			}
 
 			if (p.isKnown())
-				knownRank[p.getColor()][p.getRank().toInt()-1]++;
+				knownRank[p.getColor()][p.getRank().ordinal()-1]++;
 			if ((p.hasMoved() || p.isKnown())
 				&& p.getRank() != Rank.BOMB)
 				piecesNotBomb[p.getColor()]++;
@@ -1798,7 +1798,7 @@ public class Board
 		// If all pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.toInt()-1];
+		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.ordinal()-1];
 		int unknownBombs = unknownRankAtLarge(c, Rank.BOMB);
 		if (possibleUnknownMovablePieces[c] == 0) {
 			for (int i=12;i<=120;i++) {
@@ -2490,7 +2490,7 @@ public class Board
 		tray.add(p);
 		Collections.sort(tray,new Comparator<Piece>(){
 				     public int compare(Piece p1,Piece p2){
-					return p1.getRank().toInt() - p2.getRank().toInt();
+					return p1.getRank().ordinal() - p2.getRank().ordinal();
 				     }});
 	}
 
@@ -2730,8 +2730,6 @@ public class Board
 		if (from - (to - from) == oppmove1.getTo())
 			return false;
 
-		int oppFrom1 = oppmove1.getFrom();
-
 		// This rule checks if the player move is forced.  If the
 		// player is returning to the same square and the
 		// opponent was doing something else on the board,
@@ -2765,21 +2763,8 @@ public class Board
 		// (Thus Blue Four is seen to be trapped in very few ply).
 		// 
 
-		// Determine if the player move is forced.
-		// Opponent and player pieces not alternating
-		// in the same column or row?
-		int xdiff = Grid.getX(to) - Grid.getX(from);
-		int ydiff = Grid.getY(to) - Grid.getY(from);
-		if (xdiff != 0) {
-			if (oppmove1.getFromX() != Grid.getX(to)
-				|| oppmove1.getToX() != Grid.getX(from))
-				return false;
-		}
-		if (ydiff != 0) {
-			if (oppmove1.getFromY() != Grid.getY(to)
-				|| oppmove1.getToY() != Grid.getY(from))
-				return false;
-		}
+		if (!Grid.isAlternatingMove(m, oppmove1))
+			return false;
 
 		UndoMove oppmove3 = getLastMove(3);
 		if (oppmove3 == null)
@@ -3080,7 +3065,7 @@ public class Board
 
 	public int unknownRankAtLarge(int color, Rank rank)
 	{
-		return unknownRankAtLarge(color, rank.toInt());
+		return unknownRankAtLarge(color, rank.ordinal());
 	}
 
 	public int knownRankAtLarge(int color, int r)
@@ -3095,7 +3080,7 @@ public class Board
 
 	public int rankAtLarge(int color, Rank rank)
 	{
-		return rankAtLarge(color, rank.toInt());
+		return rankAtLarge(color, rank.ordinal());
 	}
 
         public boolean hasSpy(int color)
@@ -3111,7 +3096,7 @@ public class Board
 	public boolean isInvincible(Piece p) 
 	{
 		Rank rank = p.getRank();
-		return isInvincible(p.getColor(), rank.toInt());
+		return isInvincible(p.getColor(), rank.ordinal());
 	}
 
 	public boolean isInvincibleDefender(Piece p) 
@@ -3120,7 +3105,7 @@ public class Board
 		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
 			return false;
 
-		return isInvincible(p.getColor(), rank.toInt());
+		return isInvincible(p.getColor(), rank.ordinal());
 	}
 
 	//
@@ -3131,7 +3116,7 @@ public class Board
 		Rank rank = p.getRank();
 		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
 			return false;
-		return (rank.toInt() <= invincibleWinRank[p.getColor()]);
+		return (rank.ordinal() <= invincibleWinRank[p.getColor()]);
 	}
 
 	public long getHash()
@@ -3157,16 +3142,16 @@ public class Board
 	{
 		if (p.getColor() == Settings.bottomColor
 			&& !p.isKnown()
-			&& p.getRank().toInt() <= 4) {
+			&& p.getRank().ordinal() <= 4) {
 
 	// its hard to distinguish a Four from a Five,
 	// so if the AI thinks a piece is a Four and it turns
 	// out to be a Five, nothing is changed
 
-			if (p.getRank().toInt() == 4
-				&& p.getActualRank().toInt() == 5)
+			if (p.getRank().ordinal() == 4
+				&& p.getActualRank().ordinal() == 5)
 				guessedRankCorrect = guessedRankCorrect;
-			else if (p.getRank().toInt() >= p.getActualRank().toInt())
+			else if (p.getRank().ordinal() >= p.getActualRank().ordinal())
 				guessedRankCorrect++;
 			else
 				guessedRankCorrect--;
@@ -3178,10 +3163,25 @@ public class Board
 	}
 
 
+	protected boolean lowRankNearby(int i)
+	{
+		final int xdir[] = { 1, -1 };
+		for (int d : xdir ) {
+			int j = i + d;
+			Piece p = getPiece(j);
+			if (p != null
+				&& p.getColor() == bturn
+				&& p.getRank().ordinal() <= 4)
+				return true;
+		}
+		return false;
+	}
+
 	// Unknown pieces at the front of the lanes at the start
 	// of the game or that freely move into a lane across
 	// from an opponent unknown piece while the opponent
-	// still has a healthy supply of Scouts are assigned
+	// still has a healthy supply of Scouts and there is no
+	// obvious low ranked known AI target in the area are assigned
 	// an unknown chase rank, because the player has deliberately
 	// exposed these pieces to attack by Scouts.  This is
 	// equivalent to the piece actually having chased an unknown piece,
@@ -3207,6 +3207,8 @@ public class Board
 
 	void markExposedPieces()
 	{
+		// Assign unknown chase rank to unmoved front row pieces
+
 		final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
 		for (int x : xlanes) {
 			Piece p = getPiece(Grid.getIndex(x, Grid.yside(1-bturn, 3)));
@@ -3233,7 +3235,7 @@ public class Board
 		// piece was removed, and now it is trying to
 		// escape detection.
 
-		if (m1.getToY() - m1.getFromY() == 0)
+		if (m1.getToX() - m1.getFromX() == 0)
 			return;
 
 		// If an opponent piece is nearby, the piece
@@ -3255,13 +3257,15 @@ public class Board
 		// the direction of the players field and
 		// is the color of the possible Scout piece
 
-		int dir;
+		int up;
 		if (bturn == Settings.topColor)
-			dir = -11;
+			up = -11;
 		else
-			dir = 11;
+			up = 11;
 
-		for (int i = m1.getTo()+dir; ; i += dir) {
+		for (int i = m1.getTo()+up; ; i += up) {
+			if (lowRankNearby(i))
+				break;
 			Piece p = getPiece(i);
 			if (p != null) {
 				if (p.getColor() != bturn)

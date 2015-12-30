@@ -18,6 +18,8 @@
 package com.cjmalloy.stratego;
 
 import java.util.EnumSet;
+import java.util.ArrayList;
+
 
 
 // the transposition table entry
@@ -40,7 +42,8 @@ public class TTEntry {
 	public int bestMove;
 	public int bestValue;
 	public int depth;
-	public int turn;
+	public int exactDepth;
+	public int exactValue;
 
 	public enum Flags {
 		EXACT,

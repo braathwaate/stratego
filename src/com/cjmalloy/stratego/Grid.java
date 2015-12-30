@@ -354,6 +354,47 @@ public class Grid
 		return isAdjacent(Move.unpackFrom(m), Move.unpackTo(m));
 	}
 
+	// returns true if both moves are between the same row
+	// or column.
+	// For example,
+	// -- --
+	// B1 R2
+	// If Red Two moves up and then Blue One moves up, this
+	// function returns true.  This is useful in examining
+	// the potential for a Two Squares ending.
+	static public boolean isPossibleTwoSquaresChase(Move m1, Move m2)
+	{
+		if (m1 == null || m2 == null)
+			return false;
+		return (m1.getFromX() == m2.getFromX()
+			&& m1.getToX() == m2.getToX())
+			|| (m1.getFromY() == m2.getFromY()
+			&& m1.getToY() == m2.getToY());
+	}
+
+	static public boolean isAlternatingMove(int m1, Move m2)
+	{
+		int from1 = Move.unpackFrom(m1);
+		int to1 = Move.unpackTo(m1);
+
+                // Opponent and player pieces not alternating
+                // in the same column or row?
+                int xdiff = Grid.getX(to1) - Grid.getX(from1);
+                int ydiff = Grid.getY(to1) - Grid.getY(from1);
+                if (xdiff != 0) {
+                        if (m2.getFromX() != Grid.getX(to1)
+                                || m2.getToX() != Grid.getX(from1))
+                                return false;
+                }
+                if (ydiff != 0) {
+                        if (m2.getFromY() != Grid.getY(to1)
+                                || m2.getToY() != Grid.getY(from1))
+                                return false;
+                }
+
+		return true;
+	}
+
 	// number of steps between indicies
 	static public int steps(int f, int t)
 	{

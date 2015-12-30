@@ -297,11 +297,11 @@ public class Piece implements Comparable<Piece>
 	public void setActingRankFlee(Rank r)
 	{
 		if (actingRankFleeLow == Rank.NIL
-			|| actingRankFleeLow.toInt() > r.toInt())
+			|| actingRankFleeLow.ordinal() > r.ordinal())
 			actingRankFleeLow = r;
 
 		if (actingRankFleeHigh == Rank.NIL
-			|| actingRankFleeHigh.toInt() < r.toInt())
+			|| actingRankFleeHigh.ordinal() < r.ordinal())
 			actingRankFleeHigh = r;
 	}
 

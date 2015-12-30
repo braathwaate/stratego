@@ -166,7 +166,7 @@ public class AITest extends View
 				yy = 3 - y;
 				
 			for (int x = 0; x < 10; x++) 
-				System.out.print(rankchar[engine.getBoardPiece(x,yy).getRank().toInt()]);
+				System.out.print(rankchar[engine.getBoardPiece(x,yy).getRank().ordinal()]);
 			System.out.println();
 		}
 	}
