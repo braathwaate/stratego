@@ -87,6 +87,7 @@ public class TestingBoard extends Board
 	protected boolean knownAIOne;
 	protected int[] unknownRank = new int[2];
 	public int depth = -1;
+	protected Piece lastMovedPiece;
 
 // Silly Java warning:
 // Java won't let you declare a typed list array like
@@ -1035,7 +1036,6 @@ public class TestingBoard extends Board
 	// pieces from entering AI territory.
 	void attackLanes()
 	{
-
 		for (int c = RED; c <= BLUE; c++) {
 
 		// Once the opponent has few remaining expendable pieces,
@@ -1075,9 +1075,9 @@ public class TestingBoard extends Board
 					if (p.getRank().ordinal() < thisRank.ordinal()
 						&& !isStealthy(p))
 						thisRank = p.getRank();
-					else if (p.getRank().ordinal() == thisRank.ordinal())
+					else if (p.getRank() == thisRank
+						&& p.isKnown())
 						duplicateRank = p.getRank();
-				
 				}
 			} // y
 
@@ -1093,7 +1093,7 @@ public class TestingBoard extends Board
 					int ranksNeeded = 1;
 					for (int r = oppRank.ordinal(); ranksNeeded <= 3 && r > 1; r--) {
 						if (rankAtLarge(c, r) != 0) {
-							int tmp2[] = genDestTmp(GUARDED_OPEN, c, i);
+							int tmp2[] = genDestTmpGuarded(1-c, i, Rank.toRank(r));
 							if (!isStealthy(planAPiece[c][r-1], oppRank.ordinal()))
 								genNeededPlanA(0, tmp2, c, r, DEST_PRIORITY_CHASE);
 							if (!isStealthy(planBPiece[c][r-1], oppRank.ordinal()))
@@ -2493,7 +2493,7 @@ public class TestingBoard extends Board
 		Piece flagp = getPiece(i);
 		int color = flagp.getColor();
 
-		// Send in a lowly rank and an Eight (if any)
+		// Send in three lowly ranks (including an Eight, if any)
 		// to attack the suspected flag.
 
 		// Note: if the flag is still bombed, the
@@ -2502,13 +2502,13 @@ public class TestingBoard extends Board
 		// there is an open path to the flag.
 
 		int destTmp[] = genDestTmp(GUARDED_OPEN, flagp.getColor(), i);
-		for (int k = 10; k > 0; k--) {
+		int attackers = 0;
+		for (int k = 10; k > 0 && attackers < 3; k--) {
 			if (k == 10 && rankAtLarge(flagp.getColor(), Rank.ONE) != 0)
 				continue;
 			if (rankAtLarge(1-flagp.getColor(),k) != 0) {
 				genNeededPlanA(0, destTmp, 1-flagp.getColor(), k, DEST_PRIORITY_ATTACK_FLAG);
-				genNeededPlanA(0, destTmp, 1-flagp.getColor(), 8, DEST_PRIORITY_ATTACK_FLAG);
-				break;
+				attackers++;
 			}
 		}
 	}
@@ -2601,7 +2601,8 @@ public class TestingBoard extends Board
 	// Generate a matrix of consecutive values with the highest
 	// value at the destination "to". (Lee's algorithm).
 	//
-	// For attackers, "color" is the opposite color of the attacker.
+	// For attackers, "color" is the color of the defender
+	// (usually at destination "to" or nearby).
 	// A piece of any color blocks the destination from discovery,
 	// unless the caller is invincible or the Spy, in which case
 	// the maze continues through moved pieces.
@@ -2952,22 +2953,9 @@ public class TestingBoard extends Board
 
 		lastMove = getLastMove(1);
 		if (lastMove != null) {
-			Piece lastMovedPiece = null;
 			lastMovedPiece = getPiece(lastMove.getTo());
 			if (lastMovedPiece != null
 				&& lastMovedPiece.getColor() == lastMove.getPiece().getColor()) {
-				Rank r = getTempSuspectedRank(lastMovedPiece);
-
-		// Note that the AI considers the chase piece not bluffing
-		// when it calls setSuspectedRank().  This gives it more
-		// latitude to flee past unknown enemy rank, IF the
-		// chase piece happens to become invincible.
-
-		// Version 9.6 experimentally removed this code
-		// and relies on permanent chase rank (see Board).
-
-		//		if (r != Rank.NIL && r != Rank.UNKNOWN)
-		//			setSuspectedRank(lastMovedPiece, getChaseRank(lastMovedPiece, r, false), false);
 
 		// set actingRankFlee temporarily on any AI pieces approached
 		// by an opponent piece.  When the AI evaluates any
@@ -3174,11 +3162,12 @@ public class TestingBoard extends Board
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
 		int priority = plan[1][from];
-		if (vto == DEST_VALUE_NIL
-			|| vfrom == DEST_VALUE_NIL)
-			return 0;
 
 		if (plan[1][to] == priority) {
+
+			if (vto == DEST_VALUE_NIL
+				|| vfrom == DEST_VALUE_NIL)
+				return 0;
 
 		// The difference in chase plan values for adjacent squares
 		// is always 1, except if the plan was modified by
@@ -3194,24 +3183,24 @@ public class TestingBoard extends Board
 		// Note: adjacent squares in flee plans are not restricted
 		// to a difference of 1 (could be 0).
 
-				if (priority >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
-					return 0;
+			if (priority >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
+				return 0;
 
-				return (vfrom - vto) * priority;
+			return (vfrom - vto) * priority;
 
-			} // to-priority == from-priority
+		} // to-priority == from-priority
 
-			else {
+		else {
 
-		// Note: flee() is currently commented out,
-		// replaced by attacklanes() flee, and the goal is to keep the higher
+		// Note: flee() is replaced by attacklanes() flee,
+		// and the goal is to keep the higher
 		// ranked piece off of the flee squares.
 
-				if (priority == DEST_PRIORITY_FLEE)
-					return priority;
-				else if (plan[1][to] == DEST_PRIORITY_FLEE)
-					return -priority;
-			}
+			if (priority == DEST_PRIORITY_FLEE)
+				return priority;
+			else if (plan[1][to] == DEST_PRIORITY_FLEE)
+				return -priority;
+		}
 
 		return 0;
 	}
@@ -5502,7 +5491,7 @@ public class TestingBoard extends Board
 				if (pieceValue(1-color, r) < min)
 					min = pieceValue(1-color, r);
 
-		v = Math.min(v, min + VALUE_NINE);
+		v = Math.max(v, min + VALUE_NINE);
 
 		values[color][Rank.FLAG.ordinal()] = v;
 	}
@@ -6076,6 +6065,7 @@ public class TestingBoard extends Board
 						return Rank.EVEN;	// maybe not
 			}
 			else if (fp.moves == 0
+				&& fp != lastMovedPiece		// maybe a responding defender
 				&& foray[tprank.ordinal()]) {
 				if (!tp.isKnown())
 					return Rank.LOSES;
@@ -6104,6 +6094,7 @@ public class TestingBoard extends Board
 
 		else if (fprank != Rank.EIGHT && isPossibleBomb(tp)) {
 			if (foray[fprank.ordinal()]
+				&& tp != lastMovedPiece		// maybe a responding defender
 				&& forayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
 				return Rank.WINS;
 			return result;

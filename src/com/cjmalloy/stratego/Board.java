@@ -3171,7 +3171,7 @@ public class Board
 			Piece p = getPiece(j);
 			if (p != null
 				&& p.getColor() == bturn
-				&& p.getRank().ordinal() <= 4)
+				&& p.getApparentRank().ordinal() <= 5)
 				return true;
 		}
 		return false;
