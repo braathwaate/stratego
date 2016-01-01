@@ -57,8 +57,6 @@ public class TestingBoard extends Board
 	private static final int DEST_PRIORITY_CHASE = 1;
 	private static final int DEST_PRIORITY_LOW = 1;
 
-	private static final int DEST_VALUE_FLEE = 3;
-
 	private static final int DEST_VALUE_NIL = 9999;
 	private static final int GUARDED_OPEN = 0;
 	private static final int GUARDED_UNKNOWN = 1;
@@ -864,35 +862,35 @@ public class TestingBoard extends Board
 
 			if (c == Settings.bottomColor) {
 
-	// If the opponent has a dangerous unknown rank,
-	// and the AI suspects which piece it is,
-	// it is best to keep it unknown, because once it becomes
-	// discovered, it will certainly go on a rampage.
+		// If the opponent has a dangerous unknown rank,
+		// and the AI suspects which piece it is,
+		// it is best to keep it unknown, because once it becomes
+		// discovered, it will certainly go on a rampage.
 
 				if (dangerousUnknownRank != 99
 					&& r <= dangerousUnknownRank)
 					v = 0;
 
-	// Prior to version 9.9, opponent stealth remained constant
-	// during the game; it did not depend on remaining ranks
-	// at large like player stealth does.  This lead to the AI
-	// attacking the opponent suspected One with an invincible
-	// piece such as a Four or Five, when it would have been much
-	// better for the invincible piece to attack other unknowns
-	// rather than confirm the identity of the One.  blufferRisk
-	// helps to reduce this problem, but it does not eliminate it.
-	// So opponent stealth needs to reduced like player stealth
-	// as the game wears on and it becomes obvious which pieces
-	// are strong and which are weak.
-	//
-	// Initial values
-	// 1: 120
-	// 2: 96
-	// 3: 72
-	// 4: 48
-	//
-	// Note: Stealth values are modified based on movable piece
-	// count (see below)
+		// Prior to version 9.9, opponent stealth remained constant
+		// during the game; it did not depend on remaining ranks
+		// at large like player stealth does.  This lead to the AI
+		// attacking the opponent suspected One with an invincible
+		// piece such as a Four or Five, when it would have been much
+		// better for the invincible piece to attack other unknowns
+		// rather than confirm the identity of the One.  blufferRisk
+		// helps to reduce this problem, but it does not eliminate it.
+		// So opponent stealth needs to reduced like player stealth
+		// as the game wears on and it becomes obvious which pieces
+		// are strong and which are weak.
+		//
+		// Initial values
+		// 1: 120
+		// 2: 96
+		// 3: 72
+		// 4: 48
+		//
+		// Note: Stealth values are modified based on movable piece
+		// count (see below)
 
 				v = (int)Math.sqrt(v);
 				v *= blufferRisk * 3 / 2;
@@ -908,6 +906,7 @@ public class TestingBoard extends Board
 		// the number of unknown bombs remaining.
 		// Because if the player discovers all the bombs,
 		// then all the remaining pieces are at risk.
+
 		valueStealth[c][Rank.BOMB.ordinal()-1] =
 			(6 - unknownRankAtLarge(c, Rank.BOMB))*5;
 
@@ -1062,7 +1061,8 @@ public class TestingBoard extends Board
 
 			Rank oppRank = Rank.SIX;
 			Rank thisRank = Rank.UNKNOWN;
-			Rank duplicateRank = Rank.NIL;
+			Piece knownPiece = null;
+			Piece duplicateKnownPiece = null;
 			for (int i : attacklanes[lane])
 			for (int y = 0; y < 4; y++) {
 				Piece p = getPiece(i - y*11);
@@ -1072,12 +1072,16 @@ public class TestingBoard extends Board
 					if (p.getRank().ordinal() < oppRank.ordinal())
 						oppRank = p.getRank();
 				} else {
+					if (p.isKnown()
+						&& !isInvincible(p)) {
+						if (knownPiece == null)
+							knownPiece = p;
+						else
+							duplicateKnownPiece = p;
+					}
 					if (p.getRank().ordinal() < thisRank.ordinal()
 						&& !isStealthy(p))
 						thisRank = p.getRank();
-					else if (p.getRank() == thisRank
-						&& p.isKnown())
-						duplicateRank = p.getRank();
 				}
 			} // y
 
@@ -1135,13 +1139,13 @@ public class TestingBoard extends Board
 				setFleePlan(c, planB[c][r-1], fleetmp, DEST_PRIORITY_FLEE);
 			}
 
-		// If there are two or more of the same rank in a lane,
-		// both should flee until one of them is out of the lane.
-		// This reduces the risk of forks.
+		// If there are two or more non-invincible known ranks in a lane,
+		// at least one of them should flee until it is out of the lane.
+		// This reduces the risk of forks of known pieces.
 
-			if (duplicateRank != Rank.NIL) {
-				setFleePlan(c, planA[c][duplicateRank.ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
-				setFleePlan(c, planB[c][duplicateRank.ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
+			if (duplicateKnownPiece != null) {
+				setFleePlan(c, planA[c][duplicateKnownPiece.getRank().ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
+				setFleePlan(c, planB[c][duplicateKnownPiece.getRank().ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
 			}
 
 		} // lane
@@ -2352,8 +2356,10 @@ public class TestingBoard extends Board
                 // Flag value > aiBombValue > Eight value.)
 
                 int opponentEightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
+		int bombedStructuresRemaining = maybe_count[c] - open_count[c];
 
-                if (maybe_count[c] == 0 || maybe_count[c] + 1 < opponentEightsAtLarge)
+                if (bombedStructuresRemaining == 0
+			|| bombedStructuresRemaining + 1 < opponentEightsAtLarge)
 
 		// at least 1 opponent color eight is expendable
 		// (The AI keeps one more Eight around than
@@ -2361,7 +2367,7 @@ public class TestingBoard extends Board
 
                         setExpendableEights(1-c);
 
-                else if (opponentEightsAtLarge <= Math.min(maybe_count[c],2) + 1) {
+                else if (opponentEightsAtLarge <= Math.min(bombedStructuresRemaining, 2) + 1) {
 
 		// Opponent Eights become more valuable as their number
 		// falls below the number of player possible structures.
@@ -3192,14 +3198,30 @@ public class TestingBoard extends Board
 
 		else {
 
-		// Note: flee() is replaced by attacklanes() flee,
-		// and the goal is to keep the higher
-		// ranked piece off of the flee squares.
+		// The goal of fleeing in attacklanes()
+		// is to keep the higher ranked piece out of the lane.
+		// Until version 10.0, fleeing was awarded more points
+		// than chasing.  But the proximity pruning mechanism
+		// then causes chases to be thwarted in the lane.
+		// For example:
+		// -- -- --
+		// R2 -- --
+		// -- -- xx
+		// -- B3 xx
+		// -- -- --
+		// If R2 moves down, B3 may be close enough to R2 to allow
+		// B3 to be considered, and if fleeing is awarded more than
+		// chasing, R2 will not chase.  Even worse, R2 may move
+		// away, because perhaps B3 would no longer be close enough for the
+		// higher value B3 fleeing move to be considered.
+		//
+		// TBD: this effect likely occurs with other priority differences
+		// as well.
 
 			if (priority == DEST_PRIORITY_FLEE)
-				return priority;
+				return DEST_PRIORITY_CHASE;
 			else if (plan[1][to] == DEST_PRIORITY_FLEE)
-				return -priority;
+				return -DEST_PRIORITY_CHASE;
 		}
 
 		return 0;
@@ -3576,6 +3598,70 @@ public class TestingBoard extends Board
 
 				if (tp.getColor() == Settings.topColor) {
 
+		// If the opponent piece is unknown,
+		// the AI mave have guessed wrong,
+		// and the exchange could be a loss.  This case
+		// should only happen at depth, because if
+		// the opponent actually allows its piece to contact
+		// the known AI piece, the opponent would gain
+		// a lower chase rank and thus the exchange would not be EVEN.
+
+		// Yet the AI piece should try to avoid this situation,
+		// because of the possibility that it has guessed wrong,
+		// but it cannot overreact and lose material to an idle threat.
+		// For example:
+		// xx -- R3 xx
+		// xx -- R4 xx
+		// -- -- B? --
+		// Unknown Blue approaches known R3.  This makes Blue
+		// a suspected rank of 3.  Red Four should move,
+		// because Blue approaching known Red Three 
+		// is barely negative (this EVEN case) as it is not a foregone
+		// conclusion; Blue might not approach Red Three,
+		// although that would be a very good move, because
+		// then Red Three would have to move away (because
+		// Blue is now a suspected Two), leaving Blue to
+		// capture Red Four.
+
+					if (!fp.isKnown()) {
+						vm -= valueStealth[Settings.bottomColor][tprank.ordinal()-1];
+
+		// While the AI always gains the stealth value of the
+		// unknown opponent piece, it may have guessed wrong.
+		//
+		// Note: the bluffing factor (br) changes the outcome
+		// because it affects both stealth and riskOfLoss.
+		// With lower bluffing factors (i.e. opponent not bluffing),
+		// the result becomes more positive, because although the AI
+		// has less knowledge to gain from an even exchange,
+		// it has less chance of complete loss of its piece.
+		//
+		// Capture, Opp. Stealth (br=4), Risk Of Loss Factor, Result
+		// 4x4?, 12, 16, -4 
+		// 3x3?, 28, 33, -5
+		// 2x2?, 32, 66, -34
+		//
+		// Note: riskOfLoss can be zero if the suspected rank fled.
+
+						vm += riskOfLoss(tp, fp)/6;
+					} // fp is unknown
+
+		// If the defender is known, and either the attacker is known
+		// or the AI is the attacker (AI knows its own pieces)
+		// then, this is a known even exchange based on actual values.
+
+		// Note that although the exchange is even, the value
+		// may not be.  If the AI is winning, its ranks are
+		// worth less than opponent ranks, encouraging it to
+		// make an even exchange.
+
+					// fp is known
+
+					else if (tp.isKnown())
+						vm += actualValue(tp) - fpvalue;
+
+					else { // tp is unknown
+
 		// If the attacker is invincible, then the attacker knows
 		// that it cannot lose the exchange, but because this
 		// exchange is even, tprank must also be the same rank,
@@ -3600,26 +3686,10 @@ public class TestingBoard extends Board
 		// loss of the AI piece, if the opponent rank is
 		// lower than suspected.
 
-					if (tp.hasMoved()
-						&& isInvincible(fp)) {
-						if  (isWinning(Settings.topColor) > 0
-							&& !tp.isKnown()
+						if (isInvincible(fp)
+							&& isWinning(Settings.topColor) > 0
 							&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
 							vm -= 10;
-						else
-							vm += stealthValue(tp) - stealthValue(fp);
-		// If the defender is known, and either the attacker is known
-		// or the AI is the attacker (AI knows its own pieces)
-		// then, this is a known even exchange based on actual values.
-
-		// Note that although the exchange is even, the value
-		// may not be.  If the AI is winning, its ranks are
-		// worth less than opponent ranks, encouraging it to
-		// make an even exchange.
-
-					} else if (tp.isKnown()
-						&& fp.isKnown())
-						vm += actualValue(tp) - fpvalue;
 
 		// If the defender is an unknown AI piece,
                 // then an attacker (not an invincible attacker, see above)
@@ -3641,56 +3711,8 @@ public class TestingBoard extends Board
 		// piece survives, and thus the transposition table
 		// returns a correct result).
 
-					else if (!tp.isKnown())
-						vm += actualValue(tp) - fpvalue;
-
-		// If the AI piece is known and the opponent is unknown,
-		// it may mean that the AI has guessed wrong,
-		// and the exchange could be a loss.  This case
-		// should only happen at depth, because if
-		// the opponent actually allows its piece to contact
-		// the known AI piece, the opponent would gain
-		// a lower chase rank and thus the exchange would not be EVEN.
-
-		// Yet the AI piece should try to avoid this situation,
-		// because of the possibility that it has guessed wrong,
-		// but it cannot overreact and lose material to an idle threat.
-		// For example:
-		// xx -- R3 xx
-		// xx -- R4 xx
-		// -- -- B? --
-		// Unknown Blue approaches known R3.  This makes Blue
-		// a suspected rank of 3.  Red Four should move,
-		// because Blue approaching known Red Three 
-		// is barely negative (this EVEN case) as it is not a foregone
-		// conclusion; Blue might not approach Red Three,
-		// although that would be a very good move, because
-		// then Red Three would have to move away (because
-		// Blue is now a suspected Two), leaving Blue to
-		// capture Red Four.
-
-					else {	// tp is known AI piece
-						assert !fp.isKnown() : "fp is known?";
-						vm -= valueStealth[Settings.bottomColor][tprank.ordinal()-1];
-
-		// While the AI always gains the stealth value of the
-		// unknown opponent piece, it may have guessed wrong.
-		//
-		// Note: the bluffing factor (br) changes the outcome
-		// because it affects both stealth and riskOfLoss.
-		// With lower bluffing factors (i.e. opponent not bluffing),
-		// the result becomes more positive, because although the AI
-		// has less knowledge to gain from an even exchange,
-		// it has less chance of complete loss of its piece.
-		//
-		// Capture, Opp. Stealth (br=4), Risk Of Loss Factor, Result
-		// 4x4?, 12, 16, -4 
-		// 3x3?, 28, 33, -5
-		// 2x2?, 32, 66, -34
-		//
-		// Note: riskOfLoss can be zero if the suspected rank fled.
-
-						vm += riskOfLoss(tp, fp)/6;
+						else
+							vm += actualValue(tp) - fpvalue;
 					}
 
 		// Unknown AI pieces also have bluffing value
