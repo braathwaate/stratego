@@ -92,8 +92,9 @@ public enum Rank
 			else
 				return LOSES;
 		}
-		if (this == Rank.SPY & defend == Rank.ONE)
-				return WINS;
+		if (this == Rank.SPY
+			&& defend == Rank.ONE)
+			return WINS;
 		
 		if (ordinal() < defend.ordinal())
 			return WINS;

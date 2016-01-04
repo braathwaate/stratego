@@ -57,6 +57,7 @@ public class AI implements Runnable
 	static final int DETAIL = 2;
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private ArrayList<Integer>[] rootMoveList = null;
+	private Piece lastMovedPiece;
 	// static move ordering
 	static final int ATTACK = 0;
 	static final int FLEE = 1;
@@ -71,19 +72,25 @@ public class AI implements Runnable
 	int moveRoot = 0;
 	int completedDepth = 0;
 	int deepSearch = 0;
-	private Piece lastMovedPiece;
 
-	enum MoveType {
+	enum MoveResult {
 		TWO_SQUARES,
 		POSS_TWO_SQUARES,
 		CHASER,
 		REPEATED,
-		KM,	// killer move
-		TE,	// transposition table entry
 		IMMOBILE,
 		NEG,	// pointless attack (negative value)
 		OK
 	}
+
+	enum MoveType {
+		KM,	// killer move
+		TE,	// transposition table entry
+		NU,	// null move
+		SGE,	// singular extension
+		PR,	// pruned
+		GE	// generated move
+	};
 
 	static private long twoSquaresHash;
 	static {
@@ -506,7 +513,7 @@ public class AI implements Runnable
 		if (n > 3
 			&& fprank == Rank.UNKNOWN
 			&& fp != lastMovedPiece
-			&& !b.grid.isCloseToEnemy(b.bturn, i, 2))
+			&& !b.grid.isCloseToEnemy(b.bturn, i, 1))
 			return true;
 
 		getAllMoves(moveList, i);
@@ -773,7 +780,6 @@ public class AI implements Runnable
 		deepSearch = 0;
 
 		// chase variables
-		Piece lastMovedPiece = null;
 		int lastMoveTo = 0;
 		Move lastMove = b.getLastMove(1);
 		if (lastMove != null) {
@@ -837,12 +843,12 @@ public class AI implements Runnable
 			getMovablePieces(-n, bg);
 			getMoves(bg, moveList, -n);
 			int bestPrunedMoveValue = -9999;
-			int bestPrunedMove = 0;
+			int bestPrunedMove = -1;
 			for (int mo = 0; mo <= FLEE; mo++)
 			for (int move : moveList[mo]) {
-				logMove(2, move, 0);
-				MoveType mt = makeMove(n, move);
-				if (mt == MoveType.OK) {
+				logMove(2, move, 0, MoveType.PR);
+				MoveResult mt = makeMove(n, move);
+				if (mt == MoveResult.OK) {
 
 		// Note: negamax(0) isn't deep enough because scout far moves
 		// can cause a move outside the active area to be very bad.
@@ -863,11 +869,13 @@ public class AI implements Runnable
 				} else
 					log(DETAIL, " " + mt);
 			}
-			addMove(rootMoveList[FLEE], bestPrunedMove);
-			log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
-			log(PV, "\n" + logMove(b, n, bestPrunedMove));
-			log(DETAIL, "\n<< pick best pruned move\n");
+			if (bestPrunedMove != -1) {
+				addMove(rootMoveList[FLEE], bestPrunedMove);
+				log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
+				log(PV, "\n" + logMove(b, n, bestPrunedMove));
+				log(DETAIL, "\n<< pick best pruned move\n");
 			}
+			} // movelist
 
 		boolean hasMove = false;
 		for (int mo = 0; mo <= FLEE; mo++)
@@ -952,8 +960,8 @@ public class AI implements Runnable
 
 			log(">>> singular extension");
 
-			logMove(n+2, bestMovePly, b.getValue());
-			MoveType mt = makeMove(n, bestMovePly);
+			logMove(n+2, bestMovePly, b.getValue(), MoveType.SGE);
+			MoveResult mt = makeMove(n, bestMovePly);
 			vm = -negamax(n+1, -9999, 9999, killerMove, returnMove, depthValueReduction(1)); 
 			b.undo();
 			log(DETAIL, " " + negQS(vm));
@@ -1240,7 +1248,7 @@ public class AI implements Runnable
 				int vm = -qs(n-1, -beta, -alpha, dvr + depthValueReduction(b.depth+1));
 
 				b.undo();
-				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveType.OK) + " " + b.getValue() + " " + negQS(vm));
+				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveResult.OK) + " " + b.getValue() + " " + negQS(vm));
 
 		// Save worthwhile attack (vm > best)
 		// (if vm < best, the player will play
@@ -1564,15 +1572,15 @@ public class AI implements Runnable
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			else {
 
-			logMove(n, ttMove, b.getValue());
-			MoveType mt = makeMove(n, ttMove);
-			if (mt == MoveType.OK) {
+			logMove(n, ttMove, b.getValue(), MoveType.TE);
+			MoveResult mt = makeMove(n, ttMove);
+			if (mt == MoveResult.OK) {
 
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove, dvr + depthValueReduction(b.depth+1));
 
 				b.undo();
 
-				log(DETAIL, " " + negQS(vm) + " " + MoveType.TE);
+				log(DETAIL, " " + negQS(vm));
 
 				alpha = Math.max(alpha, vm);
 
@@ -1602,12 +1610,12 @@ public class AI implements Runnable
 			&& isValidMove(km) 
 			&& (Grid.isAdjacent(km)
 				|| isValidScoutMove(km))) {
-			logMove(n, km, b.getValue());
-			MoveType mt = makeMove(n, km);
-			if (mt == MoveType.OK) {
+			logMove(n, km, b.getValue(), MoveType.KM);
+			MoveResult mt = makeMove(n, km);
+			if (mt == MoveResult.OK) {
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove, dvr + depthValueReduction(b.depth+1));
 				b.undo();
-				log(DETAIL, " " + negQS(vm) + " " + MoveType.KM);
+				log(DETAIL, " " + negQS(vm));
 				
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1650,15 +1658,15 @@ public class AI implements Runnable
 
 			if (isPruned && ttMove != 0) {
 
-			logMove(n, 0, b.getValue());
-			MoveType mt = makeMove(n, 0);
-			if (mt == MoveType.OK) {
+			logMove(n, 0, b.getValue(), MoveType.NU);
+			MoveResult mt = makeMove(n, 0);
+			if (mt == MoveResult.OK) {
 
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove, dvr + depthValueReduction(b.depth+1));
 
 				b.undo();
 
-				log(DETAIL, " " + negQS(vm) + " " + MoveType.OK);
+				log(DETAIL, " " + negQS(vm));
 
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1673,7 +1681,8 @@ public class AI implements Runnable
 				}
 			} else
 				log(DETAIL, " " + mt);
-			}
+
+			} // isPruned
 
 			moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 
@@ -1708,9 +1717,9 @@ public class AI implements Runnable
 					|| (max != 0 && max == km))
 					continue;
 
-				logMove(n, max, b.getValue());
-				MoveType mt = makeMove(n, max);
-				if (!(mt == MoveType.OK)) {
+				logMove(n, max, b.getValue(), MoveType.GE);
+				MoveResult mt = makeMove(n, max);
+				if (!(mt == MoveResult.OK)) {
 					log(DETAIL, " " + mt);
 					continue;
 				}
@@ -1758,7 +1767,7 @@ public class AI implements Runnable
 		return bestValue;
 	}
 
-	private MoveType makeMove(int n, int tryMove)
+	private MoveResult makeMove(int n, int tryMove)
 	{
 		// NOTE: FORWARD TREE PRUNING (minor)
 		// isRepeatedPosition() discards repetitive moves.
@@ -1777,7 +1786,7 @@ public class AI implements Runnable
 		// the outcome is different if the player is different.
 		// So set a new hash and reset it after the move.
 			b.pushNullMove();
-			return MoveType.OK;
+			return MoveResult.OK;
 		}
 
 		// Immobile Pieces
@@ -1789,13 +1798,13 @@ public class AI implements Runnable
 			Piece p = b.getPiece(Move.unpackFrom(tryMove));
 			if (p.getRank() == Rank.BOMB
 				|| p.getRank() == Rank.FLAG) {
-				return MoveType.IMMOBILE;
+				return MoveResult.IMMOBILE;
 			}
 		}
 
 
 		if (b.isTwoSquares(tryMove))
-			return MoveType.TWO_SQUARES;
+			return MoveResult.TWO_SQUARES;
 
 		int enemies = b.grid.enemyCount(b.getPiece(Move.unpackFrom(tryMove)));
 		int bvalue = b.getValue();
@@ -1813,7 +1822,7 @@ public class AI implements Runnable
 	// aimlessly.
 
 			if (b.isPossibleTwoSquares(tryMove))
-				return MoveType.POSS_TWO_SQUARES;
+				return MoveResult.POSS_TWO_SQUARES;
 
 	// Piece is being chased, so repetitive moves OK
 
@@ -1836,7 +1845,7 @@ public class AI implements Runnable
 					b.move(tryMove);
 					if (b.isRepeatedPosition()) {
 						b.undo();
-						return MoveType.REPEATED;
+						return MoveResult.REPEATED;
 					}
 				}
 			} else
@@ -1854,12 +1863,12 @@ public class AI implements Runnable
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));
 				if (tp == m.tp) {	// lost the attack
 					b.undo();
-					return MoveType.NEG;
+					return MoveResult.NEG;
 				}
 			}
 		}
 
-		return MoveType.OK;
+		return MoveResult.OK;
 	}
 
 	private long getHash()
@@ -2243,10 +2252,10 @@ public class AI implements Runnable
 	return s;
 	}
 
-	void logMove(int n, int move, int valueB)
+	void logMove(int n, int move, int valueB, MoveType mt)
 	{
 		if (Settings.debugLevel >= DETAIL)
-			log.print( "\n" + n + ":" + logMove(b, n, move) + " " + valueB);
+			log.print( "\n" + n + ":" + logMove(b, n, move) + " " + valueB + " " + mt);
 	}
 
 	public void logMove(Move m)

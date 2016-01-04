@@ -3371,7 +3371,8 @@ public class TestingBoard extends Board
 		int to = Move.unpackTo(m);
 		Piece fp = getPiece(from);
 		Piece tp = getPiece(to);
-		boolean unknownScoutFarMove = !adjacent && !fp.isKnown();
+		boolean scoutFarMove = !adjacent;
+		boolean unknownScoutFarMove = scoutFarMove && !fp.isKnown();
 		moveHistory(fp, tp, m);
 
 		if (depth == 0) {
@@ -3479,7 +3480,7 @@ public class TestingBoard extends Board
 					&& !m2.tp.isKnown()
 					&& !fp.isKnown()
 					&& hasSpy(Settings.topColor))
-					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp, fpcolor);
+					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp);
 			}
 
 		// Because each move towards a chase piece is rewarded,
@@ -3498,7 +3499,7 @@ public class TestingBoard extends Board
 
 		// Scouts go too fast, so limit the points to one
 
-			if (unknownScoutFarMove)
+			if (scoutFarMove)
 				v = Math.min(v, 1);
 
 			vm += v;
@@ -3720,7 +3721,7 @@ public class TestingBoard extends Board
 					if (depth != 0
 						&& !maybeIsInvincible(fp)
 						&& isEffectiveBluff(tp, fp, m)) {
-						vm = Math.min(vm, valueBluff(fp, tp, fpcolor));
+						vm = Math.min(vm, valueBluff(fp, tp));
 						morph(tp, fprank);
 						setPiece(tp, to);
 					}
@@ -3880,7 +3881,7 @@ public class TestingBoard extends Board
 							&& hasSpy(Settings.topColor)))
 					&& !unknownScoutFarMove
 					&& isEffectiveBluff(fp, tp, m)) {
-						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp, fpcolor));
+						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp, tprank);
 						setPiece(fp, to);
 				}
@@ -3946,7 +3947,7 @@ public class TestingBoard extends Board
 								&& hasSpy(fpcolor)))
 						&& !unknownScoutFarMove
 						&& isEffectiveBluff(fp, tp, m)) {
-						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp, fpcolor));
+						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp, tprank);
 						setPiece(fp, to);
 					} else {
@@ -4280,7 +4281,7 @@ public class TestingBoard extends Board
 						if (depth != 0
 							&& !maybeIsInvincible(fp)
 							&& isEffectiveBluff(tp, fp, m)) {
-							vm = Math.min(vm, valueBluff(fp, tp, fpcolor));
+							vm = Math.min(vm, valueBluff(fp, tp));
 							morph(tp, fprank);
 							setPiece(tp, to);
 							break;
@@ -4686,7 +4687,7 @@ public class TestingBoard extends Board
 		// be discouraged from approaching an unknown opponent piece.
 
 
-					vm = Math.max(vm, valueBluff(fp, tp, fpcolor));
+					vm = Math.max(vm, valueBluff(fp, tp));
 
 		// If the AI appears to make an obviously bad move,
 		// often it is because it did not guess correctly
@@ -5176,7 +5177,7 @@ public class TestingBoard extends Board
 		// situation.
 
 			if (tp.isSuspectedRank())
-				return v - valueBluff(tp, fp, tp.getIndex());
+				return v - valueBluff(tp, fp);
 
 		// In other cases the AI only receives 2/3 of the
 		// value of the bluffing piece.  This discourages the
@@ -5231,7 +5232,7 @@ public class TestingBoard extends Board
 		return 0;
 	}
 
-	protected int valueBluff(Piece oppPiece, Piece aiPiece, int fpcolor)
+	protected int valueBluff(Piece oppPiece, Piece aiPiece)
 	{
 		assert aiPiece.getColor() == Settings.topColor : "valueBluff only for AI";
 
@@ -5292,11 +5293,6 @@ public class TestingBoard extends Board
 		//
 		// TBD: And Blue Two was trapped by unknown two expendable pieces,
 		// an approach by either expendable piece would also be counterproductive.
-
-		if (fpcolor == Settings.bottomColor)
-			return -valueBluff;
-
-		// LOSES
 
 		// Bluffing with the Spy against the opponent One
 		// is encouraged.  Because the One is invincible,

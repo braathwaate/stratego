@@ -104,8 +104,8 @@ public class BitGrid
 	// For example,
 	// in:		out:
 	// 1 1 0 0	1 1 1 0
-	// 0 0 1 0	1 1 0 0
-	// 0 0 0 0	0 0 0 0
+	// 0 0 1 0	1 1 1 1
+	// 0 0 0 0	0 0 1 0
 
 	static public void grow(long low, long high, BitGrid out)
 	{
