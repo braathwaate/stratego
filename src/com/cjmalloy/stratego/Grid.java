@@ -224,6 +224,11 @@ public class Grid
 		return pieceBitGrid[1-p.getColor()].andBitCount(neighbor[0][i]);
 	}
 
+	public int movablePieceCount(int color, int i, int n)
+	{
+		return movablePieceBitGrid[color].andBitCount(neighbor[n][i]);
+	}
+
 	public void getMovableNeighbors(int turn, BitGrid out)
 	{
 		pieceBitGrid[turn].getNeighbors(movablePieceBitGrid[1-turn], out);

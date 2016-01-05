@@ -58,9 +58,18 @@ public class AI implements Runnable
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private ArrayList<Integer>[] rootMoveList = null;
 	private Piece lastMovedPiece;
-	// static move ordering
-	static final int ATTACK = 0;
-	static final int FLEE = 1;
+
+	// Static move ordering takes precedence over dynamic
+	// move ordering.  All active moves (pieces adjacent to
+	// opponent pieces) are considered before inactive
+	// moves and scout far moves are considered last.
+	// The idea is that attacks and flees will cause
+	// alpha-beta cutoffs.  These are almost always among the
+	// best moves because non-forced losing attacks are
+	// discarded.  All moves are dynamically ordered as well.
+
+	static final int ACTIVE = 0;
+	static final int INACTIVE = 1;
 	static final int FAR = 2;
 
 	private static int[] dir = { -11, -1,  1, 11 };
@@ -409,18 +418,14 @@ public class AI implements Runnable
 		}
 	}
 
-	public void getAllMoves(ArrayList<Integer>[] moveList, int i)
+	public void getAllMoves(ArrayList<Integer> moveList, int i)
 	{
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
-
-			if (tp == null)
-				addMove(moveList[FLEE], i, t);
-			else if (tp.getColor() == 1 - b.bturn)
-				addMove(moveList[ATTACK], i, t);
-
-					
+			if (tp == null
+				|| tp.getColor() == 1 - b.bturn)
+				addMove(moveList, i, t);
 		} // d
 	}
 
@@ -472,7 +477,7 @@ public class AI implements Runnable
                 // attack.
 
 			if (b.grid.hasAttack(b.bturn, i))
-				getAttackMoves(moveList[ATTACK], i);
+				getAttackMoves(moveList[ACTIVE], i);
 			return false;
 		}
 
@@ -516,7 +521,11 @@ public class AI implements Runnable
 			&& !b.grid.isCloseToEnemy(b.bturn, i, 1))
 			return true;
 
-		getAllMoves(moveList, i);
+		if (b.grid.hasAttack(b.bturn, i))
+			getAllMoves(moveList[ACTIVE], i);
+		else
+			getAllMoves(moveList[INACTIVE], i);
+
 		return false;
 	}
 
@@ -844,7 +853,7 @@ public class AI implements Runnable
 			getMoves(bg, moveList, -n);
 			int bestPrunedMoveValue = -9999;
 			int bestPrunedMove = -1;
-			for (int mo = 0; mo <= FLEE; mo++)
+			for (int mo = 0; mo <= INACTIVE; mo++)
 			for (int move : moveList[mo]) {
 				logMove(2, move, 0, MoveType.PR);
 				MoveResult mt = makeMove(n, move);
@@ -870,7 +879,7 @@ public class AI implements Runnable
 					log(DETAIL, " " + mt);
 			}
 			if (bestPrunedMove != -1) {
-				addMove(rootMoveList[FLEE], bestPrunedMove);
+				addMove(rootMoveList[INACTIVE], bestPrunedMove);
 				log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
 				log(PV, "\n" + logMove(b, n, bestPrunedMove));
 				log(DETAIL, "\n<< pick best pruned move\n");
@@ -878,7 +887,7 @@ public class AI implements Runnable
 			} // movelist
 
 		boolean hasMove = false;
-		for (int mo = 0; mo <= FLEE; mo++)
+		for (int mo = 0; mo <= INACTIVE; mo++)
 			if (rootMoveList[mo].size() != 0) {
 				hasMove = true;
 				break;
@@ -1691,7 +1700,7 @@ public class AI implements Runnable
 			if (getMoves(bg, moveList, n)
 				&& !isPruned
 				&& ttMove != 0)
-				addMove(moveList[FLEE], 0);
+				addMove(moveList[INACTIVE], 0);
 		}
 
 		outerloop:
@@ -2058,6 +2067,7 @@ public class AI implements Runnable
 				continue;
 
 			int attackers = 0;
+			int maxsteps = 0;
 
 			BitGrid tbg = new BitGrid();
 			b.grid.getMovablePieces(Settings.bottomColor, tbg);
@@ -2144,32 +2154,43 @@ public class AI implements Runnable
 				if (vm > 0)
 					continue;
 
+				log("Deep search (" + steps + "):" + tp.getRank() + " chasing " + fp.getRank());
+
 				attackers++;
 				if (steps > MAX_STEPS)
 					continue;
 
-				log("Deep search (" + steps + "):" + tp.getRank() + " chasing " + fp.getRank());
 
-				if (deepSearch == 0
-					|| steps > deepSearch) {
-					deepSearch = 2*steps;
+				if (steps > maxsteps)
+					maxsteps = steps;
 
-				}
 			} //tp data
 			} //tp bi
 
-		// If there are two attackers nearby, then use broad search
-		// to try to avoid becoming trapped by the two attackers.
+		// If there are two attackers nearby, then broad search
+		// is often preferable because of potential
+		// entrapment by the two attackers.
 
-			if (attackers >= 2) {
-				deepSearch = 0;
-				return;
-			}
+			if (attackers >= 2)
+				continue;
+
+		// If multiple AI pieces are under attack,
+		// use the narrowest search.  (Better: use
+		// the search level of the most valuable
+		// endangered piece).
+
+			if (maxsteps != 0
+				&& (deepSearch == 0
+					|| maxsteps < deepSearch) )
+				deepSearch = maxsteps;
+
 		} // bp data
 		} // fp bi
 
-		if (deepSearch != 0)
+		if (deepSearch != 0) {
+			deepSearch *= 2;
 			log("Deep search (" + deepSearch + ") in effect");
+		}
 	}
 
 	String logPiece(Piece p)

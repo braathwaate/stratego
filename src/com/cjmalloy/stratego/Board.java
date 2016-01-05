@@ -2291,13 +2291,28 @@ public class Board
 		// to tell which structure could hold the flag, because the
 		// sentry could defend any number of structures.  So unless
 		// the attacker is close, the flag structure is difficult
-		// to discern.  So the AI looks for close-by
-		// guards(G) in the following pattern:
-		// |G G		  G G G
-		// |G G		  G G G
-		// |B G	G	G G B G G
-		// |F B		  B F B
-		// |xxx 	xxxxxxxxx
+		// to discern.
+		//
+		// Note that attackers are also counted.
+		// This is because once the AI is able to penetrate,
+		// perhaps with superior pieces, the sentries will
+		// be forced away.  For example,
+		// | R8 R1 --
+		// | BB B3 BB
+		// | BF BB B?
+		// |xxxxxxxxx
+		//
+		// After R1xB3, the sentry is gone.  This does not
+		// mean that the flag is elsewhere.  So the AI
+		// must continue with R8xBB and R8xBF.
+		//
+		// Sentries and attackers are counted within 1 or 2 steps
+		// of the flag:
+		// | S 
+		// | A S
+		// | B A S
+		// | F B A S
+		// ---------
 		//
 		// Once an AI attacker is in reach of multiple structures,
 		// the AI needs to focus on the one that is actively defended.
@@ -2313,39 +2328,6 @@ public class Board
 		// the flag structure is still guarded, even if it there are no
 		// sentries adjacent to the flag structure.
 
-			int guards = 0;
-			final int nearDir[] = { 32, 33, 34, 23, 22, 21, 13, 12, 11, 10, 9 };
-			for (int d : nearDir) {
-				int k = maybe[start][0];
-				if (k < 56)
-					k += d;
-				else
-					k -= d;
-					
-				if (k < 0 || k > 120 || !Grid.isValid(k))
-					continue;
-				Piece p = getPiece(k);
-				if (p == null)
-					continue;
-
-		// Note that no check is made for the color of piece
-		// surrounding the flag structure.
-		// This is because once the AI is able to penetrate,
-		// perhaps with superior pieces, the sentries will
-		// be forced away.  For example,
-		// | R8 R1 --
-		// | BB B3 BB
-		// | BF BB B?
-		// |xxxxxxxxx
-		//
-		// After R1xB3, the sentry is gone.  This does not
-		// mean that the flag is elsewhere.  So the AI
-		// must continue with R8xBB and R8xBF.
-
-				else if (p.getRank() != Rank.BOMB)
-					guards++;
-			}
-
 		// Note: If there is a corner bomb structure (2 bombs) and
 		// a 3 bomb structure, the 3 bomb structure normally
 		// contains the flag because often the corner bomb
@@ -2355,6 +2337,10 @@ public class Board
 		// the corner bomb structure probably has the flag.
 		// So the AI looks for a combination of small size and
 		// large number of defenders.
+
+			Piece flag = getPiece(maybe[start][0]);
+			int guards = grid.movablePieceCount(flag.getColor(), maybe[start][0], 2)
+				+ grid.movablePieceCount(1-flag.getColor(), maybe[start][0], 1);
 
 			if (size == 0
 				|| guards > bestGuessGuards

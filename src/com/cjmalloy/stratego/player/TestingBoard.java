@@ -41,19 +41,22 @@ public class TestingBoard extends Board
 	private static final int DEST_PRIORITY_DEFEND_FLAG_BOMBS = 6;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 5;
 
-	// Note: DEST_PRIORITY_FLEE must have unique priority
-	// because it is a special case in planv
-
-	private static final int DEST_PRIORITY_FLEE = 4;
 
 	// Note: DEST_PRIORITY_ATTACK_FLAG should be higher than
 	// DEST_PRIORITY_CHASE, because an Eight could be
 	// an expendable piece and can chase other opponent pieces,
 	// but it is better for the eight to attack the flag structure.
 
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 3;
-	private static final int DEST_PRIORITY_CHASE_ATTACK = 3;
-	private static final int DEST_PRIORITY_CHASE_DEFEND = 2;
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 4;
+	private static final int DEST_PRIORITY_CHASE_ATTACK = 4;
+	private static final int DEST_PRIORITY_CHASE_DEFEND = 3;
+
+	// Note: DEST_PRIORITY_LANE must have unique priority
+	// because it is a special case in planv.  It is limited to
+	// the lanes and has priority over CHASE, but not over CHASE_ATTACK
+	// or CHASE_DEFEND which are used by invincible pieces.
+
+	private static final int DEST_PRIORITY_LANE = 2;
 	private static final int DEST_PRIORITY_CHASE = 1;
 	private static final int DEST_PRIORITY_LOW = 1;
 
@@ -1127,16 +1130,16 @@ public class TestingBoard extends Board
 					for (int r = 1; r <= 10; r++) {
 						if (r == 8)
 							continue;
-						setFleePlan(c, planA[c][r-1], fleetmp, DEST_PRIORITY_FLEE);
-						setFleePlan(c, planB[c][r-1], fleetmp, DEST_PRIORITY_FLEE);
+						genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
+						genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
 				}
 			}
 
 		// Higher ranked pieces flee the lane
 
 			for (int r = oppRank.ordinal()+1; r <= 5; r++) {
-				setFleePlan(c, planA[c][r-1], fleetmp, DEST_PRIORITY_FLEE);
-				setFleePlan(c, planB[c][r-1], fleetmp, DEST_PRIORITY_FLEE);
+				genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
+				genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
 			}
 
 		// If there are two or more non-invincible known ranks in a lane,
@@ -1144,8 +1147,8 @@ public class TestingBoard extends Board
 		// This reduces the risk of forks of known pieces.
 
 			if (duplicateKnownPiece != null) {
-				setFleePlan(c, planA[c][duplicateKnownPiece.getRank().ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
-				setFleePlan(c, planB[c][duplicateKnownPiece.getRank().ordinal()-1], fleetmp, DEST_PRIORITY_FLEE);
+				genPlanA(fleetmp, c, duplicateKnownPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
+				genPlanB(fleetmp, c, duplicateKnownPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
 			}
 
 		} // lane
@@ -2054,6 +2057,20 @@ public class TestingBoard extends Board
 		// So in version 9.5, the pre-9.4 comparison was
 		// restored, but cropped the reward to only
 		// the adjacent squares.
+		//
+		// TBD: when the flag is no danger, and then the
+		// defender wanders away, it can cause loss of the
+		// game, or back-and-forth moves.  For example,
+		// -- -- RF
+		// -- -- --
+		// -- -- --
+		// -- -- --
+		// -- -- xx
+		// -- R7 xx
+		// B? -- --
+		// The flag is in no danger, so R7 moves down and
+		// unknown Blue moves up.  Now the flag is in danger,
+		// so R7 moves up, and unknown Blue moves down.
 
 		if (pDefender == null  	// attacker not stopable
 			|| (stepsTarget != 0 && stepsDefender < stepsTarget)
@@ -2835,37 +2852,6 @@ public class TestingBoard extends Board
 			setPlan(plan, desttmp, priority);
 	}
 
-	private void setFleePlan(int color, int[][] plan, int[] tmp, int priority)
-	{
-		assert tmp[0] == DEST_VALUE_NIL : "call genDestTmp before setPlan";
-		for (int y = 3; y < 10; y++)
-		for (int x = 0; x < 10; x++) {
-			int j = Grid.getIndex(x, Grid.yside(color, y));
-			if (plan[1][j] > priority) {
-				if (plan[0][j] == DEST_VALUE_NIL) {
-					plan[0][j] = tmp[j];
-					plan[1][j] = priority;
-				}
-			} else if (plan[1][j] < priority) {
-				if (tmp[j] != DEST_VALUE_NIL
-
-		// If a piece is already at the outer limit of the
-		// flee area, allow the lower priority plan (chase)
-		// to remain, to allow the piece to be called
-		// even further away.
-					&& !(tmp[j] == 1 && getPiece(j) != null)) {
-					plan[0][j] = tmp[j];
-					plan[1][j] = priority;
-				}
-
-		// priority equal, use greater value
-
-			} else if (plan[0][j] < tmp[j]
-				&& tmp[j] != DEST_VALUE_NIL)
-					plan[0][j]= tmp[j];
-		}
-	}
-
 	private void genPlanB(int [] desttmp, int color, int rank, int priority)
 	{
 		setPlan(planB[color][rank-1], desttmp, priority);
@@ -3218,9 +3204,9 @@ public class TestingBoard extends Board
 		// TBD: this effect likely occurs with other priority differences
 		// as well.
 
-			if (priority == DEST_PRIORITY_FLEE)
+			if (priority == DEST_PRIORITY_LANE)
 				return DEST_PRIORITY_CHASE;
-			else if (plan[1][to] == DEST_PRIORITY_FLEE)
+			else if (plan[1][to] == DEST_PRIORITY_LANE)
 				return -DEST_PRIORITY_CHASE;
 		}
 
@@ -3491,9 +3477,13 @@ public class TestingBoard extends Board
 		//
 		// Note: this should discourage back-and-forth chases,
 		// because the chased piece keeps gaining points
+		//
+		// Note: DEST_PRIORITY_CHASE_ATTACK is enough to take
+		// the wind out of the sails of any back-and-forth chase,
+		// including that by an invincible piece.
 
 			if (m2 != null && Grid.isAdjacent(from, m2.getTo()))
-				vm++;
+				vm += DEST_PRIORITY_CHASE_ATTACK;
 
 			int v = planValue(fp, from, to);
 
