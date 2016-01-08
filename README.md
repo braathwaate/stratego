@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.9.9][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.9.9/stratego_v0.9.9.jar
+[Stratego player v0.10.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.10.0/stratego_v0.10.0.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -26,7 +26,7 @@ or set up your computer to select which program opens the jar file.
 
 Finally, you can try to run it from the command line:
 
-	java -jar stratego_v0.1.0.jar
+	java -jar stratego_v0.10.0.jar
 
 
 # About the AI (Artificial Intelligence)
@@ -87,8 +87,8 @@ which results in cautious play until the suspected ranks
 are confirmed through attack or mature through extended play.
 
 The result is a stratego bot with a modest amateur level of play,
-able to defeat most casual human players and other stratego bots.
-A primary failing of other stratego bots is the lack of bluffing,
+able to defeat most casual human players and stratego bots.
+A primary failing of stratego bots is the lack of bluffing,
 which allows the AI to easily determine piece ranks
 without random attack.
 However, even if the opponent does bluff, the AI does not heavily
