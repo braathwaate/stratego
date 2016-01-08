@@ -1124,7 +1124,7 @@ public class AI implements Runnable
 		// a simple transposition cache.  It also prevents
 		// the search continuing ad infinitem.
 
-		int best = -9999;
+		int best;
 		if (b.getLastMove() == null)
 			best = bvalue;
 		else {
@@ -1132,6 +1132,10 @@ public class AI implements Runnable
 			best = -qs( n-1, -beta, -alpha, dvr);
 			b.undo();
 		}
+		alpha = Math.max(alpha, best);
+
+		if (alpha >= beta)
+			return best;
 
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
@@ -1824,16 +1828,16 @@ public class AI implements Runnable
 		if (Settings.twoSquares
 			|| b.bturn == Settings.topColor) {
 
-	// Note that a possible two squares result can occur
-	// even if the piece does not have an adjacent attacker.
-	// This can occur if a Nine is trying to attack from afar,
-	// or simply if the piece is moving back and forth
-	// aimlessly.
+		// Note that a possible two squares result can occur
+		// even if the piece does not have an adjacent attacker.
+		// This can occur if a Nine is trying to attack from afar,
+		// or simply if the piece is moving back and forth
+		// aimlessly.
 
 			if (b.isPossibleTwoSquares(tryMove))
 				return MoveResult.POSS_TWO_SQUARES;
 
-	// Piece is being chased, so repetitive moves OK
+		// Piece is being chased, so repetitive moves OK
 
 			if (b.isChased(tryMove)) {
 				b.move(tryMove);

@@ -168,8 +168,11 @@ public class TestingBoard extends Board
 	//	both rank N and N-1 have the same strength.
 	// • Bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
-	// • An unsuspected Spy is equal to the value of a
-	//	Major.  However, once the Spy is suspected,
+	// • An unsuspected Spy has a value between a Colonel and a
+	//	Major.  It is obviously worth more than a Major, which
+	//	can be lost and still the game can be won.  But
+	//	losing a Three makes it much harder for the AI to win.
+	//	However, once the Spy is suspected,
 	//	it has limited value except in certain reduced piece
 	//	endgames with Ones.
 	// • The Nine is the next lowest valued piece on the board.  However,
@@ -212,6 +215,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_SEVEN = 36;
 	private static final int VALUE_EIGHT = 30;	// variable
 	private static final int VALUE_NINE = 28;
+	private static final int VALUE_SPY=(VALUE_THREE + VALUE_FOUR)/2;
 	private static final int [] startValues = {
 		0,
 		1600,	// 1 Marshal
@@ -223,7 +227,7 @@ public class TestingBoard extends Board
 		VALUE_SEVEN,	// 7 Sergeant
 		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
-		VALUE_FOUR,	// Spy value with opponent One still on board
+		VALUE_SPY,	// Spy value with opponent One still on board
 		0,	// Bomb (valued by code)
 		1000,	// Flag (valued by code)
 		0,	// Unknown (valued by code, minimum piece value)
@@ -2898,7 +2902,7 @@ public class TestingBoard extends Board
 	// unknown rank.  More likely it is a higher piece
 	// bluffing as a lower piece so that it can attack the unknown
 	// piece.  (See Board.java: no permanent chase rank set).
-	public Rank getTempSuspectedRank(Piece p)
+	public Rank getTempSuspectedRank(Rank r, int to)
 	{
 		// Even if the approaching piece already has a lower
 		// suspected rank, override it if it approaches an AI piece.
@@ -2908,15 +2912,10 @@ public class TestingBoard extends Board
 		// TBD: Bluffing is why suspected rank analysis of the
 		// setup is required, so this override needs to be revisited.
 
-		if (p.isKnown()
-			|| p.getActingRankChase() == Rank.UNKNOWN)
-			return Rank.NIL;
-
-		Rank r = p.getRank();
 		if (r == Rank.UNKNOWN)
 			r = Rank.NIL;
 		for (int d : dir) {
-			Piece tp = getPiece(p.getIndex() + d);
+			Piece tp = getPiece(to + d);
 			if (tp == null
 				|| tp.getColor() != Settings.topColor)
 				continue;
@@ -3438,8 +3437,12 @@ public class TestingBoard extends Board
 		// approach the unknown Spy, because it could be the
 		// unknown One.
 
-			if (fpcolor == Settings.bottomColor) {
-				Rank newRank = getTempSuspectedRank(fp);
+			if (fpcolor == Settings.bottomColor
+				&& !fp.isKnown()
+				&& fp.getActingRankChase() != Rank.UNKNOWN
+				&& grid.hasAttack(fpcolor, to)) {
+
+				Rank newRank = getTempSuspectedRank(fprank, to);
 				if (newRank == Rank.UNKNOWN)
 					fp.setActingRankChaseEqual(Rank.UNKNOWN);
 			}
@@ -3730,12 +3733,12 @@ public class TestingBoard extends Board
 		// make an even exchange.
 
 				if (tp.isKnown()) {
-					if (isInvincible(tp)) {
-						if  (!fp.isKnown()
-							&& isWinning(Settings.topColor) > 0
-							&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
-							vm += 10;
-					} else
+					if (isInvincible(tp)
+						&& !fp.isKnown()
+						&& isWinning(Settings.topColor) > 0
+						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
+						vm += 10;
+					else
 						vm += actualValue(tp) - fpvalue;
 				} else {
 
@@ -5701,19 +5704,13 @@ public class TestingBoard extends Board
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 
 		// This program has a big unsolved problem with
-		// the horizon effect, particularly when the Spy
-		// (worth 300 points) could be attacked.  The horizon
+		// the horizon effect, particularly when the valuable
+		// and vulnerable Spy could be attacked.  The horizon
 		// effect is addressed by extended search,
 		// but if the attacker is far from the Spy, then
 		// it is possible that the attacker barely reaches
 		// the Spy and extended search is insufficient
 		// in depth to to prevent the AI from leaving pieces hanging.
-		//
-		// TBD: This is a temporary hack given low search depth.
-		// The hack causes the AI not to react if the
-		// approaching attacker has moved more than twice
-		// during tree evaluation; the idea is that the attacker
-		// is too far away to be a threat.
 		//
 		// Note: this code addresses suspected or known opponent
 		// pieces attacking unknown AI pieces.  If the opponent
@@ -5722,15 +5719,27 @@ public class TestingBoard extends Board
 		// to 1 space of separation in AI.java,
 		// so the horizon effect is limited as well.
 		//
-		// Note that this rule still means that if the AI
+		// Note that this rule still means that if an AI piece
 		// approaches an opponent piece that is far away,
-		// it is still a threat.  That is why opponent moves,
-		// not distance, is used.
+		// it is still a threat.  That is why opponent "moves"
+		// (the distance the opponent piece travels during
+		// tree evalution) is used, and not the distance between
+		// the attacker and defender.
+		//
+		// TBD: As search depth is increased, the distance
+		// factor should be reduced.  The distance factor
+		// causes the AI not to react the more moves that
+		// approaching attacker makes during tree evaluation;
+		// the idea is that the further the attacker,
+		// the more likely it has some other target in mind
 
-		if (fp.moves - fp.movesOrig > 2)
-			return 2;	// bluffing value
+		int distFactor = fp.moves - fp.movesOrig;
 
-		return actualV * risk / 10;
+		// square the distance
+
+		distFactor = Math.max(1, distFactor * distFactor);
+
+		return actualV * risk / (10 * distFactor);
 	}
 
 	// TBD: combine with pieceValue()
