@@ -1250,6 +1250,17 @@ public class AI implements Runnable
 		//
 		// Also, if the attacker has multiple enemies, perhaps
 		// it is trapped, and is forced into a losing move.
+		//
+		// Version 10.1 also qualified this logic by isFlagBombAtRisk
+		// because of this example:
+		// xxxxxxxxx
+		// -- RB RF|
+		// -- -- RB|
+		// -- B? R7|
+		//
+		// R7xB? is a losing move, but is necessary because
+		// unknown Blue is maybe an Eight and is close to the flag
+		// bomb structure.
 
 					if (tp == b.getPiece(t)	// lost the attack
 						&& enemies < 2) {
@@ -1872,7 +1883,9 @@ public class AI implements Runnable
 			&& -negQS(b.getValue() - bvalue) < 0) {
 			
 			UndoMove m = b.getLastMove(1);
-			if (m.tp != null) {
+			if (m.tp != null
+				&& (!b.isFlagBombAtRisk(m.tp)
+					|| m.getPiece().getRank() == Rank.NINE)) {
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));
 				if (tp == m.tp) {	// lost the attack
 					b.undo();
@@ -2095,12 +2108,11 @@ public class AI implements Runnable
 					|| tp.getRank() == Rank.FLAG)
 					continue;
 
-		// If the piece is near the flag, the target might be
+		// If the attacker is near the flag, then the target might be
 		// the AI flag rather than the chased piece,
 		// so a broad search is used.
 
-				if (b.isNearAIFlag(fp.getIndex())
-					&& tp.getRank() == Rank.EIGHT)
+				if (b.isFlagBombAtRisk(tp))
 					continue;
 
 				int steps = Grid.steps(fp.getIndex(), tp.getIndex());

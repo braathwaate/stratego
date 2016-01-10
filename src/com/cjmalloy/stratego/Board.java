@@ -1957,37 +1957,37 @@ public class Board
 						continue;
 					Piece p = getPiece(j);
 
-	// pieces surrounding corner pieces are always suspected bombs
-	// and the corner piece is never a suspected bomb.
-
-					if (i == 111 || i == 120) {
-						if (p == null
-							|| p.hasMoved()
-							|| (p.isKnown() && p.getRank() != Rank.BOMB)) {
-							found = true;
-							break;
-						}
-					} else if (p != null
-						&& !p.hasMoved()) {
+					if (p != null
+						&& !(p.hasMoved()
+							|| p.isKnown())) {
 						found = true;
 						break;
 					}
 				}
-				if (!found) {
 
 	// transform the piece into a suspected bomb.
 
-					if (i == 111) {
-						getPiece(100).setSuspectedRank(Rank.BOMB);
-						getPiece(112).setSuspectedRank(Rank.BOMB);
-					} else if (i == 120) {
-						getPiece(119).setSuspectedRank(Rank.BOMB);
-						getPiece(109).setSuspectedRank(Rank.BOMB);
-					} else
-						tp.setSuspectedRank(Rank.BOMB);
-				}
+				if (!found)
+					tp.setSuspectedRank(Rank.BOMB);
 			}
 		}
+	}
+
+	//
+	// Usual flag locations are on the back row, and usually
+	// in the corner or beneath the lakes
+	// F -- F F -- -- F F -- F
+	protected boolean usualFlagLocation(int color, int i)
+	{
+		if (Grid.getY(i) != Grid.yside(color, 0))
+			return false;
+		int x = Grid.getX(i);
+		if (x == 1
+			|| x == 4
+			|| x == 5
+			|| x == 8)
+			return false;
+		return true;
 	}
 
 	// Scan the board setup for suspected flag pieces.
@@ -2001,7 +2001,7 @@ public class Board
 	// to create a realistic deception that the flag is at
 	// the alternate location, but really isn't.
 
-	private void possibleFlag()
+	protected void possibleFlag()
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
@@ -2083,10 +2083,24 @@ public class Board
 
 		if (maybe_count[c] >= 1) {
 
+		// Mark surrounding pieces in all usual flag
+		// structures as suspected bombs.
+
+			for (int i = 0; i < maybe_count[c]; i++)
+				if (usualFlagLocation(c, maybe[i][0]))
+					genDestBombedFlag(maybe, maybe_count[c], open_count[c], i);
+
+		// Pick the stucture that looks most likely and
+		// mark it as containing the flag.
+
 			if (bestGuess == 99)
 				bestGuess = getBestGuess(maybe, maybe_count[c]);
 
 			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
+			if (c == Settings.bottomColor) {
+				flag[c] = getPiece(maybe[bestGuess][0]);
+				flag[c].setSuspectedRank(Rank.FLAG);
+			}
 
 		} else if (c == Settings.bottomColor) {
 
@@ -2356,7 +2370,6 @@ public class Board
 
 	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
 	{
-
 		Piece flagp = getPiece(maybe[bestGuess][0]);
 		int color = flagp.getColor();
 
@@ -2369,10 +2382,9 @@ public class Board
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
-		for (int i = bestGuess; i < Math.min(bestGuess+3, maybe_count); i++) {
-		for (int j = 1; maybe[i][j] != 0; j++) {
-			assert Grid.isValid(maybe[i][j]) : maybe[i][j] + " is not valid ";
-			Piece p = getPiece(maybe[i][j]);
+		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
+			assert Grid.isValid(maybe[bestGuess][j]) : maybe[bestGuess][j] + " is not valid ";
+			Piece p = getPiece(maybe[bestGuess][j]);
 			if (p == null
 				|| (p.isKnown() && p.getRank() != Rank.BOMB)
 				|| p.hasMoved()) {
@@ -2413,17 +2425,6 @@ public class Board
 					grid.clearMovablePiece(p);
 				}
 		} // j
-		if (i < maybe_count - 1
-			&& maybe[i][0] + 1 == maybe[i+1][0])
-			continue;
-
-		break;
-		} // i
-
-		if (color == Settings.bottomColor) {
-			flag[color] = flagp;
-			flagp.setSuspectedRank(Rank.FLAG);
-		}
 	}
 	// ********* end of suspected ranks
 

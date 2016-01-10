@@ -5945,18 +5945,38 @@ public class TestingBoard extends Board
 		// moves away.
 		//
 		// Note: maybeEight is cleared for matured suspected ranks
-		// in Board.h
+		// in Board.java
+		//
+		// Note: Prior to version 10.1, this was qualified by
+		//
+		// && (flag[Settings.topColor].isKnown()
+		//	|| fprank == Rank.UNKNOWN)) {
+		//
+		// But if the attacker becomes a known unknown during
+		// the search, then the attacker lost by attacking
+		// a bomb.  For example,
+		// xxxxxxxx|
+		// -- RB RF|
+		// R9 -- RB|
+		// -- B? R7|
+		// The AI thinks that it is no danger because if
+		// unknown Blue moves up, R9xB? creates a known
+		// but suspected Five (i.e. known unknown) and
+		// although maybeEight was still true, the AI thought the
+		// attacker would lose if it attacked the bomb structure.
+		//
+		// So now the AI depends only on maybeEight.  This means
+		// that unmatured suspected ranks can successfully win
+		// an attack on an unknown AI bomb structure.
 
 		if (tprank == Rank.BOMB
 			&& tp.getColor() == Settings.topColor
-			&& fp.getMaybeEight()
-			&& (flag[Settings.topColor].isKnown()
-				|| fprank == Rank.UNKNOWN)) {
-			if (tp.isKnown() || tp.aiValue() != 0) {
+			&& fp.getMaybeEight()) {
+			if (tp.isKnown() || tp.aiValue() != 0)
 				return Rank.WINS;	// maybe not
-			} else
+			else
 				return Rank.LOSES;	// most likely
-		}
+			}
 
 		int result = winFight(fprank, tprank);
 
@@ -6548,10 +6568,12 @@ public class TestingBoard extends Board
 		return isNearOpponentFlag(p.getIndex());
 	}
 
-	public boolean isNearAIFlag(int to)
+	public boolean isFlagBombAtRisk(Piece p)
 	{
-		return flag[Settings.topColor].isKnown() &&
-			Grid.steps(to, flag[Settings.topColor].getIndex()) <= 4;
+		Piece flagp = flag[1-p.getColor()];
+		return p.getMaybeEight()
+			&& flagp != null
+			&& Grid.steps(p.getIndex(), flagp.getIndex()) <= 4;
 	}
 
 	// If the opponent has an unsuspected Spy, it is dangerous for
