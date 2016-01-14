@@ -97,24 +97,9 @@ public class TestingBoard extends Board
 @SuppressWarnings("unchecked")
 	public ArrayList<Piece>[] scouts = (ArrayList<Piece>[])new ArrayList[2];
 
-	// The idea behind a foray is to discover low ranked pieces
-	// and win high ranked pieces while avoiding Bombs.
-	// Low ranks are usually positioned behind the lakes and high
-	// ranks such as Eights are usually on the last row.
 	protected boolean[] foray = new boolean[15];
-
-	protected static final int forayMap[] = {
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-		1, 0, 1, 1, 0, 0, 1, 1, 0, 1,
-		1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
-		1, 1, 1, 1, 1, 1, 1, 1, 1, 1
-	};
+	protected static int forayMap[] = new int[121];
+	protected static int forayLane = -1;
 
 	// De Boer (2007) suggested a formula
 	// for the relative values of pieces in Stratego:
@@ -2981,14 +2966,18 @@ public class TestingBoard extends Board
 	}
 
 	// An expedition into the unmoved and unknown area of the
-	// opponents ranks is called a foray.  Statistically,
-	// random forays result in a loss of material, if the opponent has
-	// strategically placed its pieces to rebuff them.
+	// opponents ranks is called a foray.  
+	// The idea behind a foray is to discover low ranked pieces
+	// and win higher ranked pieces while avoiding Bombs.
 	//
-	// Yet if the AI does not make any forays, then the opponent
-	// will be free to use its pieces in a sustained foray of its
-	// own, eventually uncovering the flag location, and winning
-	// even when the AI gains material.
+	// Statistically, random forays result in a loss of material,
+	// if the opponent has strategically placed its pieces to rebuff them.
+	// So a foray must be a directed attack in only one of the lanes,
+	// preferably the side lanes, so that the opponent cannot
+	// easily refortify the area.  Indeed, it is counter-productive
+	// to attack multiple lanes at once, because the more the
+	// opponents pieces move, the more mobility the opponent
+	// has to refortify the other lanes.
 	//
 	// Humans are often able to guess the ranks of unmoved pieces
 	// and direct forays accordingly, resulting in material gain.
@@ -2997,6 +2986,48 @@ public class TestingBoard extends Board
 
 	public void genForay()
 	{
+		if (forayLane == -1) {
+			// Choose the foray lane.
+			for (int lane = 0; lane < 7; lane += 3) {
+			int obstacle = 0;
+			for (int y = 2; y < 4; y++)
+			for (int x = 0; x < 4; x++) {
+				int i = Grid.getIndex(x + lane, y);
+				Piece p = getPiece(i);
+				if (p == null)
+					continue;
+				if (p.getRank() == Rank.BOMB)
+					obstacle+=3;
+				else if (p.getRank() == Rank.ONE
+					|| p.getRank() == Rank.SPY)
+					obstacle+=2;
+				else if (p.getRank() == Rank.EIGHT)
+					obstacle++;
+			}
+			if (obstacle > 2)
+				continue;
+
+			if (forayLane == -1)
+				forayLane = lane;
+
+			if (lane == 3)
+				continue;
+
+			if (rnd.nextInt(2) == 0 && lane == 0)
+				break;
+
+			forayLane = lane;
+
+			} // lane
+
+			if (forayLane != -1)
+				for (int y = 6; y < 10; y++)
+				for (int x = 0; x < 4; x++) {
+					int i = Grid.getIndex(x + forayLane, y);
+					forayMap[i] = 1;
+				}
+		}
+		
 		// Knowing the lowest unknown expendable rank is
 		// useful in an encounter with an opponent piece that
 		// has approached an AI unknown.  The AI assumes that
@@ -3030,7 +3061,7 @@ public class TestingBoard extends Board
 		f += unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4;
 		f -= unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)*3;
 		f += isWinning(Settings.bottomColor)/VALUE_FIVE;
-		foray[4] = (f > 4) || (dangerousUnknownRank < 4);
+		foray[4] = (f > 2) || (dangerousUnknownRank < 4);
 
 		foray[5] = ((unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.NINE)
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.EIGHT)
@@ -3043,7 +3074,7 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 12)
+			) > 10)
 				|| (dangerousUnknownRank < 5);
 
 		// One exception to the rule that the AI piece loses its value
@@ -3085,7 +3116,7 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 5)
+			) > 3)
 				|| (dangerousUnknownRank < 6);
 		if (foray[6] && lowestUnknownExpendableRank == 5)
 			lowestUnknownExpendableRank = 6;
@@ -3101,7 +3132,7 @@ public class TestingBoard extends Board
 			+ unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.ONE)*4
 			- unknownRankAtLarge(Settings.bottomColor, Rank.BOMB)
 			+ isWinning(Settings.bottomColor)/VALUE_FIVE
-			) > 5)
+			) > 3)
 				|| (dangerousUnknownRank < 7);
 
 		// The AI prefers to retain its Scouts for bluffing or
@@ -3117,7 +3148,8 @@ public class TestingBoard extends Board
 		int i;
 		for (i = 9 - rankAtLarge(Settings.topColor, Rank.NINE); i > 0 && rnd.nextInt(4) == 0; i--);
 		
-		if (i == 0)	
+		if (i == 0
+			|| rankAtLarge(Settings.topColor, Rank.NINE) > 4)
 			foray[9] = true;
 
 	}
@@ -3133,9 +3165,14 @@ public class TestingBoard extends Board
 	}
 
 	// Sixes, Sevens and Nines (and excess known Eights) are expendable
+	//
+	// Note: values[] is used deliberately instead of pieceValue()
+	// because the value of a Six can be reduced but the stealth
+	// values do not change, so in reduced piece situations a Nine
+	// (with high stealth) would no longer be expendable.
 	public boolean isExpendable(int c, int r)
 	{
-		return pieceValue(c, r) <= pieceValue(c, 6);
+		return values[c][r] <= values[c][6];
 	}
 
 	public boolean isExpendable(Piece p)
@@ -4404,7 +4441,13 @@ public class TestingBoard extends Board
 
 					assert tprank == Rank.UNKNOWN: "Known ranks are handled in WINS/LOSES/EVEN";
 
-			if (fprank.ordinal() > lowestUnknownNotSuspectedRank) {
+			if (foray[fprank.ordinal()]
+				&& tp != lastMovedPiece		// maybe a responding defender
+				&& forayMap[tp.getIndex()] == 1
+				&& (fprank.ordinal() >= 5 || fp.hasMoved()))
+				vm += unknownValue(fp, tp) - fpvalue/4;
+
+			else if (fprank.ordinal() > lowestUnknownNotSuspectedRank) {
 
 				vm += unknownValue(fp, tp) - fpvalue;
 
@@ -4641,6 +4684,10 @@ public class TestingBoard extends Board
 						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.ordinal() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank, false), false, tp, actualValue(tp));
 
+		if (fp != lastMovedPiece		// maybe a responding defender
+			&& foray[tprank.ordinal()])
+			tpvalue /= 4;
+
 		// Outcome is the negation as if ai were the attacker.
 		//
 		// But note that the resulting value
@@ -4667,6 +4714,7 @@ public class TestingBoard extends Board
 		// reasonable aggression.
 
 					vm += tpvalue - fpvalue;
+					vm = vm / distanceFactor(fp);
 
 		// vm is usually quite positive.  But in an endgame when
 		// the opponent has no expendable pieces, it becomes
@@ -4707,7 +4755,6 @@ public class TestingBoard extends Board
 						setPiece(tp, to);
 					}
 				}
-				//vm = 0; // fubar
 				break;
 			} // switch
 
@@ -5612,7 +5659,46 @@ public class TestingBoard extends Board
 
 	}
 
-	int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int actualV)
+	// This program has a big unsolved problem with
+	// the horizon effect, particularly when the valuable
+	// and vulnerable Spy could be attacked.  The horizon
+	// effect is addressed by extended search,
+	// but if the attacker is far from the Spy, then
+	// it is possible that the attacker barely reaches
+	// the Spy and extended search is insufficient
+	// in depth to to prevent the AI from leaving pieces hanging.
+	//
+	// Note: If the opponent piece is unknown,
+	// it is handled in UNK, but because move
+	// generation of unknown pieces is limited (pruned off)
+	// to 1 space of separation in AI.java,
+	// the horizon effect is limited as well.
+	// Yet it is still important.
+	//
+	// Note that this rule still means that if an AI piece
+	// approaches an opponent piece that is far away,
+	// it is still a threat.  That is why opponent "moves"
+	// (the distance the opponent piece travels during
+	// tree evalution) is used, and not the distance between
+	// the attacker and defender.
+	//
+	// TBD: As search depth is increased, the distance
+	// factor should be reduced.  The distance factor
+	// causes the AI not to react the more moves that
+	// approaching attacker makes during tree evaluation;
+	// the idea is that the further the attacker,
+	// the more likely it has some other target in mind
+
+	protected int distanceFactor(Piece p)
+	{
+		int d = p.moves - p.movesOrig;
+
+	// square the distance
+
+		return Math.max(1, d*d);
+	}
+
+	protected int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int v)
 	{
 		assert fp.getColor() == Settings.bottomColor : "apparentWinValue only for opponent attacker";
 
@@ -5620,7 +5706,7 @@ public class TestingBoard extends Board
 		// sees the actual value of the piece
 
 		if (tp.isKnown())
-			return actualV;
+			return v;
 
 		// tp is unknown
 
@@ -5702,44 +5788,9 @@ public class TestingBoard extends Board
 		// differently at different depths.
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
-
-		// This program has a big unsolved problem with
-		// the horizon effect, particularly when the valuable
-		// and vulnerable Spy could be attacked.  The horizon
-		// effect is addressed by extended search,
-		// but if the attacker is far from the Spy, then
-		// it is possible that the attacker barely reaches
-		// the Spy and extended search is insufficient
-		// in depth to to prevent the AI from leaving pieces hanging.
-		//
-		// Note: this code addresses suspected or known opponent
-		// pieces attacking unknown AI pieces.  If the opponent
-		// piece is unknown, it is handled in UNK, but move
-		// generation of unknown pieces is limited (pruned off)
-		// to 1 space of separation in AI.java,
-		// so the horizon effect is limited as well.
-		//
-		// Note that this rule still means that if an AI piece
-		// approaches an opponent piece that is far away,
-		// it is still a threat.  That is why opponent "moves"
-		// (the distance the opponent piece travels during
-		// tree evalution) is used, and not the distance between
-		// the attacker and defender.
-		//
-		// TBD: As search depth is increased, the distance
-		// factor should be reduced.  The distance factor
-		// causes the AI not to react the more moves that
-		// approaching attacker makes during tree evaluation;
-		// the idea is that the further the attacker,
-		// the more likely it has some other target in mind
-
-		int distFactor = fp.moves - fp.movesOrig;
-
-		// square the distance
-
-		distFactor = Math.max(1, distFactor * distFactor);
-
-		return actualV * risk / (10 * distFactor);
+		v = v * risk / 10;
+		v = v / distanceFactor(fp);
+		return v;
 	}
 
 	// TBD: combine with pieceValue()
@@ -6101,14 +6152,6 @@ public class TestingBoard extends Board
 					else if (tprank.ordinal() == lowestUnknownExpendableRank)
 						return Rank.EVEN;	// maybe not
 			}
-			else if (fp.moves == 0
-				&& fp != lastMovedPiece		// maybe a responding defender
-				&& foray[tprank.ordinal()]) {
-				if (!tp.isKnown())
-					return Rank.LOSES;
-				else
-					return Rank.EVEN;
-			}
 
 		// Any piece will take a SPY.
 
@@ -6129,13 +6172,8 @@ public class TestingBoard extends Board
 		// the result is handled in UNK.  This must have
 		// a higher value than LOSES.
 
-		else if (fprank != Rank.EIGHT && isPossibleBomb(tp)) {
-			if (foray[fprank.ordinal()]
-				&& tp != lastMovedPiece		// maybe a responding defender
-				&& forayMap[Grid.getY(tp.getIndex())*10 + Grid.getX(tp.getIndex())] == 1)
-				return Rank.WINS;
+		else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
 			return result;
-		}
 
 		// By definition, invincible rank wins or is even
 		// on attack of unknown moved pieces.
@@ -6294,11 +6332,22 @@ public class TestingBoard extends Board
 	boolean isNineTarget(Piece p)
 	{
 		Rank rank = p.getRank();
-		return (rank == Rank.FLAG
-			|| rank == Rank.SPY
-			|| (!p.isKnown()
-				&& rank != Rank.NINE	// nines have high stealth value but are not targets
-				&& valueStealth[p.getColor()][rank.ordinal()-1] > values[1-p.getColor()][9]));
+		if (rank == Rank.FLAG
+			|| rank == Rank.SPY)
+			return true;
+
+		if (p.isKnown())
+			return false;
+
+		if (foray[9]
+			&& forayMap[p.getIndex()] == 1)
+			return true;
+
+		if (rank == Rank.NINE	// nines have high stealth value but are not targets
+			|| valueStealth[p.getColor()][rank.ordinal()-1] < values[1-p.getColor()][9])
+			return false;
+
+		return true;
 	}
 
 	// If all bombs have been accounted for,

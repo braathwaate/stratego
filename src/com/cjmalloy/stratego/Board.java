@@ -77,7 +77,7 @@ public class Board
 	protected Piece[] flag = new Piece[2];  // flags
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
-	protected int guessedRankCorrect;
+	protected int guessedRankCorrect = 1;
 	public int blufferRisk = 4;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
@@ -276,7 +276,7 @@ public class Board
 					setPiece(tp, m.getFrom());
 			}
 			genChaseRank(fp.getColor());
-			genFleeRank(fp, tp, m.getMove());	// depends on suspected rank
+			genFleeRank(fp, tp);	// depends on suspected rank
 			return true;
 		}
 		return false;
@@ -528,6 +528,28 @@ public class Board
 		return false;
 	}
 
+	protected Piece getLowestRankedDefender(Move m, Piece delayPiece)
+	{
+		int to = m.getTo();
+		Piece fp = m.getPiece();
+		for (int d : dir) {
+			int j = to + d;
+			if (!Grid.isValid(j))
+				continue;
+			Piece op = getPiece(j);
+			if (op == null
+				|| op.getColor() == fp.getColor())
+				continue;
+			Rank rank = op.getApparentRank();
+
+			if (delayPiece == null
+				|| rank.ordinal() < delayPiece.getApparentRank().ordinal())
+				delayPiece = op;
+
+		}
+		return delayPiece;
+	}
+
 	// Acting rank is a historical property of the known
 	// opponent piece ranks that a moved piece was adjacent to.
 	//
@@ -555,12 +577,13 @@ public class Board
 	// at least suspect that the fleer would flee again from a
 	// piece of the same rank.
 
-	void genFleeRank(Piece fp, Piece tp, int m)
+	void genFleeRank(Piece fp, Piece tp)
 	{
 		Piece delayPiece = null;
+		Move m = getLastMove();
 
 		// movement aways
-		int from = Move.unpackFrom(m);
+		int from = m.getFrom();
 		for (int d : dir) {
 			int chaser = from + d;
 			if (!Grid.isValid(chaser))
@@ -637,22 +660,7 @@ public class Board
 		// Blue Three.  Blue Three moves away.  Do not set
 		// a flee rank on unknown Blue.
 
-		int to = Move.unpackTo(m);
-		for (int d : dir) {
-			int j = to + d;
-			if (!Grid.isValid(j))
-				continue;
-			Piece op = getPiece(j);
-			if (op == null
-				|| op.getColor() == fp.getColor())
-				continue;
-			Rank rank = op.getApparentRank();
-
-			if (delayPiece == null
-				|| rank.ordinal() < delayPiece.getApparentRank().ordinal())
-				delayPiece = op;
-
-		}
+		delayPiece = getLowestRankedDefender(getLastMove(), delayPiece);
 
 		for ( int i = 12; i <= 120; i++) {
 			Piece fleeTp = getPiece(i);
@@ -846,7 +854,7 @@ public class Board
 		// This led the AI to approach the now unknown opponent
 		// piece and thus lose its piece.
 		//
-		// In version 9.3, if a piece has a chase rank
+		// From version 9.3 to 10.0, if a piece has a chase rank
 		// of 4 or lower, the low rank is retained if the piece
 		// chases an unknown.  The side-effect is that the AI is duped
 		// by an opponent piece that chases a low ranked AI piece
@@ -857,9 +865,17 @@ public class Board
 		// AI miscalculation of other suspected ranks on the board,
 		// leading to a loss elsewhere.
 		//
-		// Note that if a piece has a chase rank of Five
+		// The key change in 10.1 is that all chase ranks
+		// other than Five are retained if the piece approaches
+		// an Unknown.  This is because chasing a known piece
+		// of any rank always gives more information than chasing
+		// an Unknown.  For example, if a piece chases a Six,
+		// it is probably a Five.  Then if it chases an Unknown,
+		// it still is probably a Five.
+		//
+		// Since Version 10.1, if a piece has a Five chase rank,
 		// (suspected rank of Four) and it then approaches an
-		// unknown, the chase rank changes to UNKNOWN, which
+		// Unknown, the chase rank changes to Six which
 		// usually results in a suspected rank of Five.
 		// Thus, if the piece is actually a trapped Four,
 		// the AI could approach it with a Five and lose
@@ -876,10 +892,12 @@ public class Board
 			&& chaser.getApparentRank().ordinal() <= 5)
 		 	return;
 
-		if (arank == Rank.NIL 
-			|| (chaser.getApparentRank() == Rank.UNKNOWN
-				&& arank.ordinal() >= 5
-				&& !isInvincible(chased))
+		if (chaser.getApparentRank() == Rank.UNKNOWN
+			&& arank.ordinal() == 5
+			&& !isInvincible(chased))
+			chased.setActingRankChaseEqual(Rank.SIX);
+
+		else if (arank == Rank.NIL 
 			|| arank.ordinal() > chaser.getApparentRank().ordinal()
 
 		// If an unknown piece has IS_LESS set (because it protected
@@ -1143,7 +1161,7 @@ public class Board
 		// Red Four moves down and forks Blue Five and unknown Blue.
 		// Unknown Blue moves left.  Unknown Blue is not a protector.
 
-			else if (p.getActingRankFleeLow() != chaser.getRank())
+			else if (p.getActingRankFleeLow() != chaserRank)
 				
 				unknownProtector = p;
 		} // dir
@@ -1231,13 +1249,29 @@ public class Board
 		// Opponent moved some piece other than the chased,
 		// and neglected to capture the chaser,
 		// likely implying that the chased piece protection
-		// is strong.  Yet we have to check flee rank because
-		// the opponent may have played some other delaying move
-		// (such as chasing another low ranked piece) and intends
-		// to move the chased piece later.  (see flee rank).
+		// is strong.  But the opponent could also
+		// be attacking some other player piece
+		// that requires more immediate attention.
+		//
+		// Prior to version 10.1, flee rank was checked:
+		//		Rank fleeRank = chased.getActingRankFleeLow();
+		//		if (fleeRank != chaserRank)
+		//			return;
+		//
+		// But this was a poor substitute for several reasons.
+		// 1. genFleeRank is called after genChaseRank.
+		//	This delayed the setting of the protector rank.
+		// 2. the piece could have fled from multiple pieces,
+		//	such as a Three fled from a Two, then
+		//	was attacked by an unknown, and then did
+		// 	not flee, implying that the protector was a Spy.
+		//	But then the protector rank was not set.
+		// 3. flee rank could have been set prior, and then
+		//	the opponent chased a stronger piece.
+		//	And then the protector rank was set in error.
 
-				Rank fleeRank = chased.getActingRankFleeLow();
-				if (fleeRank != chaserRank)
+				Piece defender = getLowestRankedDefender(getLastMove(), chased);
+				if (defender != chased)
 					return;
 			}
 
@@ -1652,9 +1686,36 @@ public class Board
 		return newRank;
 	}
 
+	// Until version 10.1, this code relied on a simple count
+	// of moves before the AI believed the piece was the rank
+	// indicated by its chasing behavior.  But this causes the
+	// AI to lose material when suspected ranked opponent pieces
+	// that have not matured are near the flag.  It also results
+	// in a long delay before the AI takes decisive action based
+	// on the ranks that it has discovered.
+	//
+	// Version 10.1 relies on a 3 move successive chase sequence
+	// (either chasing or fleeing, it doesn't matter)
+	// to accelerate the rank maturation in addition to
+	// the move count.
+
 	boolean maybeBluffing(Piece p)
 	{
-		return p.moves < SUSPECTED_RANK_AGING_DELAY;
+		if (p.moves >= SUSPECTED_RANK_AGING_DELAY)
+			return true;
+
+		for (int i = 1; i <= 5; i+=2) {
+			Move oppm = getLastMove(i);
+			Move aim = getLastMove(i+1);
+			if (aim == null)
+				return false;
+			if (!Grid.isAdjacent(oppm.getTo(), aim.getTo())
+				&& !Grid.isAdjacent(oppm.getFrom(), aim.getTo()))
+				return false;
+		}
+		p.moves = SUSPECTED_RANK_AGING_DELAY;
+		return true;
+		
 	}
 
 	protected void setSuspectedRank(Piece p, Rank rank)
@@ -2449,7 +2510,7 @@ public class Board
 				fp.makeKnown();
 			}
 			genChaseRank(fp.getColor());
-			genFleeRank(fp, null, m.getMove());	// depends on suspected rank
+			genFleeRank(fp, null);	// depends on suspected rank
 			return true;
 		}
 		
@@ -3135,9 +3196,8 @@ public class Board
 	// so if the AI thinks a piece is a Four and it turns
 	// out to be a Five, nothing is changed
 
-			if (p.getRank().ordinal() == 4
-				&& p.getActualRank().ordinal() == 5)
-				guessedRankCorrect = guessedRankCorrect;
+			if (p.getRank() == Rank.FOUR
+				&& p.getActualRank() == Rank.FIVE) {}
 			else if (p.getRank().ordinal() >= p.getActualRank().ordinal())
 				guessedRankCorrect++;
 			else
