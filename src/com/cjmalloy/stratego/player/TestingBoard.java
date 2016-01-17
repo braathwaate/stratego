@@ -190,8 +190,8 @@ public class TestingBoard extends Board
 	// almost any discovery exceeds their value.  If the AI is
 	// winning (and therefore its pieces are reduced in value)
 	// a known Seven (or Nine) should sacrifice itself
-	// to discover a Four (20 stealth)
-	// but not a Five (10 stealth).  
+	// to discover a Four (40 stealth)
+	// but not a Five (16 stealth).  
 
 	private static final int VALUE_THREE = 400;
 	private static final int VALUE_FOUR = 200;
@@ -199,7 +199,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_SIX = 50;
 	private static final int VALUE_SEVEN = 36;
 	private static final int VALUE_EIGHT = 30;	// variable
-	private static final int VALUE_NINE = 28;
+	private static final int VALUE_NINE = 20;
 	private static final int VALUE_SPY=(VALUE_THREE + VALUE_FOUR)/2;
 	private static final int [] startValues = {
 		0,
@@ -754,9 +754,10 @@ public class TestingBoard extends Board
 		// unknown piece).
 
 		if (r == 5)
-			v = 16;
-		else if (r >= 6 && r <= 9) {
-			v = 10 + (r - 6) * 6;
+			v = values[c][5]/6;
+		else if (r >= 5 && r <= 9) {
+			final int stealthRatio[] = {0, 0, 0, 0, 0, 6, 5, 2, 2, 1};
+			v = values[c][r]/stealthRatio[r];
 
 		// Eight stealth is higher when there is still a
 		// bombed structure on the board because it is easier
@@ -780,9 +781,9 @@ public class TestingBoard extends Board
 
 		else if (r == 10) {
 
-		// Spy stealth is equal to about a Seven.
+		// Spy stealth is equal to about a Seven stealth.
 
-			v = 16;
+			v = valueStealth[c][6];
 		}
 		
 		// If the player is winning by more than the value
@@ -979,11 +980,11 @@ public class TestingBoard extends Board
 	{
 		if (sumValues[Settings.topColor] != 0)
 		for (int rank = 1; rank <= 10; rank++) {
-			long v = values[Settings.topColor][rank]/3;
+			long v = values[Settings.topColor][rank]/2;
 			v *= sumValues[Settings.bottomColor];
 			v /= sumValues[Settings.topColor];
 			values[Settings.topColor][rank] =
-				values[Settings.topColor][rank]*2/3 + (int)v;
+				values[Settings.topColor][rank]/2 + (int)v;
 		}
 	}
 
@@ -4077,6 +4078,7 @@ public class TestingBoard extends Board
 
 						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
 						vm += riskOfLoss(tp, fp);
+						vm = vm / distanceFactor(tp, fp);
 					}
 
 					tp.makeKnown();
@@ -4293,15 +4295,17 @@ public class TestingBoard extends Board
 								unknownScoutFarMove,
 								tp,
 								actualValue(tp));
+							vm = vm / distanceFactor(tp, fp);
 						}
 
-					} else {
+					} else { // not a possible bomb
 
 						vm += apparentWinValue(fp,
 							fprank,
 							unknownScoutFarMove,
 							tp,
 							actualValue(tp));
+						vm = vm / distanceFactor(tp, fp);
 
 		// Chase bluffs. Allow an expendable unknown AI piece to 
 		// chase a low ranked opponent piece.  For example, unknown
@@ -4714,7 +4718,7 @@ public class TestingBoard extends Board
 		// reasonable aggression.
 
 					vm += tpvalue - fpvalue;
-					vm = vm / distanceFactor(fp);
+					vm = vm / distanceFactor(tp, fp);
 
 		// vm is usually quite positive.  But in an endgame when
 		// the opponent has no expendable pieces, it becomes
@@ -5689,9 +5693,21 @@ public class TestingBoard extends Board
 	// the idea is that the further the attacker,
 	// the more likely it has some other target in mind
 
-	protected int distanceFactor(Piece p)
+	protected int distanceFactor(Piece aiPiece, Piece oppPiece)
 	{
-		int d = p.moves - p.movesOrig;
+		// If both the AI and opponent Pieces have apparent
+		// ranks (including suspected rank), then the AI believes
+		// the outcome is inevitable.
+
+		if (aiPiece.getApparentRank() != Rank.UNKNOWN
+			&& oppPiece.getApparentRank() != Rank.UNKNOWN)
+			return 1;
+
+		// But if either piece is unknown, then the outcome
+		// is less certain, because the AI piece might not be the target
+		// of an attack by the opponent piece.
+
+		int d = oppPiece.moves - oppPiece.movesOrig;
 
 	// square the distance
 
@@ -5789,7 +5805,6 @@ public class TestingBoard extends Board
 
 		int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 		v = v * risk / 10;
-		v = v / distanceFactor(fp);
 		return v;
 	}
 

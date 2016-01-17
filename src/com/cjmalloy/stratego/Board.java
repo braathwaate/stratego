@@ -1686,7 +1686,7 @@ public class Board
 		return newRank;
 	}
 
-	// Until version 10.1, this code relied on a simple count
+	// Until version 10.1, bluffing determination relied on a simple count
 	// of moves before the AI believed the piece was the rank
 	// indicated by its chasing behavior.  But this causes the
 	// AI to lose material when suspected ranked opponent pieces
@@ -1702,20 +1702,20 @@ public class Board
 	boolean maybeBluffing(Piece p)
 	{
 		if (p.moves >= SUSPECTED_RANK_AGING_DELAY)
-			return true;
+			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
 			Move oppm = getLastMove(i);
 			Move aim = getLastMove(i+1);
-			if (aim == null)
-				return false;
+			if (aim == null
+				|| oppm.getPiece() != p)
+				return true;
 			if (!Grid.isAdjacent(oppm.getTo(), aim.getTo())
 				&& !Grid.isAdjacent(oppm.getFrom(), aim.getTo()))
-				return false;
+				return true;
 		}
 		p.moves = SUSPECTED_RANK_AGING_DELAY;
-		return true;
-		
+		return false;
 	}
 
 	protected void setSuspectedRank(Piece p, Rank rank)
