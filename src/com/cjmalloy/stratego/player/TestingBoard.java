@@ -878,9 +878,9 @@ public class TestingBoard extends Board
 		//
 		// Initial values
 		// 1: 120
-		// 2: 96
-		// 3: 72
-		// 4: 48
+		// 2: 84
+		// 3: 48
+		// 4: 36
 		//
 		// Note: Stealth values are modified based on movable piece
 		// count (see below)
@@ -1281,16 +1281,17 @@ public class TestingBoard extends Board
 			}
 	}
 
-	protected void chaseWithUnknown(Piece p, int tmp[])
+	protected void chaseWithUnknown(Piece[][] plan, Piece p, int tmp[])
 	{
 		boolean found = false;
 		int valuableRank = 0;
 		int valuableRankValue = 0;
 		for ( int r = 1; r <= 10; r++) {
-			Piece a = planAPiece[1-p.getColor()][r-1];
+			Piece a = plan[1-p.getColor()][r-1];
 			if (a != null) {
 				if (a.isKnown())
 					continue;
+				
 
 		// If the expendable has fled from this rank before,
 		// it is no longer a convincing bluffer.
@@ -1304,8 +1305,10 @@ public class TestingBoard extends Board
 			}
 
 			if (isExpendable(1-p.getColor(), r)) {
-				genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
-				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+				if (plan == planAPiece)
+					genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+				else
+					genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
 				found = true;
 			} else if (valuableRank == 0 || valuableRankValue < pieceValue(1-p.getColor(), r)) {
 				valuableRank = r;
@@ -1317,9 +1320,17 @@ public class TestingBoard extends Board
 		// If unknown expendables are exhausted, bluff with some other minor piece
 
 		if (!found && valuableRank != 0) {
-			genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
-			genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+			if (plan == planAPiece)
+				genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+			else
+				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
 		}
+	}
+
+	protected void chaseWithUnknown(Piece p, int tmp[])
+	{
+		chaseWithUnknown(planAPiece, p, tmp);
+		chaseWithUnknown(planBPiece, p, tmp);
 	}
 
 	// Chase the piece "p"
