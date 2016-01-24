@@ -82,7 +82,7 @@ public class Board
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
-	protected int[][] lowerNotSuspectedRankCount = new int[2][10];
+	protected int[][] lowerKnownOrSuspectedRankCount = new int[2][10];
 	protected boolean[] isBombedFlag = new boolean[2];
 
 	// generate bomb patterns
@@ -866,14 +866,14 @@ public class Board
 		// leading to a loss elsewhere.
 		//
 		// The key change in 10.1 is that all chase ranks
-		// other than Five are retained if the piece approaches
+		// other than Four or Five are retained if the piece approaches
 		// an Unknown.  This is because chasing a known piece
 		// of any rank always gives more information than chasing
 		// an Unknown.  For example, if a piece chases a Six,
 		// it is probably a Five.  Then if it chases an Unknown,
 		// it still is probably a Five.
 		//
-		// Since Version 10.1, if a piece has a Five chase rank,
+		// Since Version 10.1, if a piece has a Four or Five chase rank,
 		// (suspected rank of Four) and it then approaches an
 		// Unknown, the chase rank changes to Six which
 		// usually results in a suspected rank of Five.
@@ -893,7 +893,8 @@ public class Board
 		 	return;
 
 		if (chaser.getApparentRank() == Rank.UNKNOWN
-			&& arank.ordinal() == 5
+			&& (arank == Rank.FIVE
+				|| arank == Rank.FOUR)
 			&& !isInvincible(chased))
 			chased.setActingRankChaseEqual(Rank.SIX);
 
@@ -1920,7 +1921,7 @@ public class Board
 		} // all pieces accounted for
 
 			int lowerRanks = 0;
-			int lowerNotSuspectedRanks = 0;
+			int lowerKnownOrSuspectedRanks = 0;
 			for (int r = 1; r <= 10; r++) {
 
 		// Another useful count is the number of opponent pieces with
@@ -1938,8 +1939,8 @@ public class Board
 				lowerRankCount[c][r-1] = lowerRanks;
 				lowerRanks += rankAtLarge(c, r);
 
-				lowerNotSuspectedRankCount[c][r-1] = lowerNotSuspectedRanks;
-				lowerNotSuspectedRanks += rankAtLarge(c, r) - suspectedRankAtLarge(c, r) - knownRankAtLarge(c, r);
+				lowerKnownOrSuspectedRankCount[c][r-1] = lowerKnownOrSuspectedRanks;
+				lowerKnownOrSuspectedRanks += suspectedRankAtLarge(c, r) + knownRankAtLarge(c, r);
 
 			}
 
@@ -1970,7 +1971,7 @@ public class Board
 				invincibleRank[1-c][rank-1] = false;
 
 			for (rank = 1;rank <= 10;rank++) {
-				if (lowerNotSuspectedRankCount[c][rank-1] > 0)
+				if (lowerKnownOrSuspectedRankCount[c][rank-1] < lowerRankCount[c][rank-1])
 					break;
 				invincibleRankInt[1-c] = rank;
 				invincibleRank[1-c][rank-1] = true;
@@ -2414,7 +2415,7 @@ public class Board
 		// large number of defenders.
 
 			Piece flag = getPiece(maybe[start][0]);
-			int guards = grid.movablePieceCount(flag.getColor(), maybe[start][0], 2)
+			int guards = grid.movablePieceCount(flag.getColor(), maybe[start][0], 2)*2
 				+ grid.movablePieceCount(1-flag.getColor(), maybe[start][0], 1);
 
 			if (size == 0

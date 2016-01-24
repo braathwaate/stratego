@@ -275,20 +275,26 @@ public class TestingBoard extends Board
 				Rank rank = p.getRank();
 				int r = rank.ordinal();
 
-				if (!p.isKnown()) {
-					planBPiece[p.getColor()][r-1]=np;
-				}
-
-				if (p.hasMoved() || p.isKnown()) {
-					// count the number of moved pieces
-					// to determine further movement penalties
 		// only one piece of a rank is assigned plan A
-		// and preferably a piece that is known
+		// and preferably a piece that has moved or is known and as
+		// far forward on the board as possible
 
-					if (!hasPlanAPiece(p.getColor(), r)
-						|| p.isKnown())
+				if (p.isKnown()) {
+					if (hasPlan(planAPiece, p.getColor(), r))
+						planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
+					planAPiece[p.getColor()][r-1]=np;
+				} else if (p.hasMoved()) {
+					if (!hasPlan(planAPiece, p.getColor(), r))
 						planAPiece[p.getColor()][r-1]=np;
-				}
+					else {
+						if (!planAPiece[p.getColor()][r-1].isKnown()) {
+							planAPiece[p.getColor()][r-1]=np;
+							planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
+						} else
+							planBPiece[p.getColor()][r-1]=np;
+					}
+				} else
+					planBPiece[p.getColor()][r-1]=np;
 			}
 		}
 
@@ -1054,8 +1060,7 @@ public class TestingBoard extends Board
 
 			Rank oppRank = Rank.SIX;
 			Rank thisRank = Rank.UNKNOWN;
-			Piece knownPiece = null;
-			Piece duplicateKnownPiece = null;
+			Piece duplicatePiece = null;
 			for (int i : attacklanes[lane])
 			for (int y = 0; y < 4; y++) {
 				Piece p = getPiece(i - y*11);
@@ -1065,12 +1070,28 @@ public class TestingBoard extends Board
 					if (p.getRank().ordinal() < oppRank.ordinal())
 						oppRank = p.getRank();
 				} else {
-					if (p.isKnown()
-						&& !isInvincible(p)) {
-						if (knownPiece == null)
-							knownPiece = p;
+
+		// Try to keep more than one non-invincible piece of the
+		// same rank or multiple known pieces out of the lanes.
+		// This reduces the risk of forks of known pieces.
+		// It should also help to spread the defenders into
+		// other lanes.
+		//
+		// TBD: this logic fails if there are three
+		// or more pieces in the lane and the duplicates are
+		// mixed in.  But mixed-in duplicates aren't as bad anyway.
+
+					if (!isInvincible(p)) {
+						if (duplicatePiece != null
+							&& (duplicatePiece.getRank() == p.getRank()
+							|| (duplicatePiece.isKnown()
+								&& p.isKnown())))
+
+
+							genPlanB(fleetmp, c, duplicatePiece.getRank().ordinal(), DEST_PRIORITY_LANE);
+
 						else
-							duplicateKnownPiece = p;
+							duplicatePiece = p;
 					}
 					if (p.getRank().ordinal() < thisRank.ordinal()
 						&& !isStealthy(p))
@@ -1130,15 +1151,6 @@ public class TestingBoard extends Board
 			for (int r = oppRank.ordinal()+1; r <= 5; r++) {
 				genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
 				genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
-			}
-
-		// If there are two or more non-invincible known ranks in a lane,
-		// at least one of them should flee until it is out of the lane.
-		// This reduces the risk of forks of known pieces.
-
-			if (duplicateKnownPiece != null) {
-				genPlanA(fleetmp, c, duplicateKnownPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
-				genPlanB(fleetmp, c, duplicateKnownPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
 			}
 
 		} // lane
@@ -1709,16 +1721,24 @@ public class TestingBoard extends Board
 		// the invincible rank with invincible pieces until it is
 		// cornered in order for the game to continue.
 		//
-		// If a lone chased piece is chased at high priority,
+		// If a lone chased piece is always chased at high priority,
 		// fleeing creates a pointless chase.
-		// However, if the chased piece has an adjacent piece
-		// that is also a target, then both pieces will not be
+		// However, if the chased piece is nearby another possible
+		// target, then perhaps both pieces might not be
 		// able to flee at once, so it is suitable to chase
 		// the clump at high priority.  And it is
 		// important to try to chase a clump at high priority because
 		// if the AI plays some other moves, it gives the opponent
 		// time to react, such as bringing in a defensive
 		// invincible piece.
+		//
+		// This reliance on the oracle is simply a guess and may or
+		// may not lead to material gain, because the targets
+		// could flee before the chaser arrives or a superior
+		// protector could come into play.  The important
+		// condition is to stop chasing at high priority
+		// once the clump dissolves in order to avoid continuous
+		// chase sequences.
 		//
 		// The goal is to corner the chased piece
 		// rather than approach it and push it
@@ -1743,13 +1763,13 @@ public class TestingBoard extends Board
 				if (isInvincible(p))
 					priority = DEST_PRIORITY_CHASE_DEFEND;
 				else if (!(j == 1 && hasUnsuspectedSpy(p.getColor()))
-					&& hasAdjacentTarget(p, j))
+					&& grid.movablePieceCount(p.getColor(), i, 1) >= 2)
 					priority = DEST_PRIORITY_CHASE_ATTACK;
 
 				genPlanA(1, destTmpA, 1-p.getColor(), j, priority);
 				genPlanB(1, destTmpB, 1-p.getColor(), j, priority);
 
-		// The AI is cautious in sending its unknown low ranked piece
+		// The AI is cautious in sending its unknown low ranked pieces
 		// to chase an opponent pieces because of the risk of
 		// discovery of its piece and loss of stealth.
 		//
@@ -1771,9 +1791,12 @@ public class TestingBoard extends Board
 			} else if (j <= invincibleWinRank[1-p.getColor()]
 				|| (lowerRankCount[p.getColor()][j-1] < 2
 					&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])) {
+				int priority = DEST_PRIORITY_CHASE;
+				if (grid.hasAttack(p))
+					priority = DEST_PRIORITY_CHASE_DEFEND;
 				if (hasFewExpendables(p.getColor(), 4)
 					|| p.getIndex() <= 65) {
-					genNeededPlanA(rnd.nextInt(10), destTmpA, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					genNeededPlanA(rnd.nextInt(10), destTmpA, 1-p.getColor(), j, priority);
 
 		// The stealth of the unknown AI One (like the Spy)
 		// is so important
@@ -1785,7 +1808,7 @@ public class TestingBoard extends Board
 		// on its side of the board, or it flees (see Flee()).
 
 				} else if (j != 1)
-					genPlanA(rnd.nextInt(2), destTmpA, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
+					genPlanA(rnd.nextInt(2), destTmpA, 1-p.getColor(), j, priority);
 				// tbd: PlanB as well
 				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
 
@@ -2776,7 +2799,7 @@ public class TestingBoard extends Board
 	private void genNeededPlanA(int neededNear, int [] desttmp, int color, int rank, int priority)
 	{
 		genPlanA(neededNear, desttmp, color, rank, priority);
-		if (!hasPlanAPiece(color, rank))
+		if (!hasPlan(planAPiece, color, rank))
 			setNeededRank(color, rank);
 	}
 
@@ -2836,7 +2859,7 @@ public class TestingBoard extends Board
 
 		if (neededNear != 0) {
 			int[]tmp = new int[121];
-			if (!hasPlanAPiece(color, rank))
+			if (!hasPlan(planAPiece, color, rank))
 				setNeededRank(color, rank);
 
 			// deter aimless chasing of the target piece, because
@@ -3166,9 +3189,9 @@ public class TestingBoard extends Board
 
 	}
 
-	public boolean hasPlanAPiece(int color, int r)
+	public boolean hasPlan(Piece plan[][], int color, int r)
 	{
-		return planAPiece[color][r-1] != null;
+		return plan[color][r-1] != null;
 	}
 
 	public int isWinning(int color)
@@ -6678,21 +6701,6 @@ public class TestingBoard extends Board
 
 		Rank fprank = fp.getRank();
 		return fp.getRank().ordinal() < tprank.ordinal();
-	}
-
-	boolean hasAdjacentTarget(Piece tp, int rank)
-	{
-		int to = tp.getIndex();
-		int color = tp.getColor();
-		for (int d : dir) {
-			Piece p = getPiece(to + d);
-			if (p == null
-				|| p.getColor() != color
-				|| p.getRank().ordinal() < rank)
-				continue;
-			return true;
-		}
-		return false;
 	}
 
 	boolean isStealthy(Piece p, int r)

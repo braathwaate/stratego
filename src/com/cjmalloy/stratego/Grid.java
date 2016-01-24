@@ -196,16 +196,9 @@ public class Grid
 		return pieceBitGrid[p.getColor()].xorMask(neighbor[0][i]);
 	}
 
-	public boolean hasAdjacentPiece(int i)
-	{
-		return pieceBitGrid[0].andMask(neighbor[0][i])
-			|| pieceBitGrid[1].andMask(neighbor[0][i]) ;
-	}
-
-	// same is isCloseToEnemy(turn, i, 0);
 	public boolean hasAttack(int turn, int i)
 	{
-		return pieceBitGrid[1-turn].andMask(neighbor[0][i]);
+		return isCloseToEnemy(turn, i, 0);
 	}
 
 	public boolean hasAttack(Piece p)
