@@ -5599,12 +5599,14 @@ public class TestingBoard extends Board
 		// with the number of scouts remaining.
 		//
 		// An important case is an attack on the Spy, because
-		// 9xS wins the Spy and its 200 point value.
-		// But if risk is high (say 50%), the AI will sacrifice
-		// a Four to save the Spy.
+		// 9xS wins the Spy (value between a Three and Four).
+		// Thus the AI will sacrifice a Four to save the Spy
+		// if the risk is 66% or greater.  Even if there is
+		// only one opponent Scout still remaining, there is still
+		// sustantial risk to the Spy (and the undiscovered One).
 
 		if (unknownScoutFarMove)
-			return 3 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
+			return 5 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
 		// High ranking pieces
 
 		int r = rank.ordinal();

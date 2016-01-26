@@ -2108,12 +2108,23 @@ public class AI implements Runnable
 					|| tp.getRank() == Rank.FLAG)
 					continue;
 
-		// If the attacker is near the flag, then the target might be
+		// If any attacker is near the flag, then the target might be
 		// the AI flag rather than the chased piece,
 		// so a broad search is used.
 
-				if (b.isFlagBombAtRisk(tp))
-					continue;
+		// For example,
+		// B8 -- -- -- RB RF
+		// -- RB -- R9 -- RB
+		// -- -- R8 RS -- --
+		// Broad search is needed to determine that Red Eight
+		// can protect the Red Flag bomb from Blue Eight.  So
+		// even if there is a hot chase going on elsewhere on the board,
+		// broad search must still be used.
+
+				if (b.isFlagBombAtRisk(tp)) {
+					deepSearch = 0;
+					return;
+				}
 
 				int steps = Grid.steps(fp.getIndex(), tp.getIndex());
 
