@@ -809,6 +809,8 @@ public class AI implements Runnable
 
 		genDeepSearch();
 
+		// Iterative Deepening
+
 		for (int n = 1; n < MAX_PLY; n++) {
 
 			Move killerMove = new Move(null, -1);
@@ -846,6 +848,31 @@ public class AI implements Runnable
 		//
 		// Alternatively, look at the planA/B matrices to
 		// determine direction.  Or use windowing.
+		//
+		// TBD: Localized minimax
+		// Pieces in the game of stratego have limited mobility,
+		// and this fact is used to advantage in the AI in
+		// the forward pruning mechanism.  Yet further improvement
+		// is possible by grouping pieces into independent sets
+		// where pieces in those sets cannot reach the enemy pieces
+		// in the other sets given the amount of search depth.
+		// Then the minimax function is applied to each set twice,
+		// allowing either player to move first.   The best move
+		// is then the maximum of the players moves minus the
+		// maximum of the opponents moves in the other sets.
+		//
+		// This grouping would greatly reduce the number of moves
+		// that have to be considered together, resulting in
+		// an exponential increase in speed with no loss
+		// in accuracy.  Furthermore, it makes headway into
+		// solving the pointless chase problem, where the opponent
+		// has a good move in one area of the board, but because
+		// the opponent has a pointless chase sequence in
+		// some other area of the board, it pushes the ability
+		// to see the good move beyond the horizon.
+		// An additional benefit is the ability to run the sets
+		// in parallel (multithreading).
+
 
 			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 			BitGrid bg = new BitGrid();

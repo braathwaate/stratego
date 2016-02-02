@@ -1436,8 +1436,7 @@ public class TestingBoard extends Board
 				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
 			}
 
-		// Only 1 active unknown piece
-		// is assigned to chase an opponent piece.
+		// Chase an opponent piece with an unknown piece.
 		//
 		// A non-active rank is occasionally summoned
 		// to avoid a draw when the lack of known lower ranked
@@ -1456,12 +1455,18 @@ public class TestingBoard extends Board
 		// Yet the chaser must also directly chase at least some
 		// of the time, because otherwise the opponent will
 		// learn the AI bluffing strategy.
+		//
+		// Version 10.1 chases with both the same rank and a
+		// lower rank.  This confuses the opponent about which
+		// piece is the lower ranked piece.  Additional chasers
+		// can cause the opponent piece to seek protection,
+		// and the discovery can lead to further gain.
 
 		//
 		// Note the use of GUARDED_OPEN.  See note below.
 		//
 			else {
-			for (int j = chasedRank - 1; j > 0; j--)
+			for (int j = chasedRank; j > 0; j--)
 				if (isInvincible(1-p.getColor(), j))
 					continue;
 				else if (rankAtLarge(1-p.getColor(),j) != 0) {
@@ -1473,7 +1478,8 @@ public class TestingBoard extends Board
 							genPlanA(rnd.nextInt(10), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 						else
 							genNeededPlanA(rnd.nextInt(2), destTmp[GUARDED_OPEN], 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-						break;
+						if (j != chasedRank)
+							break;
 					}
 				}
 
@@ -2891,74 +2897,27 @@ public class TestingBoard extends Board
 		setPlan(neededNear, planA[color][rank-1], desttmp, color, rank, priority);
 	}
 
-	// chase rank is permanently set only if a chase piece
-	// is unprotected (see Board).  However, if a piece with
-	// protection approaches an AI piece, the piece should
-	// still be considered a chaser.
-	// This encourages the AI to move its
-	// chased piece away.  If the chaser continues the chase,
-	// eventually chase rank will be permanently set.  If not,
-	// the AI may approach the chaser like any other unknown piece.
-	// For example:
-	// xx -- -- xx
-	// xx R5 -- xx
-	// -- -- B? B?
-	// -- B? B? B?
-	// If either unknown Blue approaches known Red Five, it will
-	// not have a chase rank because it has protection.  But the
-	// piece is likely a lower ranked piece.  So Red should move
-	// away.  If unknown Blue continues the chase by moving
-	// away from its protection, it inherits a permanent chase rank.
-	// If not, Red Five may approach
-	// the unknown Blue regardless of its previous chase behavior.
-	//
-	// An exception is if an opponent piece forks a known AI
-	// piece and an unknown AI piece.  The identity of the opponent
-	// cannot be determined so it is best to rely on prior information
-	// about the piece.  It could be a lower piece chasing the
-	// the known AI piece but because it is ignoring the possibility
-	// that the unknown AI piece could be even lower in rank,
-	// this is questionable, unless the opponent has a dangerous
-	// unknown rank.  More likely it is a higher piece
-	// bluffing as a lower piece so that it can attack the unknown
-	// piece.  (See Board.java: no permanent chase rank set).
-	public Rank getTempSuspectedRank(Rank r, int to)
+	protected boolean hasAdjacentUnknownEnemy(int color, int to)
 	{
-		// Even if the approaching piece already has a lower
-		// suspected rank, override it if it approaches an AI piece.
-		// But if the chase rank was unknown, assume that the
-		// piece is bluffing.  Otherwise, the opponent can too
-		// easily bluff.
-		// TBD: Bluffing is why suspected rank analysis of the
-		// setup is required, so this override needs to be revisited.
-
-		if (r == Rank.UNKNOWN)
-			r = Rank.NIL;
 		for (int d : dir) {
 			Piece tp = getPiece(to + d);
 			if (tp == null
-				|| tp.getColor() != Settings.topColor)
+				|| tp.getColor() != 1 - color)
 				continue;
-			if (tp.isKnown()
-				&& tp.getRank().ordinal() < r.ordinal()) 
-				r = tp.getRank();
-			else if (r == Rank.NIL)
-				r = Rank.UNKNOWN;
+			if (tp.getApparentRank() == Rank.UNKNOWN)
+				return true;
 		}
-
-		return r;
+		return false;
 	}
 
-
-	//
 	// suspectedRank is based on ActingRankChase.
 	// If the piece has chased another piece,
 	// the ai guesses that the chaser is a lower rank
 	// If there are no lower ranks, then
 	// the chaser may be of the same rank (or perhaps higher, if
 	// bluffing)
-	//
-	public void genSuspectedRank()
+
+	protected void genSuspectedRank()
 	{
 		super.genSuspectedRank();
 
@@ -3019,7 +2978,7 @@ public class TestingBoard extends Board
 	// This ability needs to distilled into an algorithm giving
 	// the AI the same advantage.
 
-	public void genForay()
+	protected void genForay()
 	{
 		if (forayLane == -1) {
 			// Choose the foray lane.
@@ -3509,14 +3468,19 @@ public class TestingBoard extends Board
 		// approach the unknown Spy, because it could be the
 		// unknown One.
 
-			if (fpcolor == Settings.bottomColor
-				&& !fp.isKnown()
+			if (fp.getApparentRank() == Rank.UNKNOWN
 				&& fp.getActingRankChase() != Rank.UNKNOWN
 				&& grid.hasAttack(fpcolor, to)) {
 
-				Rank newRank = getTempSuspectedRank(fprank, to);
-				if (newRank == Rank.UNKNOWN)
+				if (hasAdjacentUnknownEnemy(fpcolor, to)) {
 					fp.setActingRankChaseEqual(Rank.UNKNOWN);
+
+		// By approaching an unknown, the piece divulges
+		// its identity as a weak piece, so this is a bad idea
+		// unless it has a material reason to do so.
+
+					vm -= DEST_PRIORITY_CHASE_ATTACK;
+				}
 			}
 
 			UndoMove m2 = getLastMove(2);
@@ -3742,8 +3706,12 @@ public class TestingBoard extends Board
 		// until time runs out. So the AI deems this
 		// as an even exchange, even if the AI piece still has stealth.
 		//
-		// If the AI is losing, it is better for the AI to flee
-		// and hope for a tie by time expiration.
+		// If the AI is losing, it may be better for the AI to flee
+		// and hope for a tie by time expiration.  But this makes
+		// for boring games, and the AI still has confidence that
+		// it could win, in spite of that it may be losing.  And the
+		// isWinning() function isn't perfect, because it only looks
+		// at material value.
 		//
 		// Note that suspected invincible pieces (except the One,
 		// if the AI has the Spy) must also
@@ -3753,7 +3721,6 @@ public class TestingBoard extends Board
 		// lower than suspected.
 
 						if (isInvincible(fp)
-							&& isWinning(Settings.topColor) > 0
 							&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
 							vm -= 10;
 
@@ -3807,7 +3774,6 @@ public class TestingBoard extends Board
 				if (tp.isKnown()) {
 					if (isInvincible(tp)
 						&& !fp.isKnown()
-						&& isWinning(Settings.topColor) > 0
 						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
 						vm += 10;
 					else
@@ -4916,6 +4882,11 @@ public class TestingBoard extends Board
 			r = 5;	// results in Five stealth
 		}
 
+		if (r == 0)
+			tpvalue += valueStealth[tp.getColor()][0];
+		else 
+			tpvalue += valueStealth[tp.getColor()][r-1];
+
 		// Version 9.7 introduced blufferRisk, which causes
 		// the stealth value of suspected pieces to be reduced
 		// if the opponent does not bluff, because the AI does
@@ -4923,17 +4894,20 @@ public class TestingBoard extends Board
 		// their true rank.  So to keep the value of UNK
 		// significantly greater
 		// than LOSES, version 9.8 adds a value based on rank.
-		// This value cannot be higher than 1/2 the value of
+		//
+		// Yet the expected gain from an unknown encounter
+		// should the AI piece actually win is likely low.
+		// So this value cannot be higher than 1/2 the value of
 		// the AI piece; otherwise if an opponent piece is guarded
 		// by an unknown, the AI will take the opponent piece.
 		// This usually happens with 4x5, because a this is
-		// 100-50, only 50 points.  So the stealth of a Three
-		// plus the higher UNK value must be less than 50 points.
+		// 200-100, only 100 points.  So the stealth of a Three (48)
+		// plus the value based on rank must be less than 100 points.
+		//
+		// Note: this value decreases with the value of AI pieces
+		// because then then AI loses less in an unknown encounter
 
-		if (r == 0)
-			tpvalue += valueStealth[tp.getColor()][0];
-		else 
-			tpvalue += valueStealth[tp.getColor()][r-1] + (9-fprank)*4;
+		tpvalue += values[fp.getColor()][r+1] / 6;
 
 		return tpvalue;
 	}

@@ -1442,7 +1442,7 @@ public class Board
 	// Note that chase rank is set after the player move
 	// but flee rank is set before the player move.
 
-	void genChaseRank(int turn)
+	protected void genChaseRank(int turn)
 	{
 		// Indirect chase rank now depends on unassigned
 		// suspected ranks because of bluffing.
@@ -1739,7 +1739,7 @@ public class Board
 	// the chaser may be of the same rank (or perhaps higher, if
 	// bluffing)
 	//
-	public void genSuspectedRank()
+	protected void genSuspectedRank()
 	{
 		int piecesNotBomb[] = new int[2];
 		for (int c = RED; c <= BLUE; c++) {
@@ -3260,6 +3260,18 @@ public class Board
 		final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
 		for (int x : xlanes) {
 			Piece p = getPiece(Grid.getIndex(x, Grid.yside(1-bturn, 3)));
+			if (p != null
+				&& !p.hasMoved()
+				&& p.getApparentRank() == Rank.UNKNOWN
+				&& p.getActingRankChase() == Rank.NIL)
+					p.setActingRankChaseLess(Rank.UNKNOWN);
+		}
+
+		// Assign unknown chase rank to unmoved back row pieces
+		// (AI guesses that opponent does not bury strong pieces)
+
+		for (int x = 0; x < 10; x++) {
+			Piece p = getPiece(Grid.getIndex(x, Grid.yside(1-bturn, 0)));
 			if (p != null
 				&& !p.hasMoved()
 				&& p.getApparentRank() == Rank.UNKNOWN
