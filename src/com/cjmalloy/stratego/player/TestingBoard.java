@@ -1545,7 +1545,7 @@ public class TestingBoard extends Board
 		// furthers the game.
 		//
 		if ((knownRankAtLarge(1-p.getColor(), chasedRank) != 0
-			|| valueStealth[1-p.getColor()][chasedRank-1] == 0)
+			|| stealthValue(1-p.getColor(), chasedRank) == 0)
 			&& isWinning(1-p.getColor()) >= 0) {
 
 			// go for an even exchange
@@ -1712,7 +1712,7 @@ public class TestingBoard extends Board
 			int destTmpB[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
 
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
-				|| valueStealth[1-p.getColor()][j-1] <= values[p.getColor()][unknownRank[p.getColor()]]) {
+				|| stealthValue(1-p.getColor(), j) <= values[p.getColor()][unknownRank[p.getColor()]]) {
 		// Prior to version 9.6 it was thought that
 		// invincible pieces cannot always chase at high priority,
 		// otherwise the AI will use these pieces in an
@@ -1796,7 +1796,7 @@ public class TestingBoard extends Board
 
 			} else if (j <= invincibleWinRank[1-p.getColor()]
 				|| (lowerRankCount[p.getColor()][j-1] < 2
-					&& valueStealth[1-p.getColor()][j-1] < values[p.getColor()][chasedRank])) {
+					&& stealthValue(1-p.getColor(), j) < values[p.getColor()][chasedRank])) {
 				int priority = DEST_PRIORITY_CHASE;
 				if (grid.hasAttack(p))
 					priority = DEST_PRIORITY_CHASE_DEFEND;
@@ -1956,6 +1956,8 @@ public class TestingBoard extends Board
 		// must be protected from an unknown or Eight
 
 			Rank rankAttacker = pAttacker.getRank();
+			int attackerValue = pieceValue(pAttacker);
+
 			if (pside != null
 				&& pside.getRank() == Rank.BOMB) {
 				if (!(rankAttacker == Rank.UNKNOWN
@@ -1966,10 +1968,12 @@ public class TestingBoard extends Board
 		// could be a low ranked piece on a kamikaze attack to discover the flag,
 		// so the AI needs an equal or even lower piece.
 
-			} else if (rankAttacker == Rank.UNKNOWN)
+			} else if (rankAttacker == Rank.UNKNOWN) {
 				rankAttacker = Rank.toRank(lowestUnknownNotSuspectedRank);
+				attackerValue = pieceValue(1-color, rankAttacker);
+			}
 
-			Piece defender = getDefender(color, destTmp, rankAttacker, stepsAttacker);
+			Piece defender = getDefender(color, destTmp, rankAttacker, attackerValue, stepsAttacker);
 			if (defender == null)
 				continue;	// no imminent danger
 
@@ -2003,7 +2007,7 @@ public class TestingBoard extends Board
 	// If stepsTarget == 0, just find the highest ranked piece capable
 	// of defending.
 
-	private Piece getDefender(int color, int destTmp[], Rank attacker, int stepsTarget)
+	private Piece getDefender(int color, int destTmp[], Rank attacker, int attackerValue, int stepsTarget)
 	{
 		int attackerRank = attacker.ordinal();
 
@@ -2038,7 +2042,7 @@ public class TestingBoard extends Board
 
 			if (p.getRank().ordinal() > attackerRank
 				|| (!p.isKnown()
-					&& stealthValue(p) > pieceValue(1-color, attackerRank)))
+					&& stealthValue(p) > attackerValue))
 				continue;
 
 			if (stepsTarget != 0 && destTmp[i] < stepsDefender
@@ -2214,7 +2218,7 @@ public class TestingBoard extends Board
 		// Obviously, that would be no deterrent
 		// to a lower-ranked unknown attacker.
 
-				Piece defender = getDefender(color, destTmp, Rank.EIGHT, stepsAttacker);
+				Piece defender = getDefender(color, destTmp, Rank.EIGHT, pieceValue(1-color, Rank.EIGHT), stepsAttacker);
 				if (defender != null) {
 					setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG);
 				} else {
@@ -2229,7 +2233,7 @@ public class TestingBoard extends Board
 		// area, because overreaction is a dead giveaway).
 
 				if (pProtector != null && flagp.isKnown()) {
-					defender = getDefender(color, destTmp, pProtector.getRank(), stepsProtector);
+					defender = getDefender(color, destTmp, pProtector.getRank(), pieceValue(pProtector), stepsProtector);
 					if (defender != null) {
 						int[] destTmp4 = genDestTmpGuarded(1-color, pProtector.getIndex(), pProtector.getRank());
 						setDefender(defender, destTmp4, DEST_PRIORITY_DEFEND_FLAG_AREA);
@@ -2376,7 +2380,7 @@ public class TestingBoard extends Board
 		// minimax should ward off any attackers.)
 
 				int destTmp[] = genDestTmp(GUARDED_OPEN, color, flagi + 22);
-				Piece defender = getDefender(color, destTmp, Rank.SEVEN, 0);
+				Piece defender = getDefender(color, destTmp, Rank.SEVEN, pieceValue(1-color, Rank.SEVEN), 0);
 
 		// TBD: The guard is only necessary if there isn't already
 		// some other piece blocking the path.  Otherwise, in an equal
@@ -3654,7 +3658,7 @@ public class TestingBoard extends Board
 		// capture Red Four.
 
 					if (!fp.isKnown()) {
-						vm -= valueStealth[Settings.bottomColor][tprank.ordinal()-1];
+						vm -= stealthValue(Settings.bottomColor, tprank.ordinal());
 
 		// While the AI always gains the stealth value of the
 		// unknown opponent piece, it may have guessed wrong.
@@ -4794,46 +4798,6 @@ public class TestingBoard extends Board
 		int tpvalue = 0;
 		int fprank = fp.getRank().ordinal();
 
-		// Note: Acting Rank Chase is an
-		// unreliable predictor of actual rank.
-		// It is easy to get suckered into thinking
-		// that a bluffing piece is a low rank and
-		// then sacrificing material to avoid it.
-
-		// If a Spy has a shot at a unknown piece acting like a One,
-		// it must be careful, because the piece could be bluffing,
-		// or it could be a Two that chased the ai Two.
-		// if ((tp.getActingRankChase() == Rank.ONE
-		// 	|| tp.getActingRankChase() == Rank.TWO)
-		// 	&& fp.getRank() == Rank.SPY)
-		// 	tpvalue =?
-
-		// If an unknown piece flees from an opponent unknown piece,
-		// it is a good indication that the opponent piece
-		// is either a high ranked piece or an unknown low ranked
-		// piece trying to maintain stealth.  Either way, this
-		// makes the piece a more attractive target.
-		//
-		// So extra value is added to the target piece.
-		// (Note: this rule had been handled in winFight() as
-		// a WIN, but then the opponent piece is removed from
-		// the board, so it is handled here, because the
-		// opponent piece remains, as would be expected if
-		// the target is a lower ranked piece.)
-		//
-		// Note: If a piece has a chase rank, then the piece
-		// has a suspected rank and is not handled here.  But
-		// if the chase rank is UNKNOWN, it does not have
-		// a suspected rank.  Because the piece has chased
-		// an unknown piece, it is not a low ranked piece.
-
-		Rank chaseRank = tp.getActingRankChase();
-		Rank fleeRank = tp.getActingRankFleeLow();
-		if (!isPossibleBomb(tp)
-			&& chaseRank != Rank.UNKNOWN
-			&& fleeRank == Rank.UNKNOWN)
-			tpvalue += 15;
-
 		// Once all the expendable ranks are gone,
 		// the AI can expect to receive more stealth value
 		// in an unknown exchange.
@@ -4841,7 +4805,8 @@ public class TestingBoard extends Board
 		int r = fprank-1;	// gains the stealth of one rank lower
 
 		if (lowestUnknownExpendableRank < 5)
-			r = Math.min(r, lowestUnknownExpendableRank);
+			tpvalue = stealthValue(tp.getColor(), 
+				Math.min(r, lowestUnknownExpendableRank));
 
 		// As the opponent uses up its expendable ranks,
 		// it becomes more likely that the unknown piece
@@ -4851,7 +4816,7 @@ public class TestingBoard extends Board
 		// the same stealth value as an AI Five.
 
 		else if (fprank >= 5 && lowestUnknownExpendableRank >= r)
-			r = 4;	// results in Four stealth
+			tpvalue = stealthValue(tp.getColor(), 4);
 
 		// unknownValue() should be more positive than LOSES.
 		// For example, if an AI piece Six or higher
@@ -4860,32 +4825,24 @@ public class TestingBoard extends Board
 		// the result is UNK and it gains the stealth value of a Five
 		// plus a nominal amount.
 
-		else if (fprank > 6) {
+		else if (fprank >= 6)
 
-		// A high ranked AI piece should prefer:
-		// (1) a suspected Four (or lower rank)
-		// (2) a completely unknown piece
+		// If a high ranked AI piece (6-9) has a choice of
+		// an exchange with a suspected Five and some other piece,			// it should prefer the other piece it it is:
+		// (1) a fleeing unknown (or a suspected Three or lower)
+		// (2) completely unknown (or a suspected Four or lower)
 		// (3) a piece with an unknown chase rank
-		// (4) a suspected Five
 		//
-		// A loss to a suspected Five gains the Five stealth,
-		// so 2 and 3 need to return a higher value.
-		//
-		// This is splitting hairs, but useful to discourage known
-		// low value AI pieces from chasing unknown weak opponent pieces
-		// that probably would win.  tpvalue must be between
-		// Five stealth (8) and Four stealth (15).
+		// A loss to a suspected Five gains the Five stealth
+		// which is the same as (3), so (3) needs to return
+		// a slightly higher value
+		// (which happens below with the value based on rank)
 
-			if (chaseRank == Rank.UNKNOWN)
-				tpvalue -= (fprank - 6);
-
-			r = 5;	// results in Five stealth
-		}
-
-		if (r == 0)
-			tpvalue += valueStealth[tp.getColor()][0];
+			tpvalue = stealthValue(tp);
+		else if (r == 0)
+			tpvalue = stealthValue(tp.getColor(), 1);
 		else 
-			tpvalue += valueStealth[tp.getColor()][r-1];
+			tpvalue = stealthValue(tp.getColor(), r);
 
 		// Version 9.7 introduced blufferRisk, which causes
 		// the stealth value of suspected pieces to be reduced
@@ -4907,6 +4864,8 @@ public class TestingBoard extends Board
 		// Note: this value decreases with the value of AI pieces
 		// because then then AI loses less in an unknown encounter
 
+		if (r == 7)
+			r = 9;
 		tpvalue += values[fp.getColor()][r+1] / 6;
 
 		return tpvalue;
@@ -5016,8 +4975,9 @@ public class TestingBoard extends Board
 			|| tp.getRank().ordinal() >  4
 			|| fp.getActingRankFleeLow() == tp.getRank()
 			|| (fp.getActingRankFleeLow() != Rank.NIL
+				&& fp.getActingRankFleeLow() != Rank.UNKNOWN
 				&& tp.getRank() != Rank.ONE	// Spy flees from any other piece
-				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow().ordinal()) > stealthValue(Settings.topColor, tp.getRank().ordinal()-1) * 7 / 10)
+				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow()) > stealthValue(tp) * 7 / 10)
 			|| (fp.getActingRankChase() != Rank.NIL
 				&& isExpendable(Settings.bottomColor, fp.getActingRankChase().ordinal()))
 			|| ((fp.getRank() == Rank.FLAG || fp.getRank() == Rank.BOMB)
@@ -5389,17 +5349,13 @@ public class TestingBoard extends Board
 
 	private int stealthValue(int c, int r)
 	{
+		assert r != Rank.UNKNOWN.ordinal() : "Rank.UNKNOWN stealth depends on acting rank chase and flee";
 		return valueStealth[c][r-1];
 	}
 
 	private int stealthValue(int c, Rank rank)
 	{
-		int r;
-		if (rank == Rank.UNKNOWN)
-			r = lowestUnknownExpendableRank;
-		else
-			r = rank.ordinal();
-		return stealthValue(c, r);
+		return stealthValue(c, rank.ordinal());
 	}
 
 	private int stealthValue(Piece p)
@@ -5407,7 +5363,28 @@ public class TestingBoard extends Board
 		if (p.isKnown())
 			return 0;
 
-		return stealthValue(p.getColor(), p.getRank());
+		Rank rank = p.getRank();
+
+		// Unknowns that chase unknowns have low stealth.
+		// Unknowns that flee unknowns have high stealth.
+
+		// If an unknown piece flees from an opponent unknown piece,
+		// it is a good indication that the opponent piece
+		// is either a high ranked piece or an unknown low ranked
+		// piece trying to maintain stealth.  Either way, the
+		// piece has more stealth than a middle rank piece.
+
+		if (rank == Rank.UNKNOWN) {
+			if (p.getActingRankChase() == Rank.UNKNOWN)
+				return stealthValue(p.getColor(), 5);
+			if (p.getActingRankFleeLow() == Rank.UNKNOWN
+				&& !isPossibleBomb(p))
+				return stealthValue(p.getColor(), 3);
+
+			return stealthValue(p.getColor(), 4);
+		}
+
+		return stealthValue(p.getColor(), rank);
 	}
 
 	// If the opponent has an invincible win rank,
@@ -5835,7 +5812,7 @@ public class TestingBoard extends Board
 		v += values[p.getColor()][r];
 
 		if (!p.isKnown())
-			v += valueStealth[p.getColor()][r-1];
+			v += stealthValue(p.getColor(), r);
 
 		// Suspected ranks have much less value than known ranks
 		// because of uncertainty.  The value of a suspected rank
@@ -6050,19 +6027,12 @@ public class TestingBoard extends Board
 			&& fp.getMaybeEight()) {
 			if (tp.isKnown() || tp.aiValue() != 0)
 				return Rank.WINS;	// maybe not
-			else
-				return Rank.LOSES;	// most likely
-			}
+			return Rank.LOSES;	// most likely
 
-		int result = winFight(fprank, tprank);
-
-		if (result == Rank.UNK) {
-
-		if (tp.getColor() == Settings.topColor) {
+		} else if (fprank == Rank.UNKNOWN) {
 
 			// AI IS DEFENDER (tp)
 
-			assert fprank == Rank.UNKNOWN : "opponent piece must be UNKNOWN (" + fprank + "X" + tprank + ")";
 			assert !fp.isKnown() : "opponent piece must be unknown (" + fprank + "X" + tprank + ")";
 
 		// By definition, attack on invincible rank loses or is even.
@@ -6178,62 +6148,64 @@ public class TestingBoard extends Board
 						return Rank.EVEN;	// maybe not
 			}
 
-		// Any piece will take a SPY.
+		// Any piece will take a SPY or FLAG
 
-			else if (tprank == Rank.SPY)
+			else if (tprank == Rank.SPY
+				|| tprank == Rank.FLAG)
 				return Rank.WINS;
 
-		} else {
+			return Rank.UNK;
+
+		} else if (tprank == Rank.UNKNOWN) {
 
 		// AI IS ATTACKER (fp)
 
-		assert tprank == Rank.UNKNOWN : "opponent piece must be UNKNOWN (" + fprank + "X" + tprank + ")";
-		assert !tp.isKnown() : "opponent piece must be unknown (" + fprank + "X" + tprank + ")";
+			assert !tp.isKnown() : "opponent piece must be unknown (" + fprank + "X" + tprank + ")";
 
-		if (fprank == Rank.BOMB || fprank == Rank.FLAG)
-			return Rank.LOSES;	// but has bluffing value
+			if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+				return Rank.LOSES;	// but has bluffing value
 
 		// If tp could be a bomb and fp is not an Eight,
 		// the result is handled in UNK.  This must have
 		// a higher value than LOSES.
 
-		else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
-			return result;
+			else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
+				return Rank.UNK;
 
 		// By definition, invincible rank wins or is even
 		// on attack of unknown moved pieces.
 		// But invincible eights should be used for attacking
 		// bombs rather than other eights.
-		if (isInvincible(fp)) {
-			if (fprank.ordinal() >= 8)
-				return Rank.EVEN;	// maybe not, could be WINS
-			else
-				return Rank.WINS;	// maybe not, could be EVEN
-		}
+			if (isInvincible(fp)) {
+				if (fprank.ordinal() >= 8)
+					return Rank.EVEN;	// maybe not, could be WINS
+				else
+					return Rank.WINS;	// maybe not, could be EVEN
+			}
 
-		else if (isFleeing(fp, tp))
-			return Rank.WINS; // maybe not, but who cares?
+			else if (isFleeing(fp, tp))
+				return Rank.WINS; // maybe not, but who cares?
 
-		else if (tp.getActingRankChase() == Rank.UNKNOWN
-			&& !isNearOpponentFlag(tp)
-			&& (dangerousUnknownRank == 99
+			else if (tp.getActingRankChase() == Rank.UNKNOWN
+				&& !isNearOpponentFlag(tp)
+				&& (dangerousUnknownRank == 99
 					|| fprank.ordinal() >= 5)) {
-					int rank = lowestUnknownExpendableRank;
-					if (tp.isRankLess())
-						rank--;
+				int rank = lowestUnknownExpendableRank;
+				if (tp.isRankLess())
+					rank--;
 				if (fprank.ordinal() < lowestUnknownExpendableRank)
 					return Rank.WINS;	// maybe not
 				else if (fprank.ordinal() == lowestUnknownExpendableRank)
 					return Rank.EVEN;	// maybe not
-		}
+			}
 		// A spy almost always loses when attacking an unknown
-		else if (fprank == Rank.SPY)
-			return Rank.LOSES;	// maybe not
+			else if (fprank == Rank.SPY)
+				return Rank.LOSES;	// maybe not
 
+			return Rank.UNK;
 		} // ai attacker
-		} // result UNK
-		
-		return result;
+
+		return winFight(fprank, tprank);
 	}
 
 	// Note: Acting Rank is an unreliable predictor
@@ -6369,7 +6341,7 @@ public class TestingBoard extends Board
 			return true;
 
 		if (rank == Rank.NINE	// nines have high stealth value but are not targets
-			|| valueStealth[p.getColor()][rank.ordinal()-1] < values[1-p.getColor()][9])
+			|| stealthValue(p) < values[1-p.getColor()][9])
 			return false;
 
 		return true;
@@ -6623,11 +6595,17 @@ public class TestingBoard extends Board
 
 	int pieceValue(int c, int r)
 	{
-		return values[c][r] + valueStealth[c][r-1];
+		return values[c][r] + stealthValue(c, r);
 	}
+
+	int pieceValue(int c, Rank rank)
+	{
+		return pieceValue(c, rank.ordinal());
+	}
+
 	int pieceValue(Piece p)
 	{
-		return p.aiValue() + pieceValue(p.getColor(), p.getRank().ordinal());
+		return p.aiValue() + values[p.getColor()][p.getRank().ordinal()] + stealthValue(p);
 	}
 
 	boolean isNearOpponentFlag(int to)

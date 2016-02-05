@@ -73,9 +73,6 @@ public enum Rank
 		if (defend == Rank.FLAG)
 			return WINS;
 
-		if (this == Rank.UNKNOWN || defend == Rank.UNKNOWN)
-			return UNK;
-
 		if (this == defend)
 		{
 			if (Settings.bDefendAdvantage)

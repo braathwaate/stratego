@@ -1972,7 +1972,7 @@ public class Board
 
 			for (rank = 1;rank <= 10;rank++) {
 				if (lowerKnownOrSuspectedRankCount[c][rank-1] < lowerRankCount[c][rank-1])
-					break;
+					continue;
 				invincibleRankInt[1-c] = rank;
 				invincibleRank[1-c][rank-1] = true;
 			}
