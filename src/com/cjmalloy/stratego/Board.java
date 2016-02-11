@@ -2525,13 +2525,14 @@ public class Board
 		remove(p);
 	}
 	
-	public void remove(int i)
+	public boolean remove(int i)
 	{
 		Piece p = getPiece(i);
 		if (p == null)
-			return;
+			return false;
 		remove(p);
 		clearPiece(i);
+		return true;
 	}
 
 	public void remove(Piece p)
@@ -2543,9 +2544,9 @@ public class Board
 				     }});
 	}
 
-	public void remove(Spot s)
+	public boolean remove(Spot s)
 	{
-		remove(grid.getIndex(s.getX(), s.getY()));
+		return remove(grid.getIndex(s.getX(), s.getY()));
 	}
 
 	// Three Moves on Two Squares: Two Square Rule.

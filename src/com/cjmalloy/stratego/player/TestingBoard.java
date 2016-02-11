@@ -98,7 +98,7 @@ public class TestingBoard extends Board
 	public ArrayList<Piece>[] scouts = (ArrayList<Piece>[])new ArrayList[2];
 
 	protected boolean[] foray = new boolean[15];
-	protected static int forayMap[] = new int[121];
+	protected static boolean forayMap[] = new boolean[121];
 	protected static int forayLane = -1;
 
 	// De Boer (2007) suggested a formula
@@ -1081,18 +1081,19 @@ public class TestingBoard extends Board
 		// or more pieces in the lane and the duplicates are
 		// mixed in.  But mixed-in duplicates aren't as bad anyway.
 
-					if (!isInvincible(p)) {
-						if (duplicatePiece != null
-							&& (duplicatePiece.getRank() == p.getRank()
-							|| (duplicatePiece.isKnown()
-								&& p.isKnown())))
+					if (p.getRank() == Rank.SPY
+						|| (p.getRank() == Rank.ONE && !p.isKnown()))
+						genPlanB(fleetmp, c, p.getRank().ordinal(), DEST_PRIORITY_LANE);
+					else if (duplicatePiece != null
+						&& (duplicatePiece.getRank() == p.getRank()
+						|| (duplicatePiece.isKnown()
+							&& p.isKnown())))
 
+						genPlanB(fleetmp, c, duplicatePiece.getRank().ordinal(), DEST_PRIORITY_LANE);
 
-							genPlanB(fleetmp, c, duplicatePiece.getRank().ordinal(), DEST_PRIORITY_LANE);
+					else if (!isInvincible(p))
+						duplicatePiece = p;
 
-						else
-							duplicatePiece = p;
-					}
 					if (p.getRank().ordinal() < thisRank.ordinal()
 						&& !isStealthy(p))
 						thisRank = p.getRank();
@@ -2283,7 +2284,8 @@ public class TestingBoard extends Board
 		for (int d : dir) {
 			int j = flagi + d;
 				
-			if (!Grid.isValid(j))
+			if (!Grid.isValid(j)
+				|| Grid.getY(j) > 3)
 				continue;
 			Piece p = getPiece(j);
 			if (p == null) {
@@ -2291,8 +2293,8 @@ public class TestingBoard extends Board
 
 		// If flag area had a bomb removed, the flag is known
 
-				if (getSetupRank(j) == Rank.BOMB)
-					makeFlagKnown(pflag);
+				// if (getSetupRank(j) == Rank.BOMB)
+				// 	makeFlagKnown(pflag);
 				continue;
 			}
 
@@ -2300,10 +2302,10 @@ public class TestingBoard extends Board
 		// or flag has a known bomb
 		// then the ai guesses that the flag is known
 
-			if (p.getColor() != color 
-				|| (p.getRank() == Rank.BOMB && p.isKnown())) {
-				makeFlagKnown(pflag);
-			}
+			// if (p.getColor() != color 
+			// 	|| (p.getRank() == Rank.BOMB && p.isKnown())) {
+			// 	makeFlagKnown(pflag);
+			// }
 
 			if (p.getRank() == Rank.BOMB)
 				p.setAiValue(aiBombValue(p.getColor()));
@@ -2963,7 +2965,7 @@ public class TestingBoard extends Board
 		}
 	}
 
-	// An expedition into the unmoved and unknown area of the
+	// An expedition into the unknown and unmoved area of the
 	// opponents ranks is called a foray.  
 	// The idea behind a foray is to discover low ranked pieces
 	// and win higher ranked pieces while avoiding Bombs.
@@ -2986,35 +2988,56 @@ public class TestingBoard extends Board
 	{
 		if (forayLane == -1) {
 			// Choose the foray lane.
-			for (int lane = 0; lane < 7; lane += 3) {
-			int obstacle = 0;
-			for (int y = 2; y < 4; y++)
-			for (int x = 0; x < 4; x++) {
-				int i = Grid.getIndex(x + lane, y);
-				Piece p = getPiece(i);
-				if (p == null)
-					continue;
-				if (p.getRank() == Rank.BOMB)
-					obstacle+=3;
-				else if (p.getRank() == Rank.ONE
-					|| p.getRank() == Rank.SPY)
-					obstacle+=2;
-				else if (p.getRank() == Rank.EIGHT)
-					obstacle++;
-			}
-			if (obstacle > 2)
-				continue;
+			int maxPower = -3;
+		for (int lane = 0; lane < 7; lane += 3) {
 
-			if (forayLane == -1)
-				forayLane = lane;
+		// For now, no forays in the middle lane
+		// TBD: randomly allow them
 
 			if (lane == 3)
 				continue;
 
-			if (rnd.nextInt(2) == 0 && lane == 0)
-				break;
+			int power = 0;
+			for (int y = 2; y < 4; y++)
+			for (int x = 0; x < 4; x++) {
+				int i = Grid.getIndex(x + lane, y);
+				Piece p = getPiece(i);
+				if (p == null
+					|| p.getColor() == Settings.bottomColor)
+					continue;
 
+		// Avoid pushing pieces and leaving bombs behind
+		// because then the bombs become obvious 
+
+				if (!p.isKnown()
+					&& p.getRank() == Rank.BOMB)
+					power-=3;
+
+		// The One and the Spy do not foray and cannot be exposed
+
+				else if (p.getRank() == Rank.ONE
+					|| p.getRank() == Rank.SPY)
+					power-=3;
+
+		// Eights do not foray either
+
+				else if (p.getRank() == Rank.EIGHT)
+					power--;
+
+		// Need some powerful pieces for the foray to succeed.
+		// We are counting on having a superior rank advantage
+		// in the area because we are going
+		// to ignore any opponent attempts at bluffing.
+
+				else if (p.getRank() == Rank.THREE)
+					power++;
+				else if (p.getRank() == Rank.TWO)
+					power+=2;
+			}
+			if (power < maxPower)
+				continue;
 			forayLane = lane;
+			maxPower = power;
 
 			} // lane
 
@@ -3022,7 +3045,7 @@ public class TestingBoard extends Board
 				for (int y = 6; y < 10; y++)
 				for (int x = 0; x < 4; x++) {
 					int i = Grid.getIndex(x + forayLane, y);
-					forayMap[i] = 1;
+					forayMap[i] = true;
 				}
 		}
 		
@@ -4451,7 +4474,7 @@ public class TestingBoard extends Board
 
 			if (foray[fprank.ordinal()]
 				&& tp != lastMovedPiece		// maybe a responding defender
-				&& forayMap[tp.getIndex()] == 1
+				&& forayMap[to]
 				&& (fprank.ordinal() >= 5 || fp.hasMoved()))
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
@@ -4693,7 +4716,7 @@ public class TestingBoard extends Board
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank, false), false, tp, actualValue(tp));
 
 		if (fp != lastMovedPiece		// maybe a responding defender
-			&& foray[tprank.ordinal()])
+			&& forayMap[to])
 			tpvalue /= 4;
 
 		// Outcome is the negation as if ai were the attacker.
@@ -6337,7 +6360,7 @@ public class TestingBoard extends Board
 			return false;
 
 		if (foray[9]
-			&& forayMap[p.getIndex()] == 1)
+			&& forayMap[p.getIndex()])
 			return true;
 
 		if (rank == Rank.NINE	// nines have high stealth value but are not targets
