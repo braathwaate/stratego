@@ -790,17 +790,7 @@ public class TestingBoard extends Board
 		// Spy stealth is equal to about a Seven stealth.
 
 			v = valueStealth[c][6];
-		}
-		
-		// If the player is winning by more than the value
-		// of a non-invincible rank, keep valueStealth of (1-4) at zero
-		// to encourage reduction of pieces.
-
-		else if (isWinning(c) > values[c][r]
-			&& r > invincibleRankInt[1-c])
-			v = 0;
-
-		else {
+		} else {
 			int n = 0;
 			int unknownDefenders = 0;
 			int count=6;
@@ -4475,7 +4465,7 @@ public class TestingBoard extends Board
 			if (foray[fprank.ordinal()]
 				&& tp != lastMovedPiece		// maybe a responding defender
 				&& forayMap[to]
-				&& (fprank.ordinal() >= 5 || fp.hasMoved()))
+				&& (fprank.ordinal() >= 5 || tp.hasMoved()))
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
 			else if (fprank.ordinal() > lowestUnknownNotSuspectedRank) {
