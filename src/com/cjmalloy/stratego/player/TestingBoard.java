@@ -4533,7 +4533,7 @@ public class TestingBoard extends Board
 		// better rewarded to slam into the unmoved unknowns than
 		// face (almost) certain capture by the chaser.
 
-				assert !tp.hasMoved() : "AI " + fprank + " WINS or is EVEN " + " against " + lowestUnknownNotSuspectedRank + " (see winFight())";
+				assert !tp.hasMoved() : "AI " + isInvincible(fp) + " " + fprank + " WINS or is EVEN " + " against " + tprank + " " + lowestUnknownNotSuspectedRank + " (see winFight())";
 				vm += Math.min(-3, values[1-fpcolor][unknownRank[1-fpcolor]] - fpvalue/2);
 			}
 
@@ -6366,11 +6366,13 @@ public class TestingBoard extends Board
 	// attack by an invincible piece.
 	boolean isPossibleBomb(Piece p)
 	{
+		if (p.moves != 0)
+			return false;
+
 		if (p.getRank() == Rank.BOMB)
 			return true;
 
 		return (!p.isKnown()
-			&& p.moves == 0
 			&& unknownRankAtLarge(p.getColor(), Rank.BOMB) != 0);
 	}
 
