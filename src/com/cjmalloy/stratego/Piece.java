@@ -41,7 +41,7 @@ public class Piece implements Comparable<Piece>
 	static private final int IS_SUSPECTED = 1 << 0;
 	static private final int MAYBE_EIGHT = 1 << 1;	// unknown piece could be an eight
 	static private final int IS_LESS = 1 << 2;
-	static private final int IS_BLOCKER = 1 << 3;
+	static private final int IS_WEAK = 1 << 3;
 	static private final int IS_KNOWN = 1 << 4;	// known to players
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
 	static Piece[] lastKill = new Piece[2];
@@ -322,17 +322,17 @@ public class Piece implements Comparable<Piece>
 		flags |= IS_SUSPECTED;
 	}
 
-	public void setBlocker(boolean b)
+	public void setWeak(boolean b)
 	{
 		if (b)
-			flags |= IS_BLOCKER;
+			flags |= IS_WEAK;
 		else
-			flags &= ~IS_BLOCKER;
+			flags &= ~IS_WEAK;
 	}
 
-	public boolean isBlocker()
+	public boolean isWeak()
 	{
-		return (flags & IS_BLOCKER) != 0;
+		return (flags & IS_WEAK) != 0;
 	}
 
 	public void setMaybeEight(boolean b)

@@ -98,7 +98,6 @@ public class TestingBoard extends Board
 	public ArrayList<Piece>[] scouts = (ArrayList<Piece>[])new ArrayList[2];
 
 	protected boolean[] foray = new boolean[15];
-	protected static boolean forayMap[] = new boolean[121];
 	protected static int forayLane = -1;
 
 	// De Boer (2007) suggested a formula
@@ -1209,32 +1208,10 @@ public class TestingBoard extends Board
 		// setting unmovedValue[].  Yet if the piece is a non-expendable
 		// piece and it is needed, break up structure.
 
-			if (neededRank[color][rank-1]) {
-				if (!isExpendable(p)) {
-					unmovedValue[i]=0;
-
-		// Furthermove, if the piece is buried, unbury it,
-		// by clearing unmovedValue from the neighbors.
-
-					boolean buried = true;
-					for (int d : dir) {
-						int j = i + d;
-						if (!Grid.isValid(j))
-							continue;
-						if (getPiece(j) == null) {
-							buried = false;
-							break;
-						}
-					}
-					if (buried)
-						for (int d : dir) {
-							int j = i + d;
-							if (!Grid.isValid(j))
-								continue;
-							unmovedValue[j]=0;
-						}
-				}
-			} else
+			if (isNeededRank(p)
+				&& !isExpendable(p))
+				unmovedValue[i]=0;
+			else
 
 		// Moving an unmoved piece needlessly is bad play
 		// because these pieces can become targets for
@@ -1263,15 +1240,6 @@ public class TestingBoard extends Board
 				unmovedValue[i] -= VALUE_MOVED*2;
 
 		} // i
-
-		// Encourage movement of front line pieces
-		// to clear a path so that pieces can move easily
-		// from side to side.
-
-		for (int c = RED; c <= BLUE; c++) {
-			for (int x = 0; x < 10; x++)
-				unmovedValue[Grid.getIndex(x, Grid.yside(c,3))] = 0;
-		}
 	}
 
 	protected void chaseWithExpendable(Piece p, int i)
@@ -2978,7 +2946,7 @@ public class TestingBoard extends Board
 	{
 		if (forayLane == -1) {
 			// Choose the foray lane.
-			int maxPower = -3;
+			int maxPower = -99;
 		for (int lane = 0; lane < 7; lane += 3) {
 
 		// For now, no forays in the middle lane
@@ -3035,7 +3003,7 @@ public class TestingBoard extends Board
 				for (int y = 6; y < 10; y++)
 				for (int x = 0; x < 4; x++) {
 					int i = Grid.getIndex(x + forayLane, y);
-					forayMap[i] = true;
+					getSetupPiece(i).setWeak(true);
 				}
 		}
 		
@@ -3189,6 +3157,11 @@ public class TestingBoard extends Board
 	public boolean isExpendable(Piece p)
 	{
 		return isExpendable(p.getColor(), p.getRank().ordinal());
+	}
+
+	public boolean isNeededRank(Piece p)
+	{
+		return neededRank[p.getColor()][p.getRank().ordinal()-1];
 	}
 
 	public void setNeededRank(int color, int rank)
@@ -3431,6 +3404,20 @@ public class TestingBoard extends Board
 		if (!fp.isKnown()
 			&& fp.moves == 0)
 			vm += unmovedValue[from];
+
+		// When a non-expendable piece is needed somewhere on the board,
+		// unmoved pieces can impede its progress, because movement
+		// of these pieces incur a penalty.  So if an unmoved
+		// piece moves to make way for a needed piece,
+		// add back the movement penalty.
+		// (If the expendable piece has already moved twice,
+		// it could be moving back-and-forth to the penalty
+		// square, so don't reward this behavior.)
+
+		if (!isExpendable(fp)
+			&& isNeededRank(fp)
+			&& fp.moves - fp.movesOrig <= 1)
+			vm += -unmovedValue[to];
 
 		if (unknownScoutFarMove) {
 			vm -= stealthValue(fp);
@@ -4464,7 +4451,7 @@ public class TestingBoard extends Board
 
 			if (foray[fprank.ordinal()]
 				&& tp != lastMovedPiece		// maybe a responding defender
-				&& forayMap[to]
+				&& tp.isWeak()
 				&& (fprank.ordinal() >= 5 || tp.hasMoved()))
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
@@ -4706,7 +4693,7 @@ public class TestingBoard extends Board
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank, false), false, tp, actualValue(tp));
 
 		if (fp != lastMovedPiece		// maybe a responding defender
-			&& forayMap[to])
+			&& fp.isWeak())
 			tpvalue /= 4;
 
 		// Outcome is the negation as if ai were the attacker.
@@ -4817,7 +4804,9 @@ public class TestingBoard extends Board
 
 		int r = fprank-1;	// gains the stealth of one rank lower
 
-		if (lowestUnknownExpendableRank < 5)
+		if (r == 0)
+			tpvalue = stealthValue(tp.getColor(), 1);
+		else if (lowestUnknownExpendableRank < 5)
 			tpvalue = stealthValue(tp.getColor(), 
 				Math.min(r, lowestUnknownExpendableRank));
 
@@ -4852,8 +4841,6 @@ public class TestingBoard extends Board
 		// (which happens below with the value based on rank)
 
 			tpvalue = stealthValue(tp);
-		else if (r == 0)
-			tpvalue = stealthValue(tp.getColor(), 1);
 		else 
 			tpvalue = stealthValue(tp.getColor(), r);
 
@@ -6350,7 +6337,7 @@ public class TestingBoard extends Board
 			return false;
 
 		if (foray[9]
-			&& forayMap[p.getIndex()])
+			&& p.isWeak())
 			return true;
 
 		if (rank == Rank.NINE	// nines have high stealth value but are not targets
