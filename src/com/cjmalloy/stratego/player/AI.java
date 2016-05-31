@@ -258,17 +258,22 @@ public class AI implements Runnable
 		log("Settings.twoSquares:" + Settings.twoSquares);
 		log("blufferRisk:" + board.blufferRisk);
 		stopTime = startTime
-			+ Settings.aiLevel * Settings.aiLevel * 100;
+			+ Settings.aiLevel * Settings.aiLevel * 10;
 
 		b = new TestingBoard(board);
                 try
                 {
 		// Settings tick marks:
-		// 1: .1 sec
-		// 2: .4 sec
-		// 3: .9 sec
-		// 4: 1.6 sec
-		// 5: 2.5 sec
+		// 1: .01 sec
+		// 2: .04 sec
+		// 3: .09 sec
+		// 4: .16 sec
+		// 5: .25 sec
+		// 6: .36 sec
+		// 7: .49 sec
+		// 8: .64 sec
+		// 9: .81 sec
+		// 10: 1.0 sec
 		// etc, etc
 			long t = System.currentTimeMillis() - startTime;
 			long trem = stopTime - System.currentTimeMillis();

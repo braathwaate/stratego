@@ -39,9 +39,9 @@ the horizon effect resulting from a very shallow search depth.
 Move generation abides by the Two-Square and More-Squares rules.
 
 The search time is adjustable with the Settings menu.
-At the default depth (1 tick)
-it completes within a fraction of a second
-usually completing about 4-6 ply depending on the speed of the desktop.
+At the middle difficulty level,
+it moves within 1 second
+usually completing about 6 ply depending on the speed of the desktop.
 
 The evaluation function is based on material gained versus lost
 as well as opponent piece rank discovery.

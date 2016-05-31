@@ -69,7 +69,6 @@ public class Board
         protected int[][] knownRank = new int[2][15];   // discovered ranks
         protected int[][] trayRank = new int[2][15];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
-	protected int[] invincibleRankInt = new int[2];	// rank that always wins or ties
 	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
@@ -1202,7 +1201,7 @@ public class Board
 		// left, leaving Blue Five subject to attack.  Do not
 		// set a chase rank on unknown Blue.
 		//
-		// TBD: Note that the following check fails if Blue did not
+		// Note that the following check fails if Blue did not
 		// move one of the forked pieces.
 		// For example,
 		// xx xx -- --
@@ -1213,8 +1212,17 @@ public class Board
 		// The AI assigns a suspected chase rank to unknown Blue,
 		// which happens to be an isolated bomb.
 
+		// Thus it can be hard to determine whether a protector
+		// is involved or not.  A simple approximation is:
+		// If the prior opponent move was any piece to a square that is
+		// two away from the chaser, it may mean:
+		//	- one of the adjacent forked pieces fled
+		//	- a protector stepped in to protect one or both
+		//		of the pieces
+
 			UndoMove m = getLastMove();
-			if (Grid.isAdjacent(m.getFrom(), chaser.getIndex()))
+			if (Grid.steps(m.getTo(), chaser.getIndex()) == 2
+				&& !Grid.isAdjacent(m.getTo(), chased.getIndex()))
 				return;
 
 		// If both the chased piece and the protector are unknown,
@@ -1243,9 +1251,11 @@ public class Board
 		// -- B? R5
 		// B? -- -- 
 
-			if (!chased.isKnown()) {
-				if (m.getPiece() == chased)
+			if (m.getPiece() == chased) {
+				if (!chased.isKnown())
 					return;
+
+			} else {
 
 		// Opponent moved some piece other than the chased,
 		// and neglected to capture the chaser,
@@ -1271,10 +1281,10 @@ public class Board
 		//	the opponent chased a stronger piece.
 		//	And then the protector rank was set in error.
 
-				Piece defender = getLowestRankedDefender(getLastMove(), chased);
-				if (defender != chased)
-					return;
-			}
+			Piece defender = getLowestRankedDefender(m, chased);
+			if (defender != chased)
+				return;
+		}
 
 		// If the chaser is high ranked (or unknown) and the chased
 		// is unknown, the chased piece may have neglected to attack
@@ -1973,7 +1983,6 @@ public class Board
 			for (rank = 1;rank <= 10;rank++) {
 				if (lowerKnownOrSuspectedRankCount[c][rank-1] < lowerRankCount[c][rank-1])
 					continue;
-				invincibleRankInt[1-c] = rank;
 				invincibleRank[1-c][rank-1] = true;
 			}
 
