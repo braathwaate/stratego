@@ -988,14 +988,16 @@ public class Board
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
-			if (chasedRank.ordinal() >= 5)	// or UNKNOWN
+			if (chasedRank.ordinal() >= 5	// or UNKNOWN
+				|| isInvincible(chased))
 				return;
 
-		// If the chaser piece is Unknown,
-		// then there is more that can be determined in this case
-		// if the chased is not invincible, because if the chased
-		// believes that the Unknown is a low ranked piece, then
-		// the protector must even be lower.  For example,
+		// If the chased piece is a strong but not invincible piece,
+		// then there can be more that can be determined in this case
+		// because if the chased believes that the Unknown
+		// is a low ranked piece, then the protector must even be lower.
+		//
+		// For example,
 		// R? -- B?
 		// -- B2 --
 		// Blue Two moves between Unknown Red and Unknown Blue.
@@ -1004,8 +1006,13 @@ public class Board
 		// Unknown Blue *is* Blue Spy.  But if Blue does not think
 		// that Unknown Red is Red One, this is simply an attacking
 		// move and nothing can be determined about Unknown Blue.
+		//
+		// Yet, if Unknown Red is actually a lower rank,
+		// and its cover has been blown, then it follows
+		// that Unknown Blue is probably Blue Spy, or otherwise
+		// Blue has greatly miscalculated.
 		// 
-		// One way to determine whether Blue believes Unknown Red
+		// A surer way to determine whether Blue believes Unknown Red
 		// is a superior piece is if Blue neglects to attack
 		// Unknown Red.  For example,
 		// R? B2 -- B?
@@ -1030,10 +1037,11 @@ public class Board
 		// 
 		// The AI makes the assumption that unknown Blue is probably
 		// Blue One in this case, although obviously it could be wrong.
-
-			Move m = getLastMove();
-			if (m.getPiece() == chased)
-				return;
+		//
+		// In version 10.1, the AI always believes that whenever the
+		// opponent leaves a valuable piece vulnerable to attack by an
+		// unknown AI piece, but protected, then the protection must be
+		// strong.
 
 		// If the chased is a lower or equal rank to the chaser piece,
 		// the chased needs no protection.

@@ -41,22 +41,32 @@ public class TestingBoard extends Board
 	private static final int DEST_PRIORITY_DEFEND_FLAG_BOMBS = 6;
 	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 5;
 
+	// Note: DEST_PRIORITY_LANE must have unique priority
+	// because it is a special case in planv.  It is limited to
+	// the lanes and has priority over CHASE, CHASE_ATTACK
+	// and CHASE_DEFEND.  This is because if the AI has weak pieces
+	// in the lanes, they can block chases.   So if the chase piece
+	// is blocked by pieces in the lanes, it will just move back
+	// and forth ad infinitum, if the chase had higher priority.
+	//
+	// Note: The pruning scheme selects only the best move based
+	// on these priorities for pieces outside the active area.   So
+	// pieces that block higher priority pieces are never moved.
+	// So blocking is a problem not only in the lanes, but anywhere
+	// on the board.  But usually if the lanes are not blocked, the
+	// chase piece can find a way to its target.
+
+	private static final int DEST_PRIORITY_LANE = 4;
 
 	// Note: DEST_PRIORITY_ATTACK_FLAG should be higher than
 	// DEST_PRIORITY_CHASE, because an Eight could be
 	// an expendable piece and can chase other opponent pieces,
 	// but it is better for the eight to attack the flag structure.
 
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 4;
-	private static final int DEST_PRIORITY_CHASE_ATTACK = 4;
-	private static final int DEST_PRIORITY_CHASE_DEFEND = 3;
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 3;
 
-	// Note: DEST_PRIORITY_LANE must have unique priority
-	// because it is a special case in planv.  It is limited to
-	// the lanes and has priority over CHASE, but not over CHASE_ATTACK
-	// or CHASE_DEFEND which are used by invincible pieces.
-
-	private static final int DEST_PRIORITY_LANE = 2;
+	private static final int DEST_PRIORITY_CHASE_ATTACK = 3;
+	private static final int DEST_PRIORITY_CHASE_DEFEND = 2;
 	private static final int DEST_PRIORITY_CHASE = 1;
 	private static final int DEST_PRIORITY_LOW = 1;
 
@@ -306,7 +316,7 @@ public class TestingBoard extends Board
 		adjustPieceValues();
 		genDangerousRanks();
 		genForay();	// depends on sumValues, dangerousUnknownRank
-		markExposedPieces();
+		markExposedPieces();	// depends on foray lane
 
 		// Destination Value Matrices
 		//
@@ -1073,7 +1083,7 @@ public class TestingBoard extends Board
 				if (p.getColor() != c) {
 					if (p.getRank().ordinal() < oppRank.ordinal())
 						oppRank = p.getRank();
-				} else {
+				} else if (c == Settings.topColor) {
 
 		// Try to keep more than one non-invincible piece of the
 		// same rank or multiple known pieces out of the lanes.
@@ -1084,6 +1094,27 @@ public class TestingBoard extends Board
 		// TBD: this logic fails if there are three
 		// or more pieces in the lane and the duplicates are
 		// mixed in.  But mixed-in duplicates aren't as bad anyway.
+
+		// The goal of fleeing in attacklanes()
+		// is to keep the higher ranked piece out of the lane.
+		// Until version 10.0, fleeing was awarded to both
+		// the AI and the opponent.  But the proximity pruning
+		// mechanism then causes chases to be thwarted in the lane.
+		// For example:
+		// -- -- --
+		// R2 -- --
+		// -- -- xx
+		// -- B3 xx
+		// -- -- --
+		// If R2 moves down, B3 may be close enough to R2 to allow
+		// B3 to be considered, and if fleeing is awarded more than
+		// chasing, R2 will not chase.  Even worse, R2 may move
+		// away, because perhaps B3 would no longer be close enough for the
+		// higher value B3 fleeing move to be considered.
+		//
+		// TBD: this effect likely occurs with other priority differences
+		// as well.
+
 
 					if (p.getRank() == Rank.SPY
 						|| (p.getRank() == Rank.ONE && !p.isKnown()))
@@ -1104,12 +1135,13 @@ public class TestingBoard extends Board
 				}
 			} // y
 
-		// It is tempting to make guarding the lanes high priority, because
-		// the AI often cannot see an attack on its weak flanks until too late.
-		// But chasing is just as important, especially if an opponent piece
-		// has made it past the lanes.  Guarding the lanes does no good in this case.
-		// Worse, the AI pieces would be glued to the lanes allowing the errant
-		// opponent piece to wreak havoc uncontested.
+		// It is tempting to make guarding the lanes high priority,
+		// because the AI often cannot see an attack on its weak flanks
+		// until too late.  But chasing is just as important,
+		// especially if an opponent piece has made it past the lanes.
+		// Guarding the lanes does no good in this case.
+		// Worse, the AI pieces would be glued to the lanes allowing
+		// the errant opponent piece to wreak havoc uncontested.
 
 			if (oppRank.ordinal() < thisRank.ordinal()
 				|| lane == forayLane)
@@ -1140,6 +1172,7 @@ public class TestingBoard extends Board
 		// if neither front opponent pieces have moved,
 		// because they are likely bombs.
 
+				if (c == Settings.topColor) {
 				Piece p1 = getPiece(attacklanes[lane][0]);
 				Piece p2 = getPiece(attacklanes[lane][1]);
 				if (p1 != null && !p1.hasMoved()
@@ -1150,10 +1183,12 @@ public class TestingBoard extends Board
 						genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
 						genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
 				}
+				} // c is ai
 			}
 
 		// Higher ranked pieces flee the lane
 
+			if (c == Settings.topColor)
 			for (int r = oppRank.ordinal()+1; r <= 5; r++) {
 				genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
 				genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
@@ -1687,7 +1722,7 @@ public class TestingBoard extends Board
 					|| chasedRank == 1 && hasSpy(1-p.getColor())))
 				continue;
 
-			int destTmpA[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
+			int destTmpA[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
 			int destTmpB[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
 
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
@@ -2792,9 +2827,7 @@ public class TestingBoard extends Board
 
 	// genDestTmpGuarded() generates a path to the destination
 	// even if the path is blocked by pieces of their own color
-	// This is primarily used by invincible pieces and the Spy,
-	// which creep slowly towards their targets.
-	// It is also used by pieces that are needed to guard lanes.
+	// This is used by pieces that are needed to guard lanes.
 
 	private int[] genDestTmpGuarded(int color, int to, Rank guard)
 	{
@@ -3039,13 +3072,6 @@ public class TestingBoard extends Board
 			maxPower = power;
 
 			} // lane
-
-			if (forayLane != -1)
-				for (int y = 6; y < 10; y++)
-				for (int x = 0; x < 2; x++) {
-					int i = Grid.getIndex(x + forayLane*4, y);
-					getSetupPiece(i).setWeak(true);
-				}
 		}
 		
 		// Knowing the lowest unknown expendable rank is
@@ -3220,19 +3246,6 @@ public class TestingBoard extends Board
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
 
-		if (pfrom == 0) {
-			pfrom = pto;
-			vfrom = vto + 1;
-		}
-
-		if (pto == 0) {
-			pto = pfrom;
-			vto = vfrom + 1;
-		}
-
-		assert vto != DEST_VALUE_NIL && vfrom != DEST_VALUE_NIL :
-			"Priority is set, but not value";
-
 		if (pto == pfrom) {
 
 		// The difference in chase plan values for adjacent squares
@@ -3256,33 +3269,14 @@ public class TestingBoard extends Board
 
 		} // to-priority == from-priority
 
-		else {
-
-		// The goal of fleeing in attacklanes()
-		// is to keep the higher ranked piece out of the lane.
-		// Until version 10.0, fleeing was awarded more points
-		// than chasing.  But the proximity pruning mechanism
-		// then causes chases to be thwarted in the lane.
-		// For example:
-		// -- -- --
-		// R2 -- --
-		// -- -- xx
-		// -- B3 xx
-		// -- -- --
-		// If R2 moves down, B3 may be close enough to R2 to allow
-		// B3 to be considered, and if fleeing is awarded more than
-		// chasing, R2 will not chase.  Even worse, R2 may move
-		// away, because perhaps B3 would no longer be close enough for the
-		// higher value B3 fleeing move to be considered.
-		//
-		// TBD: this effect likely occurs with other priority differences
-		// as well.
-
-			if (pfrom == DEST_PRIORITY_LANE)
-				return DEST_PRIORITY_CHASE;
-			else if (pto == DEST_PRIORITY_LANE)
-				return -DEST_PRIORITY_CHASE;
-		}
+		else if (pfrom == DEST_PRIORITY_LANE)
+			return DEST_PRIORITY_LANE;
+		else if (pto == DEST_PRIORITY_LANE)
+			return -DEST_PRIORITY_LANE;
+		else if (pfrom == DEST_VALUE_NIL)
+			return 1;
+		else if (pto == DEST_VALUE_NIL)
+			return -1;
 
 		return 0;
 	}
@@ -6788,11 +6782,16 @@ public class TestingBoard extends Board
 
 	void markExposedPieces()
 	{
-		// AI assumes that front row pieces are weak
+		// AI assumes that front row pieces are weak,
+		// except in the foray lane
 
-		final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
-		for (int x : xlanes)
-			getSetupPiece(Grid.getIndex(x, Grid.yside(1-bturn, 3))).setWeak(true);
+		for (int lane = 0; lane < 3; lane++) {
+		if (lane == forayLane)
+			continue;
+		for (int y = 2; y < 3; y++)
+		for (int x = 0; x < 2; x++)
+			getSetupPiece(Grid.getIndex(lane*4+x, Grid.yside(1-bturn, y))).setWeak(true);
+		}
 
 		// Assign unknown chase rank to unmoved back row pieces
 		// (AI guesses that opponent does not bury strong pieces)
