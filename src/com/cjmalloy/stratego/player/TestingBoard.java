@@ -306,6 +306,7 @@ public class TestingBoard extends Board
 		adjustPieceValues();
 		genDangerousRanks();
 		genForay();	// depends on sumValues, dangerousUnknownRank
+		markExposedPieces();
 
 		// Destination Value Matrices
 		//
@@ -567,7 +568,7 @@ public class TestingBoard extends Board
 
 		dangerousUnknownRank = 99;
 		dangerousKnownRank = 99;
-		for (int rank = 1; unknownRankAtLarge(Settings.topColor, rank) == 0; rank++) {
+		for (int rank = 1; rank <= 9; rank++) {
 
 			if ((rank == 1 && !hasSpy(Settings.topColor))
 				|| rank != 1) {
@@ -579,6 +580,8 @@ public class TestingBoard extends Board
 					dangerousKnownRank = rank;
 
 			}
+			if (unknownRankAtLarge(Settings.topColor, rank) != 0)
+				break;
 		}
 	}
 
@@ -3039,8 +3042,8 @@ public class TestingBoard extends Board
 
 			if (forayLane != -1)
 				for (int y = 6; y < 10; y++)
-				for (int x = 0; x < 4; x++) {
-					int i = Grid.getIndex(x + forayLane*3, y);
+				for (int x = 0; x < 2; x++) {
+					int i = Grid.getIndex(x + forayLane*4, y);
 					getSetupPiece(i).setWeak(true);
 				}
 		}
@@ -4500,9 +4503,14 @@ public class TestingBoard extends Board
 
 					assert tprank == Rank.UNKNOWN: "Known ranks are handled in WINS/LOSES/EVEN";
 
+
+		// If an expendable AI piece is on a foray, it is rewarded for
+		// attacking pieces that could be strong.
+
 			if (foray[fprank.ordinal()]
-				&& !(tp.getActingRankChase() == Rank.UNKNOWN && tp.hasMoved())
-				&& tp.isWeak())
+				&& !tp.isWeak()
+				&& tp.getActingRankChase() != Rank.UNKNOWN
+				&& isExpendable(fp))
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
 			else if (fprank.ordinal() > lowestUnknownNotSuspectedRank) {
@@ -4742,9 +4750,10 @@ public class TestingBoard extends Board
 						assert fprank == Rank.ONE || lowestUnknownNotSuspectedRank < fprank.ordinal() : "lower fp rank " + fprank + " WINS against " + lowestUnknownNotSuspectedRank + " (see winFight())";
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank, false), false, tp, actualValue(tp));
 
-		if (!(fp.getActingRankChase() == Rank.UNKNOWN
-			&& fp.hasMoved())		// maybe a responding defender
-			&& fp.isWeak())
+		if (foray[tprank.ordinal()]
+			&& !fp.isWeak()
+			&& fp.getActingRankChase() != Rank.UNKNOWN
+			&& isExpendable(tp))
 			tpvalue /= 4;
 
 		// Outcome is the negation as if ai were the attacker.
@@ -5426,7 +5435,8 @@ public class TestingBoard extends Board
 		// piece has more stealth than a middle rank piece.
 
 		if (rank == Rank.UNKNOWN) {
-			if (p.getActingRankChase() == Rank.UNKNOWN)
+			if (p.getActingRankChase() != Rank.NIL
+				|| p.isWeak())
 				return stealthValue(p.getColor(), 5);
 			if (p.getActingRankFleeLow() == Rank.UNKNOWN
 				&& !isPossibleBomb(p))
@@ -5747,9 +5757,9 @@ public class TestingBoard extends Board
 
 		int d = oppPiece.moves - oppPiece.movesOrig;
 
-	// square the distance
+	// double the distance
 
-		return Math.max(1, d*d);
+		return Math.max(1, d+d);
 	}
 
 	protected int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int v)
@@ -6187,12 +6197,11 @@ public class TestingBoard extends Board
 
 			else if ((fp.getActingRankChase() == Rank.UNKNOWN
 					|| riskExpendable)
+					|| (foray[tprank.ordinal()]
+						&& fp.isWeak())
 				&& !isNearOpponentFlag(fp)
 				&& (dangerousUnknownRank == 99
 					|| tprank.ordinal() >= 5)) {
-					int rank = lowestUnknownExpendableRank;
-					if (fp.isRankLess())
-						rank--;
 					if (tprank.ordinal() < lowestUnknownExpendableRank)
 						return Rank.LOSES;	// maybe not
 					else if (tprank.ordinal() == lowestUnknownExpendableRank)
@@ -6237,18 +6246,18 @@ public class TestingBoard extends Board
 			else if (isFleeing(fp, tp))
 				return Rank.WINS; // maybe not, but who cares?
 
-			else if (tp.getActingRankChase() == Rank.UNKNOWN
+			else if ((tp.getActingRankChase() == Rank.UNKNOWN
+				|| (foray[fprank.ordinal()]
+					&& tp.isWeak()))
 				&& !isNearOpponentFlag(tp)
 				&& (dangerousUnknownRank == 99
 					|| fprank.ordinal() >= 5)) {
-				int rank = lowestUnknownExpendableRank;
-				if (tp.isRankLess())
-					rank--;
 				if (fprank.ordinal() < lowestUnknownExpendableRank)
 					return Rank.WINS;	// maybe not
 				else if (fprank.ordinal() == lowestUnknownExpendableRank)
 					return Rank.EVEN;	// maybe not
 			}
+
 		// A spy almost always loses when attacking an unknown
 			else if (fprank == Rank.SPY)
 				return Rank.LOSES;	// maybe not
@@ -6388,7 +6397,7 @@ public class TestingBoard extends Board
 			return false;
 
 		if (foray[9]
-			&& p.isWeak())
+			&& !p.isWeak())
 			return true;
 
 		// nines have high stealth value but are not targets
@@ -6748,5 +6757,111 @@ public class TestingBoard extends Board
 			return false;
 		return isInvincible(p.getColor(), p.getRank().ordinal()-1);
 	}
-}
 
+	// Unknown pieces at the front of the lanes at the start
+	// of the game or that freely move into a lane across
+	// from an opponent unknown piece while the opponent
+	// still has a healthy supply of Scouts and there is no
+	// obvious low ranked known AI target in the area are assigned
+	// an unknown chase rank, because the player has deliberately
+	// exposed these pieces to attack by Scouts.  This is
+	// equivalent to the piece actually having chased an unknown piece,
+	// which is indicative of weakness.
+	//
+	// While this heuristic is frequently violated by aggressive
+	// players, the AI's route to victory hinges on discovering
+	// strong opponent ranks, particularly the opponent One,
+	// and for defensive opponents, the AI has to assume that
+	// the opponent is sheltering its One; otherwise, if the AI
+	// is unsuccessful at discovering the opponent One, it
+	// will likely lose a game of attrition against a skilled opponent.
+	//
+	// However, do not override any chase rank that the piece
+	// may have already acquired during game play.
+	//
+	// Note: this heuristic is also necessary for effective bluffing,
+	// because once the opponent realizes that the AI plays
+	// defensively and shelters its One, then the opponent also
+	// will realize that an AI piece that was voluntarily exposed to
+	// the front line is not a strong piece, and therefore
+	// is unsuitable to bluff against an opponent strong piece.
+
+	void markExposedPieces()
+	{
+		// AI assumes that front row pieces are weak
+
+		final int xlanes[] = { 0, 1, 4, 5, 8, 9 };
+		for (int x : xlanes)
+			getSetupPiece(Grid.getIndex(x, Grid.yside(1-bturn, 3))).setWeak(true);
+
+		// Assign unknown chase rank to unmoved back row pieces
+		// (AI guesses that opponent does not bury strong pieces)
+
+		for (int x = 0; x < 10; x++) {
+			getSetupPiece(Grid.getIndex(x, Grid.yside(1-bturn, 0))).setWeak(true);
+		}
+
+		// If the opponent has few Eights remaining,
+		// it is marginly safer to expose low ranked pieces
+
+		if (rankAtLarge(bturn, Rank.EIGHT) < 4)
+			return;
+
+		Move m1 = getLastMove(1);
+		if (m1 == null)
+			return;
+		Piece oppPiece=m1.getPiece();
+
+		// If piece moves on the same vertical,
+		// it could be a superior piece whose blocking
+		// piece was removed, and now it is trying to
+		// escape detection.
+
+		if (m1.getToX() - m1.getFromX() == 0)
+			return;
+
+		// If an opponent piece is nearby, the piece
+		// may have been chased, or the piece may be
+		// beginning a chase, or may be responding as protection
+		// to some other threat.
+
+		if (grid.isCloseToEnemy(1-bturn,  m1.getTo(), 1))
+			return;
+
+		// If the piece already has a rank or a chase rank,
+		// the chase rank is retained
+
+		if (oppPiece.getApparentRank() != Rank.UNKNOWN
+			|| oppPiece.getActingRankChase() != Rank.NIL)
+			return;
+
+		// bturn is current player color, so determines
+		// the direction of the players field and
+		// is the color of the possible Scout piece
+
+		int up;
+		if (bturn == Settings.topColor)
+			up = -11;
+		else
+			up = 11;
+
+		for (int i = m1.getTo()+up; ; i += up) {
+			if (lowRankNearby(i))
+				break;
+			Piece p = getPiece(i);
+			if (p != null) {
+				if (p.getColor() != bturn)
+					break;
+				if (p.getApparentRank() != Rank.UNKNOWN
+					&& p.getApparentRank() != Rank.NINE)
+					break;
+				oppPiece.setWeak(true);
+				break;
+			}
+		}
+
+		// TBD: check if the oppPiece unblocked a lane
+		// and exposed another piece to attack
+	}
+
+}

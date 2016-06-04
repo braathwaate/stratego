@@ -2294,6 +2294,10 @@ public class AI implements Runnable
 			s += '8';
 		else
 			s += '.';
+		if (p.isWeak())
+			s += 'W';
+		else
+			s += '.';
 		return s;
 	}
 

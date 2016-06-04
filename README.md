@@ -129,11 +129,23 @@ The Stratego bot Probe 2 makes guesses about the opponent setup, favoring the Ma
 Probe 2 is also frequently successful at identifying the opponent location of the flag, perhaps by looking at setup information or pattern matching.
 
 ##  Plans.
+A plan is a concept for material or positional gain that is difficult to prove computationally (because of limited search depth), but a skilled player would recognize as having some chance at success.
+Plans are generated statically before move generation by the oracle, and then minimax dynamically computes the move having the best combination of material exchange and plan value.
+Indeed,
+because moves that actually win material are rare during the game,
+most moves are chosen based on minimaxing plan value.
+
 There are very few plans.
-1. Chase opponent pieces that that could result in a favorable exchange.
-2. Attack flag structures.
-3. Protect its flag.
+1. Approach opponent pieces that that could result in a favorable exchange.
+2. Attack opponent flag structures.
+3. Defend its flag.
 4. Determine opponent piece ranks through bluffing or baiting.
+5. Control the lanes.
+
+Another plan that could be implemented is entrapment, either by
+cornering an opponent piece into a dead-end area with no likely protector and without the ability to rely on the two squares rule to avoid capture, or by
+using two pieces to surround the opponent piece, especially in combination with strategic bluffing.
+
 ##  Static position analysis
 Unlike chess, stratego probably requires more pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.
 ## Performance Tuning
