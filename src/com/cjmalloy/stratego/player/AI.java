@@ -766,7 +766,12 @@ public class AI implements Runnable
 			if (fprank == Rank.NINE)
 				getScoutFarMoves(n, moveList, i);
 
-			else if (fprank == Rank.UNKNOWN)
+		// Any unknown piece could be a Scout.
+		// But if the piece has chased an Unknown, it is much less
+		// likely that the piece is a Scout. 
+
+			else if (fprank == Rank.UNKNOWN
+				&& fp.getActingRankChase() != Rank.UNKNOWN)
 				getAttackingScoutFarMoves(moveList, i);
 		}
 	}
@@ -1916,7 +1921,7 @@ public class AI implements Runnable
 			
 			UndoMove m = b.getLastMove(1);
 			if (m.tp != null
-				&& (!b.isFlagBombAtRisk(m.tp)
+				&& (!b.isFlagBombAtRisk(m.tpcopy)
 					|| m.getPiece().getRank() == Rank.NINE)) {
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));
 				if (tp == m.tp) {	// lost the attack

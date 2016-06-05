@@ -3427,6 +3427,7 @@ public class TestingBoard extends Board
 		Piece tp = getPiece(to);
 		boolean scoutFarMove = !adjacent;
 		boolean unknownScoutFarMove = scoutFarMove && !fp.isKnown();
+		boolean wasChased = isChased(m);
 		moveHistory(fp, tp, m);
 
 		if (depth == 0) {
@@ -4325,9 +4326,8 @@ public class TestingBoard extends Board
 		// go right because of Two Squares.  It is forced to
 		// take Red Three.
 		//
-						if (lastMove != null
-							&& Grid.isAdjacent(from, lastMove.getTo())
-							&& risk == 1)
+						if (risk == 1
+							&& wasChased)
 
 		// Prior to version 9.6, VALUE_MOVED was returned.  But
 		// if an invincible opponent piece was near a slew of unmoved
