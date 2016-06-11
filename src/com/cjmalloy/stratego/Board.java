@@ -3138,6 +3138,11 @@ public class Board
 		return knownRank[color][r-1];
 	}
 
+	public int knownRankAtLarge(int color, Rank rank)
+	{
+		return knownRankAtLarge(color, rank.ordinal());
+	}
+
 	public int rankAtLarge(int color, int rank)
 	{
 		return (Rank.getRanks(Rank.toRank(rank)) - trayRank[color][rank-1]);

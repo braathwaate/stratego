@@ -254,6 +254,9 @@ public class TestingBoard extends Board
 	{
 		super(t);
 
+		// mark weak pieces before copying below
+		markExposedPieces();
+
 		value = 0;
 		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
 		hashTest[1] = boardHistory[1].hash;	// for debugging (see move)
@@ -316,7 +319,6 @@ public class TestingBoard extends Board
 		adjustPieceValues();
 		genDangerousRanks();
 		genForay();	// depends on sumValues, dangerousUnknownRank
-		markExposedPieces();	// depends on foray lane
 
 		// Destination Value Matrices
 		//
@@ -1188,10 +1190,19 @@ public class TestingBoard extends Board
 
 		// Higher ranked pieces flee the lane
 
-			if (c == Settings.topColor)
+			if (c == Settings.topColor) {
 			for (int r = oppRank.ordinal()+1; r <= 5; r++) {
 				genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
 				genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
+			}
+
+		// Spy flees the lane if the opponent one is not known
+
+			if (knownRankAtLarge(Settings.bottomColor, Rank.ONE) == 0
+				&& rankAtLarge(Settings.bottomColor, Rank.ONE) != 0) {
+				genPlanA(fleetmp, c, 10, DEST_PRIORITY_LANE);
+				genPlanB(fleetmp, c, 10, DEST_PRIORITY_LANE);
+			}
 			}
 
 		} // lane
@@ -1594,7 +1605,7 @@ public class TestingBoard extends Board
 
 		// Also use Fours and Fives to chase unknown pieces.
 		// This is done as bait to find Threes and maybe a Two.
-		// And there stealth is about the same as the value of
+		// And their stealth is about the same as the value of
 		// an expendable, so if they are discovered, its a wash.
 
 			for ( int j = 5; j >= 4; j--) {
@@ -1624,6 +1635,9 @@ public class TestingBoard extends Board
 			chaseWithExpendable(p, i);
 				
 		} else { // unknown and unmoved
+
+			if (!p.isWeak())
+				chaseWithExpendable(p, i);
 
 			return;	// do not comment this out!
 		}
@@ -3017,63 +3031,6 @@ public class TestingBoard extends Board
 
 	protected void genForay()
 	{
-		if (forayLane == -1) {
-			// Choose the foray lane.
-			int maxPower = -99;
-		for (int lane = 0; lane < 3; lane++) {
-
-		// For now, no forays in the middle lane
-		// TBD: randomly allow them
-
-			if (lane == 1)
-				continue;
-
-			int power = 0;
-			for (int y = 1; y < 4; y++)
-			for (int x = 0; x < 4; x++) {
-				int i = Grid.getIndex(x + lane*3, y);
-				Piece p = getPiece(i);
-				if (p == null
-					|| p.getColor() == Settings.bottomColor)
-					continue;
-
-		// Avoid pushing pieces and leaving bombs behind
-		// because then the bombs become obvious 
-
-				if (!p.isKnown()
-					&& p.getRank() == Rank.BOMB)
-					power-=3;
-
-		// The Spy does not foray and cannot be exposed
-
-				else if (p.getRank() == Rank.SPY)
-					power-=3;
-
-		// Eights do not foray either
-
-				else if (p.getRank() == Rank.EIGHT)
-					power--;
-
-		// Need some powerful pieces for the foray to succeed.
-		// We are counting on having a superior rank advantage
-		// in the area because we are going
-		// to ignore any opponent attempts at bluffing.
-
-				else if (p.getRank() == Rank.FOUR)
-					power++;
-				else if (p.getRank() == Rank.THREE)
-					power+=2;
-				else if (p.getRank() == Rank.TWO)
-					power+=3;
-			}
-			if (power < maxPower)
-				continue;
-			forayLane = lane;
-			maxPower = power;
-
-			} // lane
-		}
-		
 		// Knowing the lowest unknown expendable rank is
 		// useful in an encounter with an opponent piece that
 		// has approached an AI unknown.  The AI assumes that
@@ -3191,6 +3148,7 @@ public class TestingBoard extends Board
 		// a random Scout attack, although the probability
 		// diminishes greatly with the number of its remaining Scouts.
 
+		foray[9] = false;
 		int i;
 		for (i = 9 - rankAtLarge(Settings.topColor, Rank.NINE); i > 0 && rnd.nextInt(4) == 0; i--);
 		
@@ -3248,8 +3206,11 @@ public class TestingBoard extends Board
 
 		if (pto == pfrom) {
 
+			if (pto >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
+				return 0;
+
 		// The difference in chase plan values for adjacent squares
-		// is always 1, except if the plan was modified by
+		// should always be 1, except if the plan was modified by
 		// neededNear, which makes the squares
 		// adjacent to the target (value 2) to be value 5.
 		//
@@ -3259,13 +3220,15 @@ public class TestingBoard extends Board
 		// 3 2 3 4	3 5 3 2
 		// chase	neededNear
 		//
-		// Note: adjacent squares in flee plans are not restricted
-		// to a difference of 1 (could be 0).
+		// Yet if a blocking piece can be reached via two different
+		// paths, and the blocking piece moves allowing the chase
+		// piece to move across the two paths,
+		// the difference can be large.  A large difference
+		// could allow the path value to exceed material value,
+		// and cause the AI to sacrifice material for the shortcut.
+		// So the value is limited to the maximum plan step value.
 
-			if (pto >= DEST_PRIORITY_DEFEND_FLAG_AREA && depth > 1)
-				return 0;
-
-			return (vfrom - vto) * pto;
+			return  Math.max(Math.min((vfrom - vto) * pto, DEST_PRIORITY_DEFEND_FLAG), -DEST_PRIORITY_DEFEND_FLAG);
 
 		} // to-priority == from-priority
 
@@ -4501,10 +4464,13 @@ public class TestingBoard extends Board
 		// If an expendable AI piece is on a foray, it is rewarded for
 		// attacking pieces that could be strong.
 
+		// If a non-expendable AI piece is on a foray, it is rewarded
+		// for attacking pieces that could be weak.
+
 			if (foray[fprank.ordinal()]
-				&& !tp.isWeak()
-				&& tp.getActingRankChase() != Rank.UNKNOWN
-				&& isExpendable(fp))
+				&& (isExpendable(fp) && !tp.isWeak()
+					|| !isExpendable(fp) && tp.isWeak())
+				&& tp.getActingRankChase() != Rank.UNKNOWN)
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
 			else if (fprank.ordinal() > lowestUnknownNotSuspectedRank) {
@@ -4745,9 +4711,9 @@ public class TestingBoard extends Board
 						int tpvalue = apparentWinValue(fp, getChaseRank(fp, tprank, false), false, tp, actualValue(tp));
 
 		if (foray[tprank.ordinal()]
-			&& !fp.isWeak()
-			&& fp.getActingRankChase() != Rank.UNKNOWN
-			&& isExpendable(tp))
+			&& (isExpendable(tp) && !fp.isWeak()
+				|| !isExpendable(tp) && fp.isWeak())
+			&& fp.getActingRankChase() != Rank.UNKNOWN)
 			tpvalue /= 4;
 
 		// Outcome is the negation as if ai were the attacker.
@@ -5019,6 +4985,7 @@ public class TestingBoard extends Board
 		//		Five, Four, or Three, but could against a Two or One.
 		//	- if the AI piece has chased a low-value
 		//		(unknown or expendable) piece
+		//	- if the AI piece comes from a weak position
 		//	- if the AI piece is the flag or flag bomb
 		//		and the opponent piece could be an eight
 		// 	- if the unknown AI piece is near the opponent flag,
@@ -5034,6 +5001,7 @@ public class TestingBoard extends Board
 				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow()) > stealthValue(tp) * 7 / 10)
 			|| (fp.getActingRankChase() != Rank.NIL
 				&& isExpendable(Settings.bottomColor, fp.getActingRankChase().ordinal()))
+			|| fp.isWeak()
 			|| ((fp.getRank() == Rank.FLAG || fp.getRank() == Rank.BOMB)
 				&& fp.aiValue() != 0
 				&& (tp.getRank() == Rank.EIGHT || tp.getMaybeEight()))
@@ -6103,8 +6071,11 @@ public class TestingBoard extends Board
 				else
 					return Rank.LOSES; // could be EVEN
 
-			} else if (isFleeing(tp, fp))
+			} else if (isFleeing(tp, fp)) {
+				if (tprank.ordinal() == lowestUnknownNotSuspectedRank)
+					return Rank.EVEN;
 				return Rank.LOSES;	// maybe not
+			}
 
 		// If the opponent no longer has any unknown expendable
 		// pieces nor a dangerous unknown rank,
@@ -6237,8 +6208,11 @@ public class TestingBoard extends Board
 					return Rank.WINS;	// maybe not, could be EVEN
 			}
 
-			else if (isFleeing(fp, tp))
+			else if (isFleeing(fp, tp)) {
+				if (fprank.ordinal() == lowestUnknownNotSuspectedRank)
+					return Rank.EVEN;
 				return Rank.WINS; // maybe not, but who cares?
+			}
 
 			else if ((tp.getActingRankChase() == Rank.UNKNOWN
 				|| (foray[fprank.ordinal()]
@@ -6752,6 +6726,67 @@ public class TestingBoard extends Board
 		return isInvincible(p.getColor(), p.getRank().ordinal()-1);
 	}
 
+
+	void selectForayLane()
+	{
+		if (forayLane == -1) {
+			// Choose the foray lane.
+			int maxPower = -99;
+		for (int lane = 0; lane < 3; lane++) {
+
+		// For now, no forays in the middle lane
+		// TBD: randomly allow them
+
+			if (lane == 1)
+				continue;
+
+			int power = 0;
+			for (int y = 1; y < 4; y++)
+			for (int x = 0; x < 4; x++) {
+				int i = Grid.getIndex(x + lane*3, y);
+				Piece p = getPiece(i);
+				if (p == null
+					|| p.getColor() == Settings.bottomColor)
+					continue;
+
+		// Avoid pushing pieces and leaving bombs behind
+		// because then the bombs become obvious 
+
+				if (!p.isKnown()
+					&& p.getRank() == Rank.BOMB)
+					power-=3;
+
+		// The Spy does not foray and cannot be exposed
+
+				else if (p.getRank() == Rank.SPY)
+					power-=3;
+
+		// Eights do not foray either
+
+				else if (p.getRank() == Rank.EIGHT)
+					power--;
+
+		// Need some powerful pieces for the foray to succeed.
+		// We are counting on having a superior rank advantage
+		// in the area because we are going
+		// to ignore any opponent attempts at bluffing.
+
+				else if (p.getRank() == Rank.FOUR)
+					power++;
+				else if (p.getRank() == Rank.THREE)
+					power+=2;
+				else if (p.getRank() == Rank.TWO)
+					power+=3;
+			}
+			if (power < maxPower)
+				continue;
+			forayLane = lane;
+			maxPower = power;
+
+			} // lane
+		}
+	}
+		
 	// Unknown pieces at the front of the lanes at the start
 	// of the game or that freely move into a lane across
 	// from an opponent unknown piece while the opponent
@@ -6782,13 +6817,15 @@ public class TestingBoard extends Board
 
 	void markExposedPieces()
 	{
+		selectForayLane();
+
 		// AI assumes that front row pieces are weak,
 		// except in the foray lane
 
 		for (int lane = 0; lane < 3; lane++) {
 		if (lane == forayLane)
 			continue;
-		for (int y = 2; y < 3; y++)
+		for (int y = 2; y < 4; y++)
 		for (int x = 0; x < 2; x++)
 			getSetupPiece(Grid.getIndex(lane*4+x, Grid.yside(1-bturn, y))).setWeak(true);
 		}
