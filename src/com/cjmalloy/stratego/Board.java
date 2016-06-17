@@ -830,6 +830,7 @@ public class Board
 			return;
 
 		Rank arank = chased.getActingRankChase();
+		Rank chaserRank = chaser.getApparentRank();
 
 		// An unknown chase rank, once set, is never changed to
 		// a rank lower than Six.  This prevents being duped
@@ -888,17 +889,17 @@ public class Board
 		// of suspected ranks a challenge.
 
 		if (arank == Rank.UNKNOWN
-			&& chaser.getApparentRank().ordinal() <= 5)
+			&& chaserRank.ordinal() <= 5)
 		 	return;
 
-		if (chaser.getApparentRank() == Rank.UNKNOWN
+		if (chaserRank == Rank.UNKNOWN
 			&& (arank == Rank.FIVE
 				|| arank == Rank.FOUR)
 			&& !isInvincible(chased))
 			chased.setActingRankChaseEqual(Rank.SIX);
 
 		else if (arank == Rank.NIL 
-			|| arank.ordinal() > chaser.getApparentRank().ordinal()
+			|| arank.ordinal() > chaserRank.ordinal()
 
 		// If an unknown piece has IS_LESS set (because it protected
 		// a piece) and then chases an AI piece,  clear IS_LESS
@@ -908,7 +909,7 @@ public class Board
 
 			|| chased.isRankLess()) {
 
-			chased.setActingRankChaseEqual(chaser.getApparentRank());
+			chased.setActingRankChaseEqual(chaserRank);
 		}
 	}
 
@@ -1141,21 +1142,25 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-			if (p.getRank() != Rank.UNKNOWN) {
-				if (chaserRank != Rank.UNKNOWN) {
-					if (p.getRank().ordinal() < chaserRank.ordinal()
-						|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE)
-						return;
-				} else {
-					assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
-					if (knownProtector == null
-						|| p.getRank().ordinal() < knownProtector.getRank().ordinal())
-						knownProtector = p;
-				}
+			if (p.getRank() != Rank.UNKNOWN
+				&& chaserRank != Rank.UNKNOWN
+				&& (p.getRank().ordinal() < chaserRank.ordinal()
+						|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE))
+					return;
+
+			else if (p.getRank() != Rank.UNKNOWN
+				&& chaserRank == Rank.UNKNOWN) {
+				assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
+				if (knownProtector == null
+					|| p.getRank().ordinal() < knownProtector.getRank().ordinal())
+					knownProtector = p;
+
+			} else if (p.isKnown())
+				continue;
 
 			// more than one unknown protector?
 
-			} else if (activeProtector)
+			else if (activeProtector)
 				continue;
 
 			else if (unknownProtector != null)
@@ -1679,8 +1684,7 @@ public class Board
 		} else {
 
 		// Eights and Nines could be chased by
-		// almost any expendable piece, so a rank of
-		// UNKNOWN is returned, and no suspected rank is set.
+		// almost any expendable piece, so no suspected rank is set.
 		//
 		// This needs to be consistent with winFight.  For example,
 		// R9 B? R6

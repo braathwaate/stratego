@@ -610,18 +610,15 @@ public class TestingBoard extends Board
 			Piece p = getPiece(i);
 			if (p == null || p.getColor() != c)
 				continue;
-			if (!isExpendable(p))
+			if (!isExpendable(p)
+				|| p.isKnown()
+				|| p.isWeak())
 				continue;
-			if (!p.isKnown() && p.hasMoved())
-				count+=2;
-			else if (p.isKnown())
-				count++;
+			if (p.hasMoved())
+				return;
 		}
 
-		if (count >= 4)
-			return;
-
-		// if there are not any high rank pieces in motion
+		// if there are not any strong unknown expendable in motion
 		// set the neededRank.  The search tree will
 		// move the rank that can make the most progress.
 		for (int r : expendableRank)
@@ -3150,10 +3147,9 @@ public class TestingBoard extends Board
 
 		foray[9] = false;
 		int i;
-		for (i = 9 - rankAtLarge(Settings.topColor, Rank.NINE); i > 0 && rnd.nextInt(4) == 0; i--);
+		for (i = 9 - rankAtLarge(Settings.topColor, Rank.NINE); i > 0 && rnd.nextInt(2) == 0; i--);
 		
-		if (i == 0
-			|| rankAtLarge(Settings.topColor, Rank.NINE) > 4)
+		if (i == 0)
 			foray[9] = true;
 
 	}
@@ -6152,15 +6148,18 @@ public class TestingBoard extends Board
 				&& fp.hasMoved())
 				return Rank.LOSES;	// maybe not
 
-		// If the attacker has chased an unknown piece,
-		// it usually indicates that the piece is weak (5-9)
+		// If the attacker does not have a suspected rank,
+		// but it does has a chase rank, it must have
+		// chased a weak or unknown piece, which usually means
+		// that the chaser is weak.
+		//
 		// However, be wary of this rule in the opponent flag area,
 		// because unknown pieces are often approached
 		// in the opponent flag area to fend off attack.
 		// Unknown eights trying to get at the bombs are
 		// especially vulnerable.
 
-			else if ((fp.getActingRankChase() == Rank.UNKNOWN
+			else if ((fp.getActingRankChase() != Rank.NIL
 					|| riskExpendable)
 					|| (foray[tprank.ordinal()]
 						&& fp.isWeak())
@@ -6214,7 +6213,7 @@ public class TestingBoard extends Board
 				return Rank.WINS; // maybe not, but who cares?
 			}
 
-			else if ((tp.getActingRankChase() == Rank.UNKNOWN
+			else if ((tp.getActingRankChase() != Rank.NIL
 				|| (foray[fprank.ordinal()]
 					&& tp.isWeak()))
 				&& !isNearOpponentFlag(tp)
