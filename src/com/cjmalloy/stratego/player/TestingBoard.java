@@ -17,10 +17,6 @@
 
 package com.cjmalloy.stratego.player;
 
-import java.io.BufferedReader;
-import java.io.File;
-import java.io.FileReader;
-import java.io.IOException;
 import java.util.ArrayList;
 
 import com.cjmalloy.stratego.Board;
@@ -292,20 +288,13 @@ public class TestingBoard extends Board
 		// and preferably a piece that has moved or is known and as
 		// far forward on the board as possible
 
-				if (p.isKnown()) {
-					if (hasPlan(planAPiece, p.getColor(), r))
-						planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
+				if (!hasPlan(planAPiece, p.getColor(), r))
 					planAPiece[p.getColor()][r-1]=np;
-				} else if (p.hasMoved()) {
-					if (!hasPlan(planAPiece, p.getColor(), r))
-						planAPiece[p.getColor()][r-1]=np;
-					else {
-						if (!planAPiece[p.getColor()][r-1].isKnown()) {
-							planAPiece[p.getColor()][r-1]=np;
-							planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
-						} else
-							planBPiece[p.getColor()][r-1]=np;
-					}
+
+				if (p.isKnown()
+					|| (p.hasMoved() && !planAPiece[p.getColor()][r-1].isKnown())) {
+					planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
+					planAPiece[p.getColor()][r-1]=np;
 				} else
 					planBPiece[p.getColor()][r-1]=np;
 			}
@@ -329,7 +318,6 @@ public class TestingBoard extends Board
 		// the move tree.
 		for (int c = RED; c <= BLUE; c++)
 		for (int rank = 0; rank < 15; rank++) {
-			planA[c][rank][0][0] = 0;
 			for (int j=12; j <= 120; j++) {
 				planA[c][rank][0][j] = DEST_VALUE_NIL;
 				planA[c][rank][1][j] = 0;
@@ -1071,6 +1059,25 @@ public class TestingBoard extends Board
 					fleetmp[Grid.side(c, i - y*11)] = 5 - y;
 				}
 
+		// All pieces (except eights) flee the lane
+		// if neither front opponent pieces have moved,
+		// because they are likely bombs.
+
+			if (c == Settings.topColor) {
+				Piece p1 = getPiece(attacklanes[lane][0]);
+				Piece p2 = getPiece(attacklanes[lane][1]);
+				if (p1 != null && !p1.hasMoved()
+					&& p2 != null && !p2.hasMoved()) {
+					for (int r = 1; r <= 10; r++) {
+						if (r == 8)
+							continue;
+						genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
+						genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
+					}
+					continue;
+				}
+			} // c is ai
+
 			Rank oppRank = Rank.SIX;
 			Rank thisRank = Rank.UNKNOWN;
 			Piece duplicatePiece = null;
@@ -1085,14 +1092,10 @@ public class TestingBoard extends Board
 				} else if (c == Settings.topColor) {
 
 		// Try to keep more than one non-invincible piece of the
-		// same rank or multiple known pieces out of the lanes.
-		// This reduces the risk of forks of known pieces.
+		// same rank out of the lanes.
+		// This reduces the risk of forks.
 		// It should also help to spread the defenders into
 		// other lanes.
-		//
-		// TBD: this logic fails if there are three
-		// or more pieces in the lane and the duplicates are
-		// mixed in.  But mixed-in duplicates aren't as bad anyway.
 
 		// The goal of fleeing in attacklanes()
 		// is to keep the higher ranked piece out of the lane.
@@ -1118,15 +1121,12 @@ public class TestingBoard extends Board
 					if (p.getRank() == Rank.SPY
 						|| (p.getRank() == Rank.ONE && !p.isKnown()))
 						genPlanB(fleetmp, c, p.getRank().ordinal(), DEST_PRIORITY_LANE);
-					else if (duplicatePiece != null
-						&& (duplicatePiece.getRank() == p.getRank()
-						|| (duplicatePiece.isKnown()
-							&& p.isKnown())))
-
-						genPlanB(fleetmp, c, duplicatePiece.getRank().ordinal(), DEST_PRIORITY_LANE);
-
-					else if (!isInvincible(p))
-						duplicatePiece = p;
+					else if (!isInvincible(p)
+						&& isPlanAPiece(p))
+						genPlanB(fleetmp, c, p.getRank().ordinal(), DEST_PRIORITY_LANE);
+					else if (!isInvincible(p)
+						&& isPlanBPiece(p))
+						genPlanA(fleetmp, c, p.getRank().ordinal(), DEST_PRIORITY_LANE);
 
 					if (p.getRank().ordinal() < thisRank.ordinal()
 						&& !isStealthy(p))
@@ -1142,8 +1142,7 @@ public class TestingBoard extends Board
 		// Worse, the AI pieces would be glued to the lanes allowing
 		// the errant opponent piece to wreak havoc uncontested.
 
-			if (oppRank.ordinal() < thisRank.ordinal()
-				|| lane == forayLane)
+			if (oppRank.ordinal() < thisRank.ordinal())
 				for (int i : attacklanes[lane]) {
 					int ranksNeeded = 1;
 					for (int r = oppRank.ordinal(); ranksNeeded <= 3 && r > 1; r--) {
@@ -1167,22 +1166,6 @@ public class TestingBoard extends Board
 				genPlanA(attacktmp, c, thisRank.ordinal(), DEST_PRIORITY_CHASE);
 				genPlanB(attacktmp, c, thisRank.ordinal(), DEST_PRIORITY_CHASE);
 
-		// All pieces (except eights) flee the lane
-		// if neither front opponent pieces have moved,
-		// because they are likely bombs.
-
-				if (c == Settings.topColor) {
-				Piece p1 = getPiece(attacklanes[lane][0]);
-				Piece p2 = getPiece(attacklanes[lane][1]);
-				if (p1 != null && !p1.hasMoved()
-					&& p2 != null && !p2.hasMoved())
-					for (int r = 1; r <= 10; r++) {
-						if (r == 8)
-							continue;
-						genPlanA(fleetmp, c, r, DEST_PRIORITY_LANE);
-						genPlanB(fleetmp, c, r, DEST_PRIORITY_LANE);
-				}
-				} // c is ai
 			}
 
 		// Higher ranked pieces flee the lane
@@ -1261,7 +1244,7 @@ public class TestingBoard extends Board
 			int rank = p.getRank().ordinal();
 			int color = p.getColor();
 
-			if (p == planAPiece[color][rank-1])
+			if (isPlanAPiece(p))
 				continue;
 
 		// genDestFlag() tries to keep structures intact by
@@ -1303,17 +1286,18 @@ public class TestingBoard extends Board
 		} // i
 	}
 
-	protected void chaseWithExpendable(Piece p, int i)
+	// Chasing with an expendable is plan B
+	protected void chaseWithExpendable(Piece p, int i, int priority)
 	{
 		needExpendableRank = true;
 		for ( int r = 1; r <= 10; r++)
 			if (isExpendable(1-p.getColor(), r)) {
 				int tmp[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(r));
-				genPlanA(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
-				genPlanB(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+				genPlanB(tmp, 1-p.getColor(), r, priority);
 			}
 	}
 
+	// Chasing with an unknown is plan A
 	protected void chaseWithUnknown(Piece[][] plan, Piece p, int tmp[])
 	{
 		boolean found = false;
@@ -1359,6 +1343,16 @@ public class TestingBoard extends Board
 			else
 				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
 		}
+	}
+
+	protected boolean isPlanAPiece(Piece p)
+	{
+		return planAPiece[p.getColor()][p.getRank().ordinal()-1] == p;
+	}
+
+	protected boolean isPlanBPiece(Piece p)
+	{
+		return planBPiece[p.getColor()][p.getRank().ordinal()-1] == p;
 	}
 
 	protected void chaseWithUnknown(Piece p, int tmp[])
@@ -1544,7 +1538,7 @@ public class TestingBoard extends Board
 			if (p.isSuspectedRank()
 				&& (chasedRank <= 3
 					|| chasedRank == Rank.SPY.ordinal())) {
-				chaseWithExpendable(p, i);
+				chaseWithExpendable(p, i, DEST_PRIORITY_CHASE);
 
 		// Chase with Nines
 		// (GUARDED_OPEN because they can slide past guards)
@@ -1629,12 +1623,12 @@ public class TestingBoard extends Board
 					genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 					genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 				}
-			chaseWithExpendable(p, i);
+			chaseWithExpendable(p, i, DEST_PRIORITY_CHASE);
 				
 		} else { // unknown and unmoved
 
 			if (!p.isWeak())
-				chaseWithExpendable(p, i);
+				chaseWithExpendable(p, i, DEST_PRIORITY_CHASE);
 
 			return;	// do not comment this out!
 		}
@@ -2576,24 +2570,14 @@ public class TestingBoard extends Board
 		Piece flagp = getPiece(i);
 		int color = flagp.getColor();
 
-		// Send in three lowly ranks (including an Eight, if any)
-		// to attack the suspected flag.
+		// Send in an expendable to attack the suspected flag.
 
 		// Note: if the flag is still bombed, the
 		// destination matrix will not extend past the bombs.
-		// So the lowly rank and Eight will only be activated IF
+		// So the expendable will only be activated IF
 		// there is an open path to the flag.
 
-		int destTmp[] = genDestTmp(GUARDED_OPEN, flagp.getColor(), i);
-		int attackers = 0;
-		for (int k = 10; k > 0 && attackers < 3; k--) {
-			if (k == 10 && rankAtLarge(flagp.getColor(), Rank.ONE) != 0)
-				continue;
-			if (rankAtLarge(1-flagp.getColor(),k) != 0) {
-				genNeededPlanA(0, destTmp, 1-flagp.getColor(), k, DEST_PRIORITY_ATTACK_FLAG);
-				attackers++;
-			}
-		}
+		chaseWithExpendable(flagp, i, DEST_PRIORITY_ATTACK_FLAG);
 	}
 
 	// Set a destination for a bomb surrounding a possible flag
@@ -3240,21 +3224,28 @@ public class TestingBoard extends Board
 		return 0;
 	}
 
-	// Give Plan A value to one piece of a rank
-	// and Plan B value to the rest of the pieces
-	// if the piece has moved or is known
+	// If a piece is both a plan A and a plan B piece
+	// (that is, it is the only active piece of that rank on the board)
+	// it gets the maximum of plan A and plan B.
+
 	public int planValue(Piece fp, int from, int to)
 	{
 		int fpcolor = fp.getColor();
 		int r = fp.getRank().ordinal() - 1;
+		boolean a = isPlanAPiece(fp);
+		boolean b = isPlanBPiece(fp);
 
-		if (planAPiece[fpcolor][r] == fp
-			|| planAPiece[fpcolor][r] == null && neededRank[fpcolor][r])
+		if (a && b)
+			return Math.max(
+				planv(planA[fpcolor][r], from, to),
+				planv(planB[fpcolor][r], from, to));
+
+		if (a)
 			return planv(planA[fpcolor][r], from, to);
-		else if (fp.hasMoved()
-				|| fp.isKnown()
-				|| neededRank[fpcolor][r])
+
+		if (b)
 			return planv(planB[fpcolor][r], from, to);
+
 		return 0;
 	}
 
