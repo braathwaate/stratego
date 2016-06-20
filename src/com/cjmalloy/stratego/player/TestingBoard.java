@@ -1244,9 +1244,6 @@ public class TestingBoard extends Board
 			int rank = p.getRank().ordinal();
 			int color = p.getColor();
 
-			if (isPlanAPiece(p))
-				continue;
-
 		// genDestFlag() tries to keep structures intact by
 		// setting unmovedValue[].  Yet if the piece is a non-expendable
 		// piece and it is needed, break up structure.
@@ -1286,18 +1283,17 @@ public class TestingBoard extends Board
 		} // i
 	}
 
-	// Chasing with an expendable is plan B
 	protected void chaseWithExpendable(Piece p, int i, int priority)
 	{
 		needExpendableRank = true;
 		for ( int r = 1; r <= 10; r++)
 			if (isExpendable(1-p.getColor(), r)) {
-				int tmp[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(r));
+				int tmp[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(r));
+				genPlanA(tmp, 1-p.getColor(), r, priority);
 				genPlanB(tmp, 1-p.getColor(), r, priority);
 			}
 	}
 
-	// Chasing with an unknown is plan A
 	protected void chaseWithUnknown(Piece[][] plan, Piece p, int tmp[])
 	{
 		boolean found = false;
@@ -2577,6 +2573,14 @@ public class TestingBoard extends Board
 		// So the expendable will only be activated IF
 		// there is an open path to the flag.
 
+		// Note: chaseWithExpendable() keeps only 1 chaser
+		// in motion.  And planA and planB keep only 2 pieces
+		// occupied.  Thus it can happen that the AI has several
+		// Scouts remaining, and one of the Scouts has an obvious
+		// path to the flag, but that Scout isn't picked to move.
+		// This is a necessary tradeoff to keep most pieces unmoved
+		// and reduce the size of the search tree.
+
 		chaseWithExpendable(flagp, i, DEST_PRIORITY_ATTACK_FLAG);
 	}
 
@@ -2835,8 +2839,7 @@ public class TestingBoard extends Board
 	private void genNeededPlanA(int neededNear, int [] desttmp, int color, int rank, int priority)
 	{
 		genPlanA(neededNear, desttmp, color, rank, priority);
-		if (!hasPlan(planAPiece, color, rank)
-			&& !isExpendable(color, rank))
+		if (!isExpendable(color, rank))
 			setNeededRank(color, rank);
 	}
 
@@ -3148,6 +3151,12 @@ public class TestingBoard extends Board
 		return sumValues[color] - sumValues[1-color];
 	}
 
+	public boolean isWeak(Piece p)
+	{
+		int c = p.getColor();
+		return values[c][p.getRank().ordinal()] <= values[c][5];
+	}
+
 	// Sixes, Sevens and Nines (and excess known Eights) are expendable
 	//
 	// Note: values[] is used deliberately instead of pieceValue()
@@ -3216,17 +3225,13 @@ public class TestingBoard extends Board
 			return DEST_PRIORITY_LANE;
 		else if (pto == DEST_PRIORITY_LANE)
 			return -DEST_PRIORITY_LANE;
-		else if (pfrom == DEST_VALUE_NIL)
+		else if (pfrom == 0)
 			return 1;
-		else if (pto == DEST_VALUE_NIL)
+		else if (pto == 0)
 			return -1;
 
 		return 0;
 	}
-
-	// If a piece is both a plan A and a plan B piece
-	// (that is, it is the only active piece of that rank on the board)
-	// it gets the maximum of plan A and plan B.
 
 	public int planValue(Piece fp, int from, int to)
 	{
@@ -3235,10 +3240,16 @@ public class TestingBoard extends Board
 		boolean a = isPlanAPiece(fp);
 		boolean b = isPlanBPiece(fp);
 
-		if (a && b)
-			return Math.max(
-				planv(planA[fpcolor][r], from, to),
-				planv(planB[fpcolor][r], from, to));
+		// If a piece is both a plan A and a plan B piece
+		// (that is, it is the only piece of that rank on the board)
+		// it gets plan A or plan B
+
+		if (a && b) {
+			int v = planv(planA[fpcolor][r], from, to);
+			if (v == 0)
+				v = planv(planB[fpcolor][r], from, to);
+			return v;
+		}
 
 		if (a)
 			return planv(planA[fpcolor][r], from, to);
@@ -3479,10 +3490,12 @@ public class TestingBoard extends Board
 					fp.setActingRankChaseEqual(Rank.UNKNOWN);
 
 		// By approaching an unknown, the piece divulges
-		// its identity as a weak piece, so this is a bad idea
-		// unless it has a material reason to do so.
+		// its identity as a probable weak piece, so this is a bad idea
+		// unless it has a material reason to do so, or
+		// really isn't a weak piece, and wants to bluff that it is.
 
-					vm -= DEST_PRIORITY_CHASE_ATTACK;
+					if (isWeak(fp))
+						vm -= DEST_PRIORITY_CHASE_ATTACK;
 				}
 			}
 
@@ -4959,7 +4972,7 @@ public class TestingBoard extends Board
 	{
 		// Bluffing doesn't work:
 		//	- if the AI piece is known
-		//	- if the opponent piece is expendable
+		//	- if the opponent piece is weak
 		// 	- if the AI piece has fled from this same piece rank before
 		//		(or neglected to attack)
 		// 	- if the AI piece has fled from some other piece rank before
@@ -4980,7 +4993,7 @@ public class TestingBoard extends Board
 
 		if (fp.getColor() == Settings.bottomColor
 			|| fp.isKnown()
-			|| tp.getRank().ordinal() >  4
+			|| isWeak(tp)
 			|| fp.getActingRankFleeLow() == tp.getRank()
 			|| (fp.getActingRankFleeLow() != Rank.NIL
 				&& fp.getActingRankFleeLow() != Rank.UNKNOWN
@@ -5321,8 +5334,9 @@ public class TestingBoard extends Board
 		// So the opponent One can become confused about which
 		// of the unknown AI pieces is actually the Spy.
 
-		Rank rank = oppPiece.getRank();
-		if (aiPiece.getRank() == Rank.SPY && rank == Rank.ONE)
+		Rank oppRank = oppPiece.getRank();
+		Rank aiRank = aiPiece.getRank();
+		if (aiRank == Rank.SPY && oppRank == Rank.ONE)
 			return -VALUE_BLUFF;
 
 		// Bluffing using valuable pieces is discouraged
@@ -5330,14 +5344,15 @@ public class TestingBoard extends Board
 		// of a valuable piece, the flag, or the protection
 		// of its flag.)
 
-		if (!isExpendable(aiPiece))
+		if (!isExpendable(aiPiece)
+			&& oppRank.ordinal() < aiRank.ordinal())
 			return pieceValue(aiPiece)/7;
 
 		// A suspected Four (that chased a Five) could well be a Five.
 		// If so, the piece might attack and the AI would
 		// lose its piece.
 
-		if (rank == Rank.FOUR
+		if (oppRank == Rank.FOUR
 			&& !oppPiece.isKnown()
 			&& oppPiece.isSuspectedRank()
 			&& !oppPiece.isRankLess())
