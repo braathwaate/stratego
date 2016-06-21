@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.10.1][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.10.1/stratego_v0.10.1.jar
+[Stratego player v0.10.2][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.10.2/stratego_v0.10.2.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
