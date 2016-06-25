@@ -1063,7 +1063,8 @@ public class TestingBoard extends Board
 		// if neither front opponent pieces have moved,
 		// because they are likely bombs.
 
-			if (c == Settings.topColor) {
+			if (c == Settings.topColor
+				&& lane != forayLane) {
 				Piece p1 = getPiece(attacklanes[lane][0]);
 				Piece p2 = getPiece(attacklanes[lane][1]);
 				if (p1 != null && !p1.hasMoved()
@@ -1087,8 +1088,8 @@ public class TestingBoard extends Board
 				if (p == null)
 					continue;
 				if (p.getColor() != c) {
-					if (p.getRank().ordinal() < oppRank.ordinal())
-						oppRank = p.getRank();
+					if (p.getApparentRank().ordinal() < oppRank.ordinal())
+						oppRank = p.getApparentRank();
 				} else if (c == Settings.topColor) {
 
 		// Try to keep more than one non-invincible piece of the
@@ -1234,15 +1235,11 @@ public class TestingBoard extends Board
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
-			unmovedValue[i] = 0;
 			Piece p = getPiece(i);
 			if (p == null
 				|| p.hasMoved()
 				|| p.isKnown())
 				continue;
-
-			int rank = p.getRank().ordinal();
-			int color = p.getColor();
 
 		// genDestFlag() tries to keep structures intact by
 		// setting unmovedValue[].  Yet if the piece is a non-expendable
@@ -1252,7 +1249,7 @@ public class TestingBoard extends Board
 				&& !isExpendable(p))
 				unmovedValue[i]=0;
 
-			else if (!isNeededRank(p))
+			else if (!isNeededRank(p)) {
 
 		// Moving an unmoved piece needlessly is bad play
 		// because these pieces can become targets for
@@ -1263,7 +1260,12 @@ public class TestingBoard extends Board
 		// intact to prevent the opponent from guessing the
 		// real structure.
 
+				int rank = p.getRank().ordinal();
+				int color = p.getColor();
 				unmovedValue[i] += -VALUE_MOVED -values[color][rank]/100;
+			}
+
+
 		// If the opponent has a known invincible rank,
 		// it will be hellbent on obliterating all moved pieces,
 		// so movement of additional pieces is heavily discouraged.
@@ -1275,8 +1277,8 @@ public class TestingBoard extends Board
 		//
 		// TBD: check if the AI has a fighting chance
 
-			if (color == Settings.topColor
-				&& rank > dangerousKnownRank
+			if (p.getColor() == Settings.topColor
+				&& p.getRank().ordinal() > dangerousKnownRank
 				&& rnd.nextInt(30) != 0)
 				unmovedValue[i] -= VALUE_MOVED*2;
 
@@ -6827,25 +6829,28 @@ public class TestingBoard extends Board
 		// AI assumes that front row pieces are weak,
 		// except in the foray lane
 
+		for (int c = RED; c <= BLUE; c++) {
+
 		for (int lane = 0; lane < 3; lane++) {
-		if (lane == forayLane)
+		if (lane == forayLane
+			&& c == Settings.topColor)
 			continue;
 		for (int y = 2; y < 4; y++)
 		for (int x = 0; x < 2; x++)
-			getSetupPiece(Grid.getIndex(lane*4+x, Grid.yside(1-bturn, y))).setWeak(true);
+			getSetupPiece(Grid.getIndex(lane*4+x, Grid.yside(1-c, y))).setWeak(true);
 		}
 
 		// Assign unknown chase rank to unmoved back row pieces
 		// (AI guesses that opponent does not bury strong pieces)
 
 		for (int x = 0; x < 10; x++) {
-			getSetupPiece(Grid.getIndex(x, Grid.yside(1-bturn, 0))).setWeak(true);
+			getSetupPiece(Grid.getIndex(x, Grid.yside(1-c, 0))).setWeak(true);
 		}
 
 		// If the opponent has few Eights remaining,
 		// it is marginly safer to expose low ranked pieces
 
-		if (rankAtLarge(bturn, Rank.EIGHT) < 4)
+		if (rankAtLarge(c, Rank.EIGHT) < 4)
 			return;
 
 		Move m1 = getLastMove(1);
@@ -6866,7 +6871,7 @@ public class TestingBoard extends Board
 		// beginning a chase, or may be responding as protection
 		// to some other threat.
 
-		if (grid.isCloseToEnemy(1-bturn,  m1.getTo(), 1))
+		if (grid.isCloseToEnemy(1-c,  m1.getTo(), 1))
 			return;
 
 		// If the piece already has a rank or a chase rank,
@@ -6876,12 +6881,12 @@ public class TestingBoard extends Board
 			|| oppPiece.getActingRankChase() != Rank.NIL)
 			return;
 
-		// bturn is current player color, so determines
+		// c is current player color, so determines
 		// the direction of the players field and
 		// is the color of the possible Scout piece
 
 		int up;
-		if (bturn == Settings.topColor)
+		if (c == Settings.topColor)
 			up = -11;
 		else
 			up = 11;
@@ -6891,7 +6896,7 @@ public class TestingBoard extends Board
 				break;
 			Piece p = getPiece(i);
 			if (p != null) {
-				if (p.getColor() != bturn)
+				if (p.getColor() != c)
 					break;
 				if (p.getApparentRank() != Rank.UNKNOWN
 					&& p.getApparentRank() != Rank.NINE)
@@ -6903,6 +6908,7 @@ public class TestingBoard extends Board
 
 		// TBD: check if the oppPiece unblocked a lane
 		// and exposed another piece to attack
+		} // c
 	}
 
 }
