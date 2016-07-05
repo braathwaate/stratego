@@ -2180,7 +2180,7 @@ public class AI implements Runnable
 		// But if it has a choice of another open square, deep search
 		// is still needed to examine the flee route.
 
-				if (b.isProtected(fp, tp, fp.getIndex()))
+				if (b.isProtected(fp, tp))
 					continue;
 
 		// Unknown AI pieces have little to fear from the opponent One

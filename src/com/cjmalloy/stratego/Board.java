@@ -509,8 +509,9 @@ public class Board
 	}
 
 	// return if chaser piece could be protected
-	public boolean isProtected(Piece chaserPiece, Piece chasedPiece, int chaser)
+	public boolean isProtected(Piece chaserPiece, Piece chasedPiece)
 	{
+		int chaser = chaserPiece.getIndex();
 		for (int d : dir) {
 			int j = chaser + d;
 			if (!Grid.isValid(j))
@@ -547,6 +548,21 @@ public class Board
 
 		}
 		return delayPiece;
+	}
+
+	void setForkedFleeRank(Piece chaser)
+	{
+		for (int d : dir) {
+			int j = chaser.getIndex() + d;
+			if (!Grid.isValid(j))
+				continue;
+			Piece op = getPiece(j);
+			if (op == null
+				|| op.getColor() == chaser.getColor())
+				continue;
+
+			op.setActingRankFlee(chaser.getApparentRank());
+		}
 	}
 
 	// Acting rank is a historical property of the known
@@ -608,10 +624,12 @@ public class Board
 		// the chase piece, but does not because
 		// of the protection.
 
-				if (isProtected(chasePiece, fp, chaser))
+				if (isProtected(chasePiece, fp))
 					continue;
 
 				fp.setActingRankFlee(rank);
+
+				setForkedFleeRank(chasePiece);
 			}
 		}
 
@@ -655,9 +673,21 @@ public class Board
 		// -- R4 -- R? -- 
 		// -- B? -- -- --
 		// Unknown Blue approaches Red Four, so unknown Blue
-		// now is a suspected Three.  Unknown Red approaches
-		// Blue Three.  Blue Three moves away.  Do not set
-		// a flee rank on unknown Blue.
+		// now is a suspected Three.  Unknown Red moves up
+		// and attacks Blue Three.  Blue Three moves away.  Do not set
+		// a flee rank on unknown Blue, because a lower ranked
+		// Blue piece was moved instead.
+		//
+		// Contrast with this example:
+		// | R7 --
+		// | -- B?
+		// | B? --
+		// |xxxxxxx
+		// Red Seven moves down and forks two Unknowns.   Unknown Blue
+		// in the corner is a suspected Two and moves right.
+		// The flee rank on the other unknown Blue should be set
+		// because it neglected to attack the same piece that
+		// suspected Two fled from.  See setForkedFleeRank().
 
 		delayPiece = getLowestRankedDefender(getLastMove(), delayPiece);
 
@@ -676,7 +706,7 @@ public class Board
 				Piece op = getPiece(j);
 				if (op == null
 					|| op.getColor() == fp.getColor()
-					|| isProtected(op, fleeTp, j)
+					|| isProtected(op, fleeTp)
 					|| tp != null)	// TBD: test rank
 					continue;
 
