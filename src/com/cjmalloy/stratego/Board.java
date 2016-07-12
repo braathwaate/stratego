@@ -1150,7 +1150,7 @@ public class Board
 
 				boolean isGuarded = false;
 				for (int d2 : dir) {
-					int j2 = j + d;
+					int j2 = j + d2;
 					if (!Grid.isValid(j2))
 						continue;
 					Piece p2 = getPiece(j2);

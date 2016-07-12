@@ -56,7 +56,6 @@ public class AI implements Runnable
 	static final int PV = 1;
 	static final int DETAIL = 2;
 	private int unknownNinesAtLarge;	// if the opponent still has Nines
-	private ArrayList<Integer>[] rootMoveList = null;
 	private Piece lastMovedPiece;
 
 	// Static move ordering takes precedence over dynamic
@@ -823,120 +822,12 @@ public class AI implements Runnable
 
 		for (int n = 1; n < MAX_PLY; n++) {
 
-			Move killerMove = new Move(null, -1);
-			Move returnMove = new Move(null, -1);
-
-			rootMoveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
-			boolean isPruned = getMoves(rootMoveList, n);
-			if (isPruned) {
-
-			log(DETAIL, "\n>>> pick best pruned move");
-
-		// If any moves were pruned off, choose the best looking one
-		// and then evaluate it along with the non-pruned moves
-		// that could affect material balance.
-		//
-		// Why do this forward pruning?  If the AI
-		// were to consider all moves together, then the best move
-		// would be found without the rigmarole.
-		// The problem is that there are just too many moves
-		// to consider, resulting in shallow search depth.
-		// By pruning off inactive moves, and then
-		// evaluating only active moves, depth is significantly
-		// increased (by 2-3 ply), making sure that the AI
-		// does not easily blunder material away.
-		//
-		// TBD: Search depth needs to be increased further.
-		// There is currently a grid bitmap for each color.
-		// This could be improved to indexed on rank, where
-		// each color rank bitmap contains the locations of
-		// all lower ranks.  This would allow fleeing moves
-		// to be generated for only pieces that should flee
-		// (when the indexed rank bitmap mask is non-zero)
-		// and attack/approach moves for pieces that can attack
-		// (when the indexed rank bitmap mask is zero).
-		//
-		// Alternatively, look at the planA/B matrices to
-		// determine direction.  Or use windowing.
-		//
-		// TBD: Localized minimax
-		// Pieces in the game of stratego have limited mobility,
-		// and this fact is used to advantage in the AI in
-		// the forward pruning mechanism.  Yet further improvement
-		// is possible by grouping pieces into independent sets
-		// where pieces in those sets cannot reach the enemy pieces
-		// in the other sets given the amount of search depth.
-		// Then the minimax function is applied to each set twice,
-		// allowing either player to move first.   The best move
-		// is then the maximum of the players moves minus the
-		// maximum of the opponents moves in the other sets.
-		//
-		// This grouping would greatly reduce the number of moves
-		// that have to be considered together, resulting in
-		// an exponential increase in speed with no loss
-		// in accuracy.  Furthermore, it makes headway into
-		// solving the pointless chase problem, where the opponent
-		// has a good move in one area of the board, but because
-		// the opponent has a pointless chase sequence in
-		// some other area of the board, it pushes the ability
-		// to see the good move beyond the horizon.
-		// An additional benefit is the ability to run the sets
-		// in parallel (multithreading).
-
-
-			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
-			BitGrid bg = new BitGrid();
-			getMovablePieces(-n, bg);
-			getMoves(bg, moveList, -n);
-			int bestPrunedMoveValue = -9999;
-			int bestPrunedMove = -1;
-			for (int mo = 0; mo <= INACTIVE; mo++)
-			for (int move : moveList[mo]) {
-				logMove(2, move, 0, MoveType.PR);
-				MoveResult mt = makeMove(n, move);
-				if (mt == MoveResult.OK) {
-
-		// Note: negamax(0) isn't deep enough because scout far moves
-		// can cause a move outside the active area to be very bad.
-		// For example, a Spy might be far away from the opponent
-		// pieces and could be selected as the best pruned move.
-		// But moving it could lose the Spy to a far scout move.
-		// So negamax(1) is called to allow the opponent scout
-		// moves to be considered (because QS does not currently
-		// consider scout moves).
-		// 
-					int vm = -negamax(1, -9999, 9999, killerMove, returnMove, depthValueReduction(1)); 
-					if (vm > bestPrunedMoveValue) {
-						bestPrunedMoveValue = vm;
-						bestPrunedMove = move;
-					}
-					b.undo();
-					log(DETAIL, " " + negQS(vm));
-				} else
-					log(DETAIL, " " + mt);
-			}
-			if (bestPrunedMove != -1) {
-				addMove(rootMoveList[INACTIVE], bestPrunedMove);
-				log(PV, "\nPPV:" + n + " " + bestPrunedMoveValue);
-				log(PV, "\n" + logMove(b, n, bestPrunedMove));
-				log(DETAIL, "\n<< pick best pruned move\n");
-			}
-			} // movelist
-
-		boolean hasMove = false;
-		for (int mo = 0; mo <= INACTIVE; mo++)
-			if (rootMoveList[mo].size() != 0) {
-				hasMove = true;
-				break;
-			}
-
-		if (!hasMove) {
-			log("Empty move list");
-			return;		// ai trapped
-		}
+		Move killerMove = new Move(null, -1);
+		Move returnMove = new Move(null, -1);
 
 		log(DETAIL, "\n>>> pick best move");
 		int vm = negamax(n, -9999, 9999, killerMove, returnMove, 0); 
+
 		completedDepth = n;
 
 		// To negate the horizon effect where the ai
@@ -1564,18 +1455,11 @@ public class AI implements Runnable
 		return max;
 	}
 
-	boolean isValidMove(int move)
+	boolean isValidDest(int move)
 	{
-		int from = Move.unpackFrom(move);
 		int to = Move.unpackTo(move);
-		Piece fp = b.getPiece(from);
 		Piece tp = b.getPiece(to);
-		if (fp == null
-			|| fp.getColor() != b.bturn
-			|| (tp != null && tp.getColor() == b.bturn)
-			|| (fp.isKnown()
-				&& (fp.getRank() == Rank.BOMB
-					|| fp.getRank() == Rank.FLAG)))
+		if (tp != null && tp.getColor() == b.bturn)
 			return false;
 		return true;
 	}
@@ -1622,6 +1506,19 @@ public class AI implements Runnable
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
 		int bestmove = -1;
+		BitGrid bg = new BitGrid();
+		boolean isPruned = getMovablePieces(n, bg);
+
+		// Version 10.3 fixes a bug by skipping the TE and KM
+		// if they fall outside the pruning area.   This caused moves
+		// to be evaluated on an unequal basis.  This was first noticed
+		// in the selection of the best pruned move, because often only
+		// one of the first moves in the list was selected because
+		// the remaining moves picked up a TE or KM outside
+		// the pruning area, making them look bad.   The same occurred
+		// with the selection of the best move, particularly when
+		// the AI flag could be attacked successfully,
+		// and only some of the moves considered the attack.
 
 		if (ttMove != -1) {
 
@@ -1629,8 +1526,10 @@ public class AI implements Runnable
 		// best move entries in the table are not tried
 		// if a duplicate of the killer move
 
-			if (ttMove != 0 && !isValidMove(ttMove))
-				log(PV, n + ":" + ttMove + " bad tt entry");
+			if (ttMove != 0
+				&& (!bg.testBit(Move.unpackFrom(ttMove))
+					|| !isValidDest(ttMove)))
+				ttMove = -1;
 			else {
 
 			logMove(n, ttMove, b.getValue(), MoveType.TE);
@@ -1658,7 +1557,7 @@ public class AI implements Runnable
 			} else
 				log(DETAIL, " " + mt);
 			}
-		}
+		} // ttmove
 
 		// Try the killer move before move generation
 		// to save time if the killer move causes ab pruning
@@ -1666,9 +1565,11 @@ public class AI implements Runnable
 
 		int km = killerMove.getMove();
 		assert km != 0 : "Killer move cannot be null move";
+
 		if (km != -1
 			&& km != ttMove
-			&& isValidMove(km) 
+			&& bg.testBit(Move.unpackFrom(km))
+			&& isValidDest(km) 
 			&& (Grid.isAdjacent(km)
 				|| isValidScoutMove(km))) {
 			logMove(n, km, b.getValue(), MoveType.KM);
@@ -1692,24 +1593,120 @@ public class AI implements Runnable
 				}
 			} else
 				log(DETAIL, " " + mt);
-		}
+		} // killer move
 
-		// Sort the move list.
-		// Because alpha-beta can prunes off most of the list,
-		// most game playing programs use a selection sort.
-		//
-		// concept:
-		// Collections.sort(moveList);
-		// for (MoveValuePair mvp : moveList) {
-		//
-		// implementation: selection sort
+		if (b.depth == -1) {
+			if (isPruned) {
 
-		ArrayList<Integer>[] moveList = null;
-		if (b.depth == -1)
-			moveList = rootMoveList;
-		else {
-			BitGrid bg = new BitGrid();
-			boolean isPruned = getMovablePieces(n, bg);
+			log(DETAIL, "\n>>> pick best pruned move");
+
+		// If any moves were pruned off, choose the best looking one
+		// and then evaluate it along with the non-pruned moves
+		// that could affect material balance.
+		//
+		// Why do this forward pruning?  If the AI
+		// were to consider all moves together, then the best move
+		// would be found without the rigmarole.
+		// The problem is that there are just too many moves
+		// to consider, resulting in shallow search depth.
+		// By pruning off inactive moves, and then
+		// evaluating only active moves, depth is significantly
+		// increased (by 2-3 ply), making sure that the AI
+		// does not easily blunder material away.
+		//
+		// TBD: Search depth needs to be increased further.
+		// There is currently a grid bitmap for each color.
+		// This could be improved to indexed on rank, where
+		// each color rank bitmap contains the locations of
+		// all lower ranks.  This would allow fleeing moves
+		// to be generated for only pieces that should flee
+		// (when the indexed rank bitmap mask is non-zero)
+		// and attack/approach moves for pieces that can attack
+		// (when the indexed rank bitmap mask is zero).
+		//
+		// Alternatively, look at the planA/B matrices to
+		// determine direction.  Or use windowing.
+		//
+		// TBD: Localized minimax
+		// Pieces in the game of stratego have limited mobility,
+		// and this fact is used to advantage in the AI in
+		// the forward pruning mechanism.  Yet further improvement
+		// is possible by grouping pieces into independent sets
+		// where pieces in those sets cannot reach the enemy pieces
+		// in the other sets given the amount of search depth.
+		// Then the minimax function is applied to each set twice,
+		// allowing either player to move first.   The best move
+		// is then the maximum of the players moves minus the
+		// maximum of the opponents moves in the other sets.
+		//
+		// This grouping would greatly reduce the number of moves
+		// that have to be considered together, resulting in
+		// an exponential increase in speed with no loss
+		// in accuracy.  Furthermore, it makes headway into
+		// solving the pointless chase problem, where the opponent
+		// has a good move in one area of the board, but because
+		// the opponent has a pointless chase sequence in
+		// some other area of the board, it pushes the ability
+		// to see the good move beyond the horizon.
+		// An additional benefit is the ability to run the sets
+		// in parallel (multithreading).
+
+
+			BitGrid bgpruned = new BitGrid();
+			getMovablePieces(-n, bgpruned);
+			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
+			getMoves(bgpruned, moveList, -n);
+			int bestPrunedMoveValue = -9999;
+			int bestPrunedMove = -1;
+			for (int mo = 0; mo <= INACTIVE; mo++)
+			for (int move : moveList[mo]) {
+				logMove(2, move, 0, MoveType.PR);
+				MoveResult mt = makeMove(n, move);
+				if (mt == MoveResult.OK) {
+
+		// Note: negamax(0) isn't deep enough because scout far moves
+		// can cause a move outside the active area to be very bad.
+		// For example, a Spy might be far away from the opponent
+		// pieces and could be selected as the best pruned move.
+		// But moving it could lose the Spy to a far scout move.
+		// So negamax(1) is called to allow the opponent scout
+		// moves to be considered (because QS does not currently
+		// consider scout moves).
+
+					int vm = -negamax(1, -9999, 9999, killerMove, returnMove, depthValueReduction(1)); 
+					if (vm > bestPrunedMoveValue) {
+						bestPrunedMoveValue = vm;
+						bestPrunedMove = move;
+					}
+					b.undo();
+					log(DETAIL, " " + negQS(vm));
+				} else
+					log(DETAIL, " " + mt);
+			} // moves
+			log(DETAIL, "\n<< pick best pruned move\n");
+
+			if (bestPrunedMove != -1) {
+
+			logMove(n, bestPrunedMove, bestPrunedMoveValue, MoveType.PR);
+			MoveResult mt = makeMove(n, bestPrunedMove);
+			assert mt == MoveResult.OK : "Pruned move tested OK above?";
+
+			int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove, dvr + depthValueReduction(b.depth+1));
+
+			b.undo();
+
+			log(DETAIL, " " + negQS(vm));
+
+			if (vm > bestValue) {
+				bestValue = vm;
+				bestmove = bestPrunedMove;
+			}
+			alpha = Math.max(alpha, vm);
+
+			} // pruned move found
+			} // isPruned
+
+		} else {
 
 		// If legal moves were pruned before move
 		// generation, then try the null move before move
@@ -1745,15 +1742,16 @@ public class AI implements Runnable
 
 			} // isPruned
 
-			moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
-
-			// FORWARD PRUNING
-			// Add null move if not processed already
-			if (getMoves(bg, moveList, n)
-				&& !isPruned
-				&& ttMove != 0)
-				addMove(moveList[INACTIVE], 0);
 		}
+
+		// FORWARD PRUNING
+		// Add null move if not processed already
+		ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
+		if (getMoves(bg, moveList, n)
+			&& b.depth != -1
+			&& !isPruned
+			&& ttMove != 0)
+			addMove(moveList[INACTIVE], 0);
 
 		outerloop:
 		for (int mo = 0; mo <= FAR; mo++) {
@@ -1767,6 +1765,10 @@ public class AI implements Runnable
 
 			if (mo == FAR)
 				getScoutMoves(moveList[mo], n, b.bturn);
+
+		// Sort the move list.
+		// Because alpha-beta can prunes off most of the list,
+		// most game playing programs use a selection sort.
 
 			ArrayList<Integer> ml = moveList[mo];
 			for (int i = 0; i < ml.size(); i++) {

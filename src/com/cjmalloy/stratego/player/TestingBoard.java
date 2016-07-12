@@ -59,7 +59,7 @@ public class TestingBoard extends Board
 	// an expendable piece and can chase other opponent pieces,
 	// but it is better for the eight to attack the flag structure.
 
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 3;
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 2;
 
 	private static final int DEST_PRIORITY_CHASE_ATTACK = 3;
 	private static final int DEST_PRIORITY_CHASE_DEFEND = 2;
@@ -1098,9 +1098,9 @@ public class TestingBoard extends Board
 
 			// find the lowest apparent rank in the lane
 
-			Rank[] lowRank = new Rank[2];
-			lowRank[Settings.bottomColor] = Rank.toRank(Math.max(6, lowestUnknownExpendableRank));
-			lowRank[Settings.topColor] = Rank.SIX;
+			int[] lowRank = new int[2];
+			lowRank[Settings.bottomColor] = Math.max(6, lowestUnknownExpendableRank);
+			lowRank[Settings.topColor] = 99;
 			Piece aiPiece = null;
 
 			for (int i : attacklanes[lane])
@@ -1108,8 +1108,8 @@ public class TestingBoard extends Board
 				Piece p = getPiece(i - y*11);
 				if (p == null)
 					continue;
-				if (p.getApparentRank().ordinal() < lowRank[p.getColor()].ordinal())
-					lowRank[p.getColor()] = p.getApparentRank();
+				if (p.getRank().ordinal() < lowRank[p.getColor()])
+					lowRank[p.getColor()] = p.getRank().ordinal();
 
 
 		// Try to keep more than one non-invincible piece of the
@@ -1158,7 +1158,7 @@ public class TestingBoard extends Board
 		// Stealthy pieces should flee the lane
 
 			if (aiPiece != null
-				&& isStealthy(aiPiece, lowRank[Settings.bottomColor].ordinal())) {
+				&& isStealthy(aiPiece, lowRank[Settings.bottomColor])) {
 				if (isPlanAPiece(aiPiece))
 					genPlanB(fleetmp[aiPiece.getColor()], aiPiece.getColor(), aiPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
 				else if (isPlanBPiece(aiPiece))
@@ -1187,8 +1187,8 @@ public class TestingBoard extends Board
 					&& dangerousKnownRank != 99))
 				continue;
 
-			int oppRank = lowRank[1-c].ordinal();
-			int thisRank = lowRank[c].ordinal();
+			int oppRank = lowRank[1-c];
+			int thisRank = lowRank[c];
 			if (oppRank < thisRank)
 				for (int i : attacklanes[lane]) {
 					int ranksNeeded = 1;
@@ -1203,18 +1203,6 @@ public class TestingBoard extends Board
 						}
 					}
 				}
-			else {
-
-		// AI piece is stronger or as strong as opponent piece
-		// in the lane or there is no opponent piece in the lane.
-		// Push the sentry piece in the lane to the most forward square in
-		// the lane.  
-
-				genPlanA(attacktmp[c], c, thisRank, DEST_PRIORITY_CHASE);
-				genPlanB(attacktmp[c], c, thisRank, DEST_PRIORITY_CHASE);
-
-			}
-
 
 		// Higher ranked pieces flee the lane
 		// (unless there is only one lower rank)
@@ -1661,24 +1649,23 @@ public class TestingBoard extends Board
 				genPlanB(rnd.nextInt(2), destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
 			}
 		//
-		// Chase completely unknown pieces with known AI pieces
+		// Before version 10.3, the AI chased
+		// completely unknown pieces with known AI pieces
 		// and expendable unknown piece.
 		//
-		// If the unknown piece chases back, then
-		// it will get a chase rank and the AI piece will no
-		// longer chase it.  This is how the AI tries to assess
+		// This was a baiting plan.  The idea was if the AI could
+		// entice the unknown piece to chase back, then
+		// it would get a chase rank.  This is how the AI tries to assess
 		// the rank of unknown piece without actually attacking it.
+		//
+		// Yet if the piece never chased back, it tied up the AI
+		// piece from other more pressing duties, such as chasing higher
+		// ranked pieces or protecting an open lane.   Furthermore,
+		// attackLanes() pushes pieces down the lane to bait the
+		// opponent into attacking as well.
+		//
+		// So this code is no longer needed and was removed.
 		
-			for ( int j = 7; j > 0; j--)
-				if (isInvincible(1-p.getColor(), j))
-					continue;
-				else if (knownRankAtLarge(1-p.getColor(), j) != 0) {
-					int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
-					genPlanA(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-					genPlanB(destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE);
-				}
-			chaseWithExpendable(p, i, DEST_PRIORITY_CHASE);
-				
 		} else { // unknown and unmoved
 
 			if (!p.isWeak())
@@ -2995,17 +2982,22 @@ public class TestingBoard extends Board
 		setPlan(neededNear, planA[color][rank-1], desttmp, color, rank, priority);
 	}
 
-	protected boolean hasAdjacentUnknownEnemy(int color, int to)
+	protected Rank getLowestAdjacentEnemyRank(int color, int to)
 	{
+		int minRank = 99;
 		for (int d : dir) {
 			Piece tp = getPiece(to + d);
 			if (tp == null
 				|| tp.getColor() != 1 - color)
 				continue;
-			if (tp.getApparentRank() == Rank.UNKNOWN)
-				return true;
+			int tprank = tp.getApparentRank().ordinal();
+			if (tprank < minRank)
+				minRank = tprank;
+				
 		}
-		return false;
+		assert minRank != 99 : "getLowestAdjacentEnemyRank() called without any enemies?";
+
+		return Rank.toRank(minRank);
 	}
 
 	// suspectedRank is based on ActingRankChase.
@@ -3216,8 +3208,7 @@ public class TestingBoard extends Board
 
 	public boolean hasLowValue(Piece p)
 	{
-		int c = p.getColor();
-		return values[c][p.getRank().ordinal()] <= values[c][5];
+		return pieceValue(p) <= pieceValue(p.getColor(),5);
 	}
 
 	// Sixes, Sevens and Nines (and excess known Eights) are expendable
@@ -3504,6 +3495,23 @@ public class TestingBoard extends Board
 			fp.makeKnown();
 		}
 
+		// Version 10.3 gives a slight bias to all pieces
+		// to move towards the opponent flag.   This replaces
+		// the code that used a plan A/B chase to move
+		// pieces in the lanes down the lanes, because that
+		// code overloaded chases, often stranding low rank
+		// pieces in the lanes while the opponent pieces
+		// ran amok.
+	
+		if (flag[1-fpcolor] != null &&
+			fp.moves - fp.movesOrig == 0) {
+			if (Grid.steps(to, flag[1-fpcolor].getIndex())
+				- Grid.steps(from, flag[1-fpcolor].getIndex()) < 0)
+				vm++;
+			else
+				vm--;
+		}
+
 		if (tp == null) { // move to open square
 
 		// If an unknown opponent piece approaches an unknown AI piece
@@ -3552,24 +3560,39 @@ public class TestingBoard extends Board
 		// approach the unknown Spy, because it could be the
 		// unknown One.
 
-			if (fp.getApparentRank() == Rank.UNKNOWN
-				&& fp.getActingRankChase() != Rank.UNKNOWN
+			UndoMove m2 = getLastMove(2);
+
+			if (fpcolor == Settings.topColor) {
+
+			if (!fp.isKnown()
 				&& grid.hasAttack(fpcolor, to)) {
 
-				if (hasAdjacentUnknownEnemy(fpcolor, to)) {
-					fp.setActingRankChaseEqual(Rank.UNKNOWN);
+		// By approaching any enemy piece for the first time,
+		// the AI piece loses part of its stealth, if the opponent
+		// is playing attention, because most players make
+		// at least some kind of assumption
+		// that their opponent is making rational moves.
+		//
+		// So this is a bad idea unless the AI piece has a material
+		// reason to chase, or really isn't the piece that the
+		// opponent might suspect.
+		//
+		// This code is especially important when the AI plays itself,
+		// because then both sides are trying desperately
+		// to determine piece ranks through these kinds of movements.
 
-		// By approaching an unknown, the piece divulges
-		// its identity as a probable weak piece, so this is a bad idea
-		// unless it has a material reason to do so, or
-		// really isn't a weak piece, and wants to bluff that it is.
+				Rank oppRank = getLowestAdjacentEnemyRank(fpcolor, to);
+				if (oppRank != fp.getActingRankChase()) {
+					fp.setActingRankChaseEqual(oppRank);
 
-					if (hasLowValue(fp))
-						vm -= DEST_PRIORITY_CHASE_ATTACK;
+					if (oppRank == Rank.UNKNOWN) {
+						if (hasLowValue(fp))
+							vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
+					} else if (fprank.ordinal() == oppRank.ordinal() - 1)
+						vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
 				}
 			}
 
-			UndoMove m2 = getLastMove(2);
 			if (m2 != null && m2.getTo() == to) {
 				Rank m2fprank = m2.getPiece().getRank();
 
@@ -3586,13 +3609,14 @@ public class TestingBoard extends Board
 		// restoring the lost stealth and adding the bluffing value.
 		// (very rare occurrence).
 
-				if (fpcolor == Settings.topColor
-					&& m2fprank == Rank.ONE
+					if (m2fprank == Rank.ONE
 					&& !m2.tp.isKnown()
 					&& !fp.isKnown()
 					&& hasSpy(Settings.topColor))
 					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp);
 			}
+
+			} // fp is AI
 
 		// Because each move towards a chase piece is rewarded,
 		// at higher plies, the AI may leave low valued material
@@ -4075,17 +4099,24 @@ public class TestingBoard extends Board
 
 		// Bombs could have a zero value, so when
 		// the AI considers Bx?, it must return a realistic
-		// negative value like any other AI piece.  Fx? must also
+		// negative value like a movable AI piece.  Fx? must also
 		// return a realistic value rather than its flag value,
 		// because Fx? is not a move the AI can make.  This is
 		// important in the case where tp is invincible,
 		// because all attacks on the invincible piece are futile
 		// and therefore is not deterred in passing an unknown AI
 		// piece, even if the opponent has stealth.
+		//
+		// Note that setPiece(fp, from) is called as well
+		// as setPiece(tp, to) so both pieces remain.
+		// If the Bomb or Flag disappeared like
+		// other pieces, then the opponent could not attack it
+		// and gain its value.
 
-						if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+						if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
 							vm -= pieceValue(fpcolor, unknownRank[fpcolor]);
-						else
+							setPiece(fp, from);
+						} else
 							vm -= fpvalue;
 
 		// makeWinner is not called because the opponent
@@ -4141,19 +4172,27 @@ public class TestingBoard extends Board
 
 					if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
 						&& !isInvincibleDefender(tp))  {
-						if (tprank == Rank.EIGHT
-							|| !tp.isKnown()
+						if (!tp.isKnown()
 							|| isExpendable(tp)
 							|| (tprank == Rank.ONE
 								&& !isPossibleUnknownSpyXOne(tprank, fp)))
 							vm += 1;
 
-		// How risky is it for a known valuable piece to approach
-		// a suspected bomb?  There is always some risk, but
-		// a reward could make it a worthwhile gamble.
-		// The AI is willing to risk a Four (but not a One
+		// How risky is it for a known valuable piece
+		// (including known Eights) to approach a suspected bomb?
+		// There is always some risk, but if the minimaxed reward
+		// is greater than the initial cost, the AI will take
+		// the gamble.
+		// 
+		// For example,
+		// The AI will risk a Four (but not a One
 		// Two or Three) if it can capture an expendable piece.
-		// The AI would risk a Three to capture a Five.
+		// The AI will risk a Three to capture a Five.
+		// The AI will risk an Eight to capture a flag bomb or flag.
+		//
+		// TBD: The AI makes big risks if the flag is still in
+		// a flag structure, because it thinks it will be rewarded
+		// for the bomb AND the flag.
 	
 						else
 							vm += pieceValue(tp)/7;
@@ -4165,14 +4204,13 @@ public class TestingBoard extends Board
 						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
 						vm += riskOfLoss(tp, fp);
 						vm = vm / distanceFactor(tp, fp);
+						vm -= fpvalue;
 					}
 
 					tp.makeKnown();
-					vm -= fpvalue;
 					setPiece(tp, to);
 				}
 
-				// vm = 0; // fubar
 				break;
 
 			case Rank.WINS:
