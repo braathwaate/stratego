@@ -100,6 +100,12 @@ public class BitGrid
 			|| ((low & b.low) ^ b.low) != 0;
 	}
 
+	public int xorBitCount(BitGrid b)
+	{
+		return Long.bitCount((high & b.high) ^ b.high)
+			+  Long.bitCount((low & b.low) ^ b.low);
+	}
+
 	// This grows the bits in the bit map
 	// For example,
 	// in:		out:

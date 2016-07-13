@@ -196,6 +196,19 @@ public class Grid
 		return pieceBitGrid[p.getColor()].xorMask(neighbor[0][i]);
 	}
 
+	public int moveCount(Piece p)
+	{
+		int i = p.getIndex();
+		return pieceBitGrid[p.getColor()].xorBitCount(neighbor[0][i]);
+	}
+
+	// used to determine if a captured piece was trapped
+	public int oppMoveCount(Piece p)
+	{
+		int i = p.getIndex();
+		return pieceBitGrid[1-p.getColor()].xorBitCount(neighbor[0][i]);
+	}
+
 	public boolean hasAttack(int turn, int i)
 	{
 		return isCloseToEnemy(turn, i, 0);

@@ -1455,6 +1455,22 @@ public class AI implements Runnable
 		return max;
 	}
 
+	boolean isValidMove(int move)
+	{
+		int from = Move.unpackFrom(move);
+		int to = Move.unpackTo(move);
+		Piece fp = b.getPiece(from);
+		Piece tp = b.getPiece(to);
+		if (fp == null
+			|| fp.getColor() != b.bturn
+			|| (tp != null && tp.getColor() == b.bturn)
+			|| (fp.isKnown()
+				&& (fp.getRank() == Rank.BOMB
+					|| fp.getRank() == Rank.FLAG)))
+			return false;
+		return true;
+	}
+
 	boolean isValidDest(int move)
 	{
 		int to = Move.unpackTo(move);
@@ -1506,8 +1522,6 @@ public class AI implements Runnable
 		int bestValue = -9999;
 		Move kmove = new Move(null, -1);
 		int bestmove = -1;
-		BitGrid bg = new BitGrid();
-		boolean isPruned = getMovablePieces(n, bg);
 
 		// Version 10.3 fixes a bug by skipping the TE and KM
 		// if they fall outside the pruning area.   This caused moves
@@ -1527,10 +1541,10 @@ public class AI implements Runnable
 		// if a duplicate of the killer move
 
 			if (ttMove != 0
-				&& (!bg.testBit(Move.unpackFrom(ttMove))
-					|| !isValidDest(ttMove)))
+				&& !isValidMove(ttMove)) {
 				ttMove = -1;
-			else {
+				log(PV, n + ":" + ttMove + " bad tt entry");
+			} else {
 
 			logMove(n, ttMove, b.getValue(), MoveType.TE);
 			MoveResult mt = makeMove(n, ttMove);
@@ -1565,6 +1579,9 @@ public class AI implements Runnable
 
 		int km = killerMove.getMove();
 		assert km != 0 : "Killer move cannot be null move";
+
+		BitGrid bg = new BitGrid();
+		boolean isPruned = getMovablePieces(n, bg);
 
 		if (km != -1
 			&& km != ttMove

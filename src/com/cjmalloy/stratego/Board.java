@@ -83,6 +83,7 @@ public class Board
 	protected int[][] lowerRankCount = new int[2][10];
 	protected int[][] lowerKnownOrSuspectedRankCount = new int[2][10];
 	protected boolean[] isBombedFlag = new boolean[2];
+	protected int unknownBombs[] = new int[2];
 
 	// generate bomb patterns
 	static int[][] bombPattern = new int[30][6];
@@ -1798,6 +1799,7 @@ public class Board
                         piecesInTray[c] = 0;
                         piecesNotBomb[c] = 0;
 			flag[c] = null;
+			unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
                         for (int j=0;j<15;j++) {
                                 trayRank[c][j] = 0;
                                 knownRank[c][j] = 0;
@@ -1831,7 +1833,9 @@ public class Board
 
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().ordinal()-1]++;
-			if ((p.hasMoved() || p.isKnown())
+			if ((p.hasMoved()
+				|| p.isKnown()
+				|| unknownBombs[p.getColor()] == 0)
 				&& p.getRank() != Rank.BOMB)
 				piecesNotBomb[p.getColor()]++;
 
@@ -1890,8 +1894,6 @@ public class Board
 
 		} // for
 
-                possibleBomb();
-
 		for (int c = RED; c <= BLUE; c++) {
 
 		// If all movable pieces are moved or known
@@ -1911,7 +1913,6 @@ public class Board
 		// the rest must be bombs (or the flag)
 
 		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.ordinal()-1];
-		int unknownBombs = unknownRankAtLarge(c, Rank.BOMB);
 		if (possibleUnknownMovablePieces[c] == 0) {
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
@@ -1950,7 +1951,7 @@ public class Board
 
 				if (c == Settings.topColor)
 					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai pieces not bomb or flag?";
-				else if (unknownBombs != 0) {
+				else if (unknownBombs[c] != 0) {
 		// Set setSuspectedRank (not rank)
 		// because the piece is suspected to
 		// be a bomb, but it could be the flag.
@@ -1961,18 +1962,22 @@ public class Board
 		// Eight X Bomb is a WIN.
 		//
 					p.setSuspectedRank(Rank.BOMB);
-				} else {
-					p.setRank(Rank.FLAG);
-					flag[c] = p;
 				}
+
+		// if all the bombs have been found, then the flag
+		// is somewhere in the remaining unmoved pieces.
+
 				} // not moved
 			} // for
 
 		} // all pieces accounted for
+		else if (c == Settings.bottomColor)
+			possibleBomb();
 
-			int lowerRanks = 0;
-			int lowerKnownOrSuspectedRanks = 0;
-			for (int r = 1; r <= 10; r++) {
+
+		int lowerRanks = 0;
+		int lowerKnownOrSuspectedRanks = 0;
+		for (int r = 1; r <= 10; r++) {
 
 		// Another useful count is the number of opponent pieces with
 		// lower rank.  If a rank has only 1 opponent piece
@@ -1986,13 +1991,12 @@ public class Board
 		// rule or forked with another one of its pieces.
 		// This can be solved by increasing look-ahead.
 
-				lowerRankCount[c][r-1] = lowerRanks;
-				lowerRanks += rankAtLarge(c, r);
+			lowerRankCount[c][r-1] = lowerRanks;
+			lowerRanks += rankAtLarge(c, r);
 
-				lowerKnownOrSuspectedRankCount[c][r-1] = lowerKnownOrSuspectedRanks;
-				lowerKnownOrSuspectedRanks += suspectedRankAtLarge(c, r) + knownRankAtLarge(c, r);
-
-			}
+			lowerKnownOrSuspectedRankCount[c][r-1] = lowerKnownOrSuspectedRanks;
+			lowerKnownOrSuspectedRanks += suspectedRankAtLarge(c, r) + knownRankAtLarge(c, r);
+		}
 
 		} // c
 
