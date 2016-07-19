@@ -575,7 +575,7 @@ public class TestingBoard extends Board
 				if (unknownRankAtLarge(Settings.bottomColor, rank) != 0
 					&& dangerousUnknownRank == 99)
 					dangerousUnknownRank = rank;
-				if (rankAtLarge(Settings.bottomColor, rank) != 0
+				else if (knownRankAtLarge(Settings.bottomColor, rank) != 0
 					&& dangerousKnownRank == 99)
 					dangerousKnownRank = rank;
 
@@ -620,8 +620,7 @@ public class TestingBoard extends Board
 			if (p == null || p.getColor() != c)
 				continue;
 			if (!isExpendable(p)
-				|| p.isKnown()
-				|| p.isWeak())
+				|| p.isKnown())
 				continue;
 			if (p.hasMoved())
 				return;
@@ -1363,12 +1362,11 @@ public class TestingBoard extends Board
 
 	protected void chaseWithExpendable(Piece p, int i, int priority)
 	{
-		needExpendableRank = true;
 		for ( int r = 1; r <= 10; r++)
 			if (isExpendable(1-p.getColor(), r)) {
 				int tmp[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(r));
-				genPlanA(tmp, 1-p.getColor(), r, priority);
-				genPlanB(tmp, 1-p.getColor(), r, priority);
+				genNeededPlanA(0, tmp, 1-p.getColor(), r, priority);
+				genNeededPlanB(tmp, 1-p.getColor(), r, priority);
 			}
 	}
 
@@ -1377,7 +1375,6 @@ public class TestingBoard extends Board
 		boolean found = false;
 		int valuableRank = 0;
 		int valuableRankValue = 0;
-		needExpendableRank = true;
 		for ( int r = 1; r <= 10; r++) {
 			Piece a = plan[1-p.getColor()][r-1];
 			if (a != null) {
@@ -1398,9 +1395,9 @@ public class TestingBoard extends Board
 
 			if (isExpendable(1-p.getColor(), r)) {
 				if (plan == planAPiece)
-					genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+					genNeededPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
 				else
-					genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+					genNeededPlanB(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
 				found = true;
 			} else if (valuableRank == 0 || valuableRankValue < pieceValue(1-p.getColor(), r)) {
 				valuableRank = r;
@@ -2895,19 +2892,25 @@ public class TestingBoard extends Board
 	}
 
 	// Note: To reduce the number of moved weak pieces,
-	// expendable ranks are only needed as required by setNeedExpendableRank
+	// expendable ranks are only needed as required by setNeedExpendableRank()
 
 	private void genNeededPlanA(int neededNear, int [] desttmp, int color, int rank, int priority)
 	{
 		genPlanA(neededNear, desttmp, color, rank, priority);
-		if (!isExpendable(color, rank))
+		if (isExpendable(color, rank))
+			needExpendableRank = true;
+		else if (planAPiece[color][rank-1] != null
+			&& !planAPiece[color][rank-1].hasMoved())
 			setNeededRank(color, rank);
 	}
 
 	private void genNeededPlanB(int [] desttmp, int color, int rank, int priority)
 	{
 		genPlanB(desttmp, color, rank, priority);
-		if (!isExpendable(color, rank))
+		if (isExpendable(color, rank))
+			needExpendableRank = true;
+		else if (planBPiece[color][rank-1] != null
+			&& !planBPiece[color][rank-1].hasMoved())
 			setNeededRank(color, rank);
 	}
 
@@ -3034,27 +3037,15 @@ public class TestingBoard extends Board
 		// the opponent will realize that the approached piece
 		// is weak.
 
-				boolean hasProtector = false;
 				for (int d : dir) {
-					Piece tp = getPiece(lastMovedPiece.getIndex()+d);
-					if (tp == null)
+					int i = lastMovedPiece.getIndex()+d;
+					Piece p = getPiece(i);
+					if (p == null
+						|| p.getColor() != Settings.topColor)
 						continue;
-					if (tp.getColor() == Settings.bottomColor) {
-						if (!tp.isKnown()
-							|| tp.getRank().ordinal() < lastMovedPiece.getRank().ordinal() - 1) {
-							hasProtector = true;
-							break;
-						}
-					}
-				}
-
-				if (!hasProtector)
-				for (int d : dir) {
-					Piece tp = getPiece(lastMovedPiece.getIndex()+d);
-					if (tp == null)
+					if (isProtected(p, lastMovedPiece))
 						continue;
-					if (tp.getColor() == Settings.topColor)
-						tp.setActingRankFlee(lastMovedPiece.getRank());
+					p.setActingRankFlee(lastMovedPiece.getRank());
 				}
 			}
 		}
@@ -3599,7 +3590,9 @@ public class TestingBoard extends Board
 					if (oppRank == Rank.UNKNOWN) {
 						if (hasLowValue(fp))
 							vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
-					} else if (fprank.ordinal() <= oppRank.ordinal())
+					} else if (oppRank != Rank.BOMB
+						&& oppRank != Rank.FLAG
+						&& fprank.ordinal() <= oppRank.ordinal())
 						vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
 				}
 			}
@@ -5760,16 +5753,17 @@ public class TestingBoard extends Board
 
 		int r = rank.ordinal();
 
-		if (isPossibleBomb(tp)) {
+		// If tp is not known and has not moved,
+		// it could be a bomb which can deter valuable
+		// pieces from attacking an unknown unmoved piece.
+		// 
 
-		// tp is not known and has not moved
-		// so it could be a bomb which deters low ranked
-		// pieces from attacking an unknown unmoved piece
-
-			if (r <= 4)
-				return 1; // 10% chance of attack
-
-		}
+		if (isPossibleBomb(tp)
+			&& fp.isKnown()
+			&& rank != Rank.EIGHT
+			&& (r <= 4 
+				|| isInvincible(fp)))
+			return 1; // 10% chance of attack
 
 		// if the attacker is invincible, attack is almost certain
 
@@ -5778,44 +5772,6 @@ public class TestingBoard extends Board
 				return 9;
 			else
 				return 5;
-		}
-
-		// If an opponent piece approaches
-		// and the AI piece does not attack
-		// attack is almost certain.
-		// TBD: unless the opponent piece is protected
-
-		// This is true regardless of the opponent piece rank.
-		// For example,
-		// -- R1 -- R5
-		// xx xx B4 --
-		// xx xx -- --
-		// Red One is unknown, Blue Four and Red Five are known.
-		// Blue Four has the move and forks Red One and Red Five.
-		// If Red Five moves, then Blue Four will attack
-		// Red One, winning its substantial stealth value.
-		//
-		// Blue Four is deterred from forking only because
-		// it does not know the rank of Red One.  Thus, R1xB4
-		// in WINS is positive only because of bluffing
-		// (Red One *could* be an unknown Red Three).
-		// Otherwise, unknown Red One will not attack Blue Four
-		// because of the loss of stealth (it does not want
-		// to reveal itself for just a Four, because that makes
-		// the opponent Two invincible allowing run amok).
-		// 
-		// (note that getLastMove(2) is called to get the prior
-		// move, because the current move is already on the
-		// stack
-
-		// So if the AI piece wasn't the piece that was
-		// moved, meaning it stayed put, then attack is
-		// almost certain.
-
-		if (!isPossibleBomb(tp)) {
-			UndoMove prev = getLastMove(2);
-			if (prev != null && prev.getPiece() != tp)
-				return 9;
 		}
 
 		if (r <= 4)
@@ -6971,7 +6927,44 @@ public class TestingBoard extends Board
 			} // lane
 		}
 	}
-		
+
+
+	void markExposedPiece(Piece oppPiece)
+	{
+		// If the piece already has a rank or a chase rank,
+		// the chase rank is retained
+
+		if (oppPiece.getApparentRank() != Rank.UNKNOWN
+			|| oppPiece.getActingRankChase() != Rank.NIL)
+			return;
+
+		// c is current player color, so determines
+		// the direction of the players field and
+		// is the color of the possible Scout piece
+		int c = 1 - oppPiece.getColor();
+
+		int up;
+		if (c == Settings.topColor)
+			up = -11;
+		else
+			up = 11;
+
+		for (int i = oppPiece.getIndex()+up; ; i += up) {
+			if (lowRankNearby(i))
+				break;
+			Piece p = getPiece(i);
+			if (p != null) {
+				if (p.getColor() != c)
+					break;
+				if (p.getApparentRank() != Rank.UNKNOWN
+					&& p.getApparentRank() != Rank.NINE)
+					break;
+				oppPiece.setWeak(true);
+				break;
+			}
+		}
+	}
+
 	// Unknown pieces at the front of the lanes at the start
 	// of the game or that freely move into a lane across
 	// from an opponent unknown piece while the opponent
@@ -7030,16 +7023,15 @@ public class TestingBoard extends Board
 		for (int x = 0; x < 10; x++)
 			getSetupPiece(Grid.getIndex(x, Grid.yside(1-c, 0))).setWeak(true);
 
-		// If the opponent has few Eights remaining,
+		// If the opponent has few Scouts remaining,
 		// it is marginly safer to expose low ranked pieces
 
-		if (rankAtLarge(c, Rank.EIGHT) < 4)
+		if (rankAtLarge(c, Rank.NINE) < 4)
 			continue;
 
 		Move m1 = getLastMove(1);
 		if (m1 == null)
 			continue;
-		Piece oppPiece=m1.getPiece();
 
 		// If piece moves on the same vertical,
 		// it could be a superior piece whose blocking
@@ -7049,48 +7041,49 @@ public class TestingBoard extends Board
 		if (m1.getToX() - m1.getFromX() == 0)
 			continue;
 
+		// It is difficult to guess if the opponent
+		// was forced to expose a piece or deliberately
+		// exposed a piece for some opportunity.
+		// And some opponents do not care about exposing
+		// their strong pieces.   So the following logic
+		// should not be too restrictive or complex.
+		// Marking weak pieces based on piece movements
+		// is just a (big) risk that the AI takes.
+
 		// If an opponent piece is nearby, the piece
 		// may have been chased, or the piece may be
-		// beginning a chase, or may be responding as protection
-		// to some other threat.
+		// beginning a chase.
 
-		if (grid.isCloseToEnemy(1-c,  m1.getTo(), 1))
+		Move m2 = getLastMove(2);
+		if (m2 == null)
 			continue;
 
-		// If the piece already has a rank or a chase rank,
-		// the chase rank is retained
-
-		if (oppPiece.getApparentRank() != Rank.UNKNOWN
-			|| oppPiece.getActingRankChase() != Rank.NIL)
+		if (Grid.isAdjacent(m1.getFrom(), m2.getTo())
+			|| grid.hasAttack(m1.getPiece()))
 			continue;
 
-		// c is current player color, so determines
-		// the direction of the players field and
-		// is the color of the possible Scout piece
+		// There isn't an obvious reason why the piece moved,
+		// so if it exposed itself or another piece to a
+		// potential Scout attack, assume the exposed piece is weak.
 
-		int up;
+		markExposedPiece(m1.getPiece());
+
+		// Did the piece expose another piece?
+		int down;
 		if (c == Settings.topColor)
-			up = -11;
+			down = -11;
 		else
-			up = 11;
+			down = 11;
 
-		for (int i = m1.getTo()+up; ; i += up) {
-			if (lowRankNearby(i))
-				break;
+		for (int i = m1.getFrom()+down; Grid.isValid(i); i += down) {
 			Piece p = getPiece(i);
-			if (p != null) {
-				if (p.getColor() != c)
-					break;
-				if (p.getApparentRank() != Rank.UNKNOWN
-					&& p.getApparentRank() != Rank.NINE)
-					break;
-				oppPiece.setWeak(true);
+			if (p != null
+				&& p.getColor() != c) {
+				markExposedPiece(p);
 				break;
 			}
 		}
-
-		// TBD: check if the oppPiece unblocked a lane
-		// and exposed another piece to attack
+		
 		} // c
 
 		// AI set the opponent pieces in the foray lane weak.

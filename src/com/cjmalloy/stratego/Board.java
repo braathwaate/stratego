@@ -735,6 +735,41 @@ public class Board
 
 	}
 
+	// check if the piece was trapped
+	boolean wasTrapped(Piece trapPiece, int j)
+	{
+		for (int d : dir) {
+			int i = j + d;
+			if (!Grid.isValid(i))
+				continue;
+			Piece p = getPiece(i);
+// TBD: check rank
+			if  (p != null
+				&& p != trapPiece)
+				continue;
+			if (!isGuarded(trapPiece.getColor(), i))
+				return false;
+		}
+		return true;
+	}
+
+	// check if the square is guarded
+	boolean isGuarded(int color, int j)
+	{
+		for (int d : dir) {
+			int i = j + d;
+			if (!Grid.isValid(i))
+				continue;
+			Piece p = getPiece(i);
+			if  (p == null
+				|| p.getColor() == color)
+				continue;
+// TBD: check rank
+			return true;
+		}
+		return false;
+	}
+
 	// Set direct chase rank
 
 	// Set direct chase rank to the piece that just moved.
@@ -785,7 +820,8 @@ public class Board
 		if (m.getPiece() != chased)
 			return;
 
-		// Do not set chase rank on a fleeing piece.
+		// Do not set chase rank on a piece if all of the squares
+		// that it could move to were guarded.
 		// For example,
 		// -- R3 --
 		// xx B4 --
@@ -796,8 +832,7 @@ public class Board
 		// Blue Four does not acquare a chase rank of Three,
 		// but remains a Four.
 
-		Move m2 = getLastMove(2);
-		if (Grid.isAdjacent(m2.getTo(), m.getFrom()))
+		if (wasTrapped(chased, m.getFrom()))
 			return;
 
 		// Prior to version 9.6, if a chase piece had a
@@ -998,6 +1033,14 @@ public class Board
 
 		setDirectChaseRank(chaser, chased, i);
 
+		// If the opponent is a bluffer, then
+		// the AI does not assign any indirect chase ranks.
+		// Otherwise, a bluffer could use any piece to thwart
+		// an AI attack.
+
+		if (blufferRisk == 5)
+			return;
+
 		Rank chasedRank = chased.getApparentRank();
 		Rank chaserRank = chaser.getApparentRank();
 
@@ -1112,7 +1155,7 @@ public class Board
 		if (Grid.isAdjacent(um1.getTo(), i)) {
 			open++;	// adjacent square was open
 			Piece p = um1.getPiece();
-			if (p.getRank() == Rank.UNKNOWN
+			if (p.getApparentRank() == Rank.UNKNOWN
 				&& p.getActingRankFleeLow() != chaser.getRank()) {
 				unknownProtector = p;
 				activeProtector = true;
@@ -1147,25 +1190,9 @@ public class Board
 				if (j == um1.getFrom())
 					continue;
 
-		// check if the open square is guarded
-
-				boolean isGuarded = false;
-				for (int d2 : dir) {
-					int j2 = j + d2;
-					if (!Grid.isValid(j2))
-						continue;
-					Piece p2 = getPiece(j2);
-					if  (p2 == null
-						|| p2.getColor() == chased.getColor())
-						continue;
-		// TBD: check rank
-					isGuarded = true;
-					break;
-				}
-
 		// assume the move to the open square is a decent flee move
 
-				if (!isGuarded)
+				if (!isGuarded(chased.getColor(), j))
 					open++;
 				continue;
 			}
@@ -1173,17 +1200,17 @@ public class Board
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-			if (p.getRank() != Rank.UNKNOWN
+			if (p.getApparentRank() != Rank.UNKNOWN
 				&& chaserRank != Rank.UNKNOWN
-				&& (p.getRank().ordinal() < chaserRank.ordinal()
-						|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE))
+				&& (p.getApparentRank().ordinal() < chaserRank.ordinal()
+						|| p.getApparentRank() == Rank.SPY && chaserRank == Rank.ONE))
 					return;
 
-			else if (p.getRank() != Rank.UNKNOWN
+			else if (p.getApparentRank() != Rank.UNKNOWN
 				&& chaserRank == Rank.UNKNOWN) {
 				assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
 				if (knownProtector == null
-					|| p.getRank().ordinal() < knownProtector.getRank().ordinal())
+					|| p.getApparentRank().ordinal() < knownProtector.getApparentRank().ordinal())
 					knownProtector = p;
 
 			} else if (p.isKnown())
@@ -1227,8 +1254,14 @@ public class Board
 		// the chased piece and the piece is cornered, the
 		// approaching protector is probably bluffing.  Or
 		// at least the AI thinks so.
+		//
+		// One exception is if the unknown protector has the
+		// same suspected rank as the attacker.   In this case the AI
+		// believes that the protector may actually be stronger.
 
-			if (open == 0)
+			if (open == 0
+				&& (chaserRank == Rank.UNKNOWN
+					|| unknownProtector.getApparentRank() != chaserRank))
 				return;
 
 		// If a chased piece was forked, the player had to choose
