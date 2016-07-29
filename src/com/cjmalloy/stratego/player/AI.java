@@ -1720,6 +1720,12 @@ public class AI implements Runnable
 			}
 			alpha = Math.max(alpha, vm);
 
+			if (alpha >= beta) {
+				hh[bestmove]+=n;
+				returnMove.setMove(bestmove);
+				return bestValue;
+			}
+
 			} // pruned move found
 			} // isPruned
 
