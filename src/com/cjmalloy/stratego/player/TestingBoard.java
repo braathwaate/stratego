@@ -1332,18 +1332,21 @@ public class TestingBoard extends Board
 
 		// If the opponent has a known invincible rank,
 		// it will be hellbent on obliterating all moved pieces,
-		// so movement of additional pieces is heavily discouraged.
+		// so movement of additional pieces is heavily discouraged,
+		// unless the opponent has only one lower rank (because
+		// then the AI piece is not easily trapped).
 		//
-		// However, this can lead to draws, so eventually the AI
+		// TBD: However, this can lead to draws, so eventually the AI
 		// must sparingly move additional pieces, such as Eights
 		// to attack flag structures or mid ranked pieces needed
-		// to attack other opponent pieces.
-		//
-		// TBD: check if the AI has a fighting chance
+		// to attack other opponent pieces.  But only if
+		// the AI has a fighting chance.
 
 			if (p.getColor() == Settings.topColor
-				&& p.getRank().ordinal() > dangerousKnownRank)
-//				&& rnd.nextInt(30) != 0)
+				&& p.getRank().ordinal() > dangerousKnownRank
+				&& p.getRank() != Rank.BOMB
+				&& p.getRank() != Rank.FLAG
+				&& lowerRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2)
 				unmovedValue[i] -= VALUE_MOVED*2;
 
 		} // i
@@ -2539,10 +2542,6 @@ public class TestingBoard extends Board
                                 += (30 - lowerRankCount[c][8])*2;
 		}
 
-		// Note:Flag value depends on opponent Eight value above
-
-		setFlagValue(pflag);
-
 		// Making the flag known eliminates the flag
 		// from the piece move lists, which means that
 		// it offers no protective value to pieces that
@@ -2552,9 +2551,10 @@ public class TestingBoard extends Board
 		// If the flag is known, a low ranked AI piece in the area
 		// will attack the flag, which could lose the game
 		// For example,
-		// R8 R1
-		// BB B7
-		// BB BB -- BF
+		// | R8 R1
+		// | BB B7
+		// | BB BB -- BF
+		// ----------
 		// R8xBB, B7xR8, R1 attacks the corner bomb which it
 		// thinks is the flag, but the flag is actually elsewhere.
 
@@ -2565,6 +2565,9 @@ public class TestingBoard extends Board
 
 		if (maybe_count[c] == 1)
 			makeFlagKnown(pflag);
+
+		// Note:Flag value depends on opponent Eight value above
+		setFlagValue(pflag);
 
 		if (opponentEightsAtLarge == 0)
 			continue;
@@ -4404,9 +4407,10 @@ public class TestingBoard extends Board
 		// could be bomb
 
 					if (isPossibleBomb(tp)
+						&& !tp.isKnown()
 						&& (fp.isKnown() || fp.isSuspectedRank())
-						&& fprank != Rank.EIGHT) {
-						int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
+						&& fprank != Rank.EIGHT
+						&& !wasChased) {
 
 		// If risk is low, the AI piece is usually safe from attack.
 		// But if the attacker is pinned (facing a sure loss),
@@ -4418,8 +4422,9 @@ public class TestingBoard extends Board
 		// go right because of Two Squares.  It is forced to
 		// take Red Three.
 		//
-						if (risk == 1
-							&& wasChased)
+						if (fp.isKnown()
+							&& (fprank.ordinal() <= 4 
+								|| isInvincible(fp)))
 
 		// Prior to version 9.6, VALUE_MOVED was returned.  But
 		// if an invincible opponent piece was near a slew of unmoved
@@ -4432,6 +4437,7 @@ public class TestingBoard extends Board
 
 							vm = 0;
 						else {
+							int risk = apparentRisk(fp, fprank, unknownScoutFarMove, tp);
 							vm -= fpvalue * (10 - risk) / 10;
 
 							vm += apparentWinValue( fp,
@@ -5722,13 +5728,23 @@ public class TestingBoard extends Board
 	private void setFlagValue(Piece pflag)
 	{
 		int color = pflag.getColor();
+		int v;
+
+	// If the flag is the last unmoved piece on the board,
+	//  it has a high value and must be protected or
+	// attacked at all costs.
+
+		if (pflag.isKnown()
+			&& unknownBombs[color] == 0)
+			v = 8888;
+		else {
 
 	// Set the flag value higher than a worthwhile bomb
 	// so that an unknown miner that removes a bomb
 	// to get at the flag
 	// will attack the flag rather than another bomb.
 
-		int v = aiBombValue(pflag);
+		v = aiBombValue(pflag);
 
 	// Flag value needs to be higher than the lowest value piece
 	// and the highest expendable piece value,
@@ -5748,6 +5764,7 @@ public class TestingBoard extends Board
 
 		v = Math.max(v, minPieceValue(1-color) + VALUE_NINE);
 		v = Math.max(v, maxExpendableValue(1-color) + VALUE_NINE);
+		}
 
 		values[color][Rank.FLAG.ordinal()] = v;
 	}
@@ -5755,6 +5772,8 @@ public class TestingBoard extends Board
 	// risk of attack (0 is none,  10 is certain)
 	int apparentRisk(Piece fp, Rank rank, boolean unknownScoutFarMove, Piece tp)
 	{
+		assert !tp.isKnown() : "tp " + tp.getRank() + " should be unknown";
+
 		// Risk of an unknown scout attack decreases with
 		// with the number of scouts remaining.
 		//
@@ -5792,6 +5811,11 @@ public class TestingBoard extends Board
 				return 5;
 		}
 
+		// An attack on a fleeing piece is almost certain.
+		// (But you never know, maybe the opponent forgot).
+		if (isFleeing(fp, tp))
+			return 9;	// 90% chance of attack
+
 		if (r <= 4)
 			return r;
 
@@ -5800,12 +5824,6 @@ public class TestingBoard extends Board
 			// unless it really isn't the spy
 			return 1;
 		}
-
-		// An attack on a fleeing piece is almost certain.
-		if (!tp.isKnown()
-			&& tp.getActingRankFleeHigh() != Rank.NIL
-			&& r <= tp.getActingRankFleeHigh().ordinal())
-			return 9;	// 90% chance of attack
 
 		// Known Fives are unpredictable.  Suspected Fives
 		// even more so (because they could be a 6, 7 or 9).
@@ -6415,10 +6433,10 @@ public class TestingBoard extends Board
 	// likely worse, so the move is a loss.
 	// However, it is only a loss for low actingRankFlee
 	// or for high tp rank.
-	protected boolean isFleeing(Piece fp, Piece tp)
+	protected boolean isFleeing(Piece p, Piece unk)
 	{
-		assert fp.getColor() == Settings.topColor : "fp must be top color";
-		// fleeRankLow is always lower than fleeRankHigh.
+		assert !unk.isKnown() : "unk must be unknown";
+
 		// So checking fleeRankHigh usually determines the strength
 		// of the piece.  But if fleeRankHigh is unknown,
 		// and fleeRankLow is a numeric rank (i.e. the piece
@@ -6439,36 +6457,37 @@ public class TestingBoard extends Board
 		// AI should allow one of its weaker pieces to discover
 		// its true identity.
 
-		int fprank = fp.getRank().ordinal();
-		// if (fprank <= 4 && fprank > dangerousUnknownRank)
+		int rank = p.getRank().ordinal();
+		// if (rank <= 4 && rank > dangerousUnknownRank)
 		//	return false;
 
-		Rank fleeRank = tp.getActingRankFleeHigh();
+		Rank fleeRank = unk.getActingRankFleeHigh();
 		if (fleeRank == Rank.UNKNOWN
-			|| (fprank <= 4
+			|| (rank <= 4
+				&& p.getColor() == Settings.topColor
 				&& stealthValue(Settings.topColor, lowestUnknownNotSuspectedRank) * 5 / 4 > values[Settings.bottomColor][fleeRank.ordinal()]))
-			fleeRank = tp.getActingRankFleeLow();
+			fleeRank = unk.getActingRankFleeLow();
 
 		int fleerank = fleeRank.ordinal();
-		if (fleerank == fprank)
+		if (fleerank == rank)
 			return true;
 
 		if (fleeRank == Rank.UNKNOWN
 			|| fleeRank == Rank.NIL
-			|| (fprank <= 4
+			|| (rank <= 4
+				&& p.getColor() == Settings.topColor
 				&& stealthValue(Settings.topColor, lowestUnknownNotSuspectedRank) * 5 / 4 > values[Settings.bottomColor][fleeRank.ordinal()]))
 			return false;
 
-		if (fleerank >= fprank)
+		if (fleerank >= rank)
 			return true;
 
-		// If the opponent piece fled from an AI piece 5 and up,
-		// the risk of loss of an AI piece of the same rank
-		// or even one rank higher is zero.
+		// If the unknown piece fled from Rank 5 and up,
+		// and the player piece is one rank higher,
+		// then the risk is small.
 
-		else if ((fleerank == fprank
-				|| fleerank + 1 == fprank)
-			&& fleerank >= 5)
+		else if (fleerank >= 5
+			&& fleerank + 1 == rank)
 			return true;
 
 		return false;
