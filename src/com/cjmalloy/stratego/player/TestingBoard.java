@@ -249,7 +249,7 @@ public class TestingBoard extends Board
 		super(t);
 
 		// mark weak pieces before copying below
-		markExposedPieces();
+		markWeakPieces();
 
 		value = 0;
 		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
@@ -3604,15 +3604,15 @@ public class TestingBoard extends Board
 		// to determine piece ranks through these kinds of movements.
 
 				Rank oppRank = getLowestAdjacentEnemyRank(fpcolor, to);
-				if (oppRank != fp.getActingRankChase()) {
+				if (oppRank != fp.getActingRankChase()
+					&& oppRank != Rank.BOMB
+					&& oppRank != Rank.FLAG) {
 					fp.setActingRankChaseEqual(oppRank);
 
 					if (oppRank == Rank.UNKNOWN) {
 						if (hasLowValue(fp))
 							vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
-					} else if (oppRank != Rank.BOMB
-						&& oppRank != Rank.FLAG
-						&& fprank.ordinal() <= oppRank.ordinal())
+					} else if (fprank.ordinal() <= oppRank.ordinal())
 						vm -= valueStealth[fpcolor][fprank.ordinal()-1]/3;
 				}
 			}
@@ -6647,13 +6647,16 @@ public class TestingBoard extends Board
 			return false;
 
 	// If the opponent has dangerous ranks, then the AI is aggressive
-	// and assumes that the AI One is safe from any piece with a chase rank
-	// or from a weak area.
+	// and assumes that the AI One is safe from:
+	// - any piece with a chase rank
+	// - any piece from a weak area
+	// - a suspected bomb
 
 		if (dangerousKnownRank != 99 || dangerousUnknownRank != 99)
 			if (( tp.getActingRankChase() != Rank.NIL
 				&& !tp.isRankLess())
-				|| tp.isWeak())
+				|| tp.isWeak()
+				|| tp.getRank() == Rank.BOMB)
 			return false;
 
 	// If the One is not yet known at the outset of an exchange,
@@ -6849,23 +6852,23 @@ public class TestingBoard extends Board
 			&& suspectedRankAtLarge(c, Rank.SPY) == 0;
 	}
 
-	boolean isThreat(Piece fp, TestPiece tp)
-	{
-		assert fp.getColor() == Settings.bottomColor;
+        boolean isThreat(Piece fp, TestPiece tp)
+        {
+                assert fp.getColor() == Settings.bottomColor;
 
-		if (!fp.isKnown()
-			&& !fp.isSuspectedRank()) {
-			if (isInvincible(Settings.topColor, tp.getRank().ordinal())) {
-				if (tp.getRank() == Rank.ONE)
-					return isPossibleUnknownSpyXOne(tp, fp);
-				return false;
-			}
-			return true;
-		}
+                if (!fp.isKnown()
+                        && !fp.isSuspectedRank()) {
+                        if (isInvincible(Settings.topColor, tp.getRank().ordinal())) {
+                                if (tp.getRank() == Rank.ONE)
+                                        return isPossibleUnknownSpyXOne(tp, fp);
+                                return false;
+                        }
+                        return true;
+                }
 
-		Rank fprank = fp.getRank();
-		return fp.getRank().ordinal() < tp.getRank().ordinal();
-	}
+                Rank fprank = fp.getRank();
+                return fp.getRank().ordinal() < tp.getRank().ordinal();
+        }
 
 	boolean isStealthy(Piece p, int r)
 	{
@@ -6965,6 +6968,19 @@ public class TestingBoard extends Board
 		}
 	}
 
+        protected boolean lowRankNearby(int c, int i)
+        {
+                final int xdir[] = { 1, -1 };
+                for (int d : xdir ) {
+                        int j = i + d;
+                        Piece p = getPiece(j);
+                        if (p != null
+                                && p.getColor() == c
+                                && p.getApparentRank().ordinal() <= 5)
+                                return true;
+                }
+                return false;
+        }
 
 	void markExposedPiece(Piece oppPiece)
 	{
@@ -6987,7 +7003,7 @@ public class TestingBoard extends Board
 			up = 11;
 
 		for (int i = oppPiece.getIndex()+up; ; i += up) {
-			if (lowRankNearby(i))
+			if (lowRankNearby(c, i))
 				break;
 			Piece p = getPiece(i);
 			if (p != null) {
@@ -7001,6 +7017,79 @@ public class TestingBoard extends Board
 			}
 		}
 	}
+
+	void markExposedPieces(int mc)
+	{
+		// If the opponent has few Scouts remaining,
+		// it is marginly safer to expose low ranked pieces
+
+		Move m1 = getLastMove(mc);
+		if (m1 == null)
+			return;
+
+		int c = m1.getPiece().getColor();
+
+		if (rankAtLarge(1-c, Rank.NINE) < 3)
+			return;
+
+		// If piece a piece is still on the board
+		// and it moved vertically,
+		// it could be a superior piece whose blocking
+		// piece was removed, and now it is trying to
+		// escape detection.
+
+		if (getPiece(m1.getTo()) == m1.getPiece()) {
+
+			if (m1.getToX() - m1.getFromX() == 0)
+				return;
+
+		// It is difficult to guess if the opponent
+		// was forced to expose a piece or deliberately
+		// exposed a piece for some opportunity.
+		// And some opponents do not care about exposing
+		// their strong pieces.   So the following logic
+		// should not be too restrictive or complex.
+		// Marking weak pieces based on piece movements
+		// is just a (big) risk that the AI takes.
+
+		// If an opponent piece is nearby, the piece
+		// may have been chased, or the piece may be
+		// beginning a chase.
+
+			Move m2 = getLastMove(mc+1);
+			if (m2 == null)
+				return;
+
+			if (Grid.isAdjacent(m1.getFrom(), m2.getTo())
+				|| grid.hasAttack(m1.getPiece()))
+				return;
+
+		// There isn't an obvious reason why the piece moved,
+		// so if it exposed itself or another piece to a
+		// potential Scout attack, assume the exposed piece is weak.
+
+			markExposedPiece(m1.getPiece());
+		}
+
+
+		// Did the piece expose another piece?
+		int down;
+		if (c == Settings.topColor)
+			down = -11;
+		else
+			down = 11;
+
+		for (int i = m1.getFrom()+down; Grid.isValid(i); i += down) {
+			Piece p = getPiece(i);
+			if (p != null
+				&& p.getColor() == c) {
+				markExposedPiece(p);
+				break;
+			}
+		}
+		
+	}
+
 
 	// Unknown pieces at the front of the lanes at the start
 	// of the game or that freely move into a lane across
@@ -7038,7 +7127,7 @@ public class TestingBoard extends Board
 	// - - x x - - x x - -
 	// - - x x - - x x - -
 
-	void markExposedPieces()
+	void markWeakPieces()
 	{
 		selectForayLane();
 
@@ -7060,68 +7149,10 @@ public class TestingBoard extends Board
 		for (int x = 0; x < 10; x++)
 			getSetupPiece(Grid.getIndex(x, Grid.yside(1-c, 0))).setWeak(true);
 
-		// If the opponent has few Scouts remaining,
-		// it is marginly safer to expose low ranked pieces
-
-		if (rankAtLarge(c, Rank.NINE) < 4)
-			continue;
-
-		Move m1 = getLastMove(1);
-		if (m1 == null)
-			continue;
-
-		// If piece moves on the same vertical,
-		// it could be a superior piece whose blocking
-		// piece was removed, and now it is trying to
-		// escape detection.
-
-		if (m1.getToX() - m1.getFromX() == 0)
-			continue;
-
-		// It is difficult to guess if the opponent
-		// was forced to expose a piece or deliberately
-		// exposed a piece for some opportunity.
-		// And some opponents do not care about exposing
-		// their strong pieces.   So the following logic
-		// should not be too restrictive or complex.
-		// Marking weak pieces based on piece movements
-		// is just a (big) risk that the AI takes.
-
-		// If an opponent piece is nearby, the piece
-		// may have been chased, or the piece may be
-		// beginning a chase.
-
-		Move m2 = getLastMove(2);
-		if (m2 == null)
-			continue;
-
-		if (Grid.isAdjacent(m1.getFrom(), m2.getTo())
-			|| grid.hasAttack(m1.getPiece()))
-			continue;
-
-		// There isn't an obvious reason why the piece moved,
-		// so if it exposed itself or another piece to a
-		// potential Scout attack, assume the exposed piece is weak.
-
-		markExposedPiece(m1.getPiece());
-
-		// Did the piece expose another piece?
-		int down;
-		if (c == Settings.topColor)
-			down = -11;
-		else
-			down = 11;
-
-		for (int i = m1.getFrom()+down; Grid.isValid(i); i += down) {
-			Piece p = getPiece(i);
-			if (p != null
-				&& p.getColor() != c) {
-				markExposedPiece(p);
-				break;
-			}
-		}
-		
 		} // c
+
+		markExposedPieces(1);
+		markExposedPieces(2);
 
 		// AI set the opponent pieces in the foray lane weak.
 		// The idea is to attack unmoved pieces in the foray lane

@@ -509,7 +509,36 @@ public class Board
 		return undoList.get(size-i);
 	}
 
-	// return if chaser piece could be protected
+        boolean isThreat(Piece fp, Piece tp)
+        {
+                if (!fp.isKnown()
+                        && !fp.isSuspectedRank()) {
+                        if (isInvincibleDefender(tp))
+                                return false;
+                        return true;
+                }
+
+                Rank fprank = fp.getApparentRank();
+                return fp.getApparentRank().ordinal() < tp.getApparentRank().ordinal();
+        }
+
+	// return true if piece is threatened
+	public boolean wasThreatened(Piece tp, int i)
+	{
+		for (int d : dir) {
+			int j = i + d;
+			if (!Grid.isValid(j))
+				continue;
+			Piece p = getPiece(j);
+			if (p != null
+				&& p.getColor() == 1 - tp.getColor()
+				&& isThreat(p, tp))
+				return true;
+		}
+		return false;
+	}
+
+	// return true if chaser piece could be protected
 	public boolean isProtected(Piece chaserPiece, Piece chasedPiece)
 	{
 		int chaser = chaserPiece.getIndex();
@@ -520,11 +549,8 @@ public class Board
 			Piece p = getPiece(j);
 			if (p != null
 				&& p.getColor() == chaserPiece.getColor()
-				&& ((p.getApparentRank() == Rank.UNKNOWN
-					&& !isInvincibleDefender(chasedPiece))
-					|| p.getApparentRank().ordinal() < chasedPiece.getApparentRank().ordinal())) {
+				&& isThreat(p, chasedPiece))
 				return true;
-			}
 		}
 		return false;
 	}
@@ -832,7 +858,8 @@ public class Board
 		// Blue Four does not acquare a chase rank of Three,
 		// but remains a Four.
 
-		if (wasTrapped(chased, m.getFrom()))
+		if (wasThreatened(chased, m.getFrom())
+			&& wasTrapped(chased, m.getFrom()))
 			return;
 
 		// Prior to version 9.6, if a chase piece had a
@@ -3300,20 +3327,5 @@ public class Board
 			blufferRisk = Math.min(blufferRisk, 5);
 		}
 		p.revealRank();
-	}
-
-
-	protected boolean lowRankNearby(int i)
-	{
-		final int xdir[] = { 1, -1 };
-		for (int d : xdir ) {
-			int j = i + d;
-			Piece p = getPiece(j);
-			if (p != null
-				&& p.getColor() == bturn
-				&& p.getApparentRank().ordinal() <= 5)
-				return true;
-		}
-		return false;
 	}
 }
