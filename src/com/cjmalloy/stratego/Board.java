@@ -734,7 +734,7 @@ public class Board
 					continue;
 				Piece op = getPiece(j);
 				if (op == null
-					|| op.getColor() != 1 - fp.getColor()
+					|| op.getColor() != 1 - fleeTp.getColor()
 					|| isProtected(op, fleeTp)
 					|| tp != null)	// TBD: test rank
 					continue;
