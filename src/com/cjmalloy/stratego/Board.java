@@ -69,6 +69,7 @@ public class Board
         protected int[][] knownRank = new int[2][15];   // discovered ranks
         protected int[][] trayRank = new int[2][15];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
+	protected Rank[] chaseRank = new Rank[15];	// usual chase rank
 	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
@@ -719,11 +720,12 @@ public class Board
 		delayPiece = getLowestRankedDefender(getLastMove(), delayPiece);
 
 		for ( int i = 12; i <= 120; i++) {
+			if (!Grid.isValid(i))
+				continue;
 			Piece fleeTp = getPiece(i);
 			if (fleeTp == null
 				|| fleeTp == fp
-				|| fleeTp.isKnown()
-				|| fleeTp.getColor() != fp.getColor())
+				|| fleeTp.isKnown())
 				continue;
 			
 			for (int d : dir) {
@@ -732,16 +734,17 @@ public class Board
 					continue;
 				Piece op = getPiece(j);
 				if (op == null
-					|| op.getColor() == fp.getColor()
+					|| op.getColor() != 1 - fp.getColor()
 					|| isProtected(op, fleeTp)
 					|| tp != null)	// TBD: test rank
 					continue;
 
 				Rank rank = op.getApparentRank();
-				if (rank == Rank.BOMB
-					|| (delayPiece != null
-						&& op != delayPiece
-						&& rank.ordinal() >= delayPiece.getApparentRank().ordinal()))	// new in version 9.5
+				if (fleeTp.getColor() == fp.getColor()
+					&& (rank == Rank.BOMB
+						|| (delayPiece != null
+							&& op != delayPiece
+							&& rank.ordinal() >= delayPiece.getApparentRank().ordinal())))	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
@@ -1713,11 +1716,8 @@ public class Board
 
 	// The usual Stratego attack strategy is one rank lower.
 
-	protected Rank getChaseRank(Piece p, Rank rank, boolean rankLess)
+	Rank getChaseRank(int r)
 	{
-		int color = p.getColor();
-		int r = rank.ordinal();
-		assert color == Settings.bottomColor : "getChaseRank() only for opponent pieces";
 		Rank newRank = Rank.UNKNOWN;
 
 		// If a piece approaches an unknown piece, the approacher is
@@ -1734,11 +1734,11 @@ public class Board
 		// except for unknown Fives, the AI assumes that the approacher
 		// *is* a Five.
 
-		if (rank == Rank.UNKNOWN) {
+		if (r == Rank.UNKNOWN.ordinal()) {
 			for (int e: expendableRank)
-				if (unknownRankAtLarge(color, e) != 0)
+				if (unknownRankAtLarge(Settings.bottomColor, e) != 0)
 					return Rank.NIL;
-			if (unknownRankAtLarge(color, 5) == 0)
+			if (unknownRankAtLarge(Settings.bottomColor, 5) == 0)
 				return Rank.NIL;
 
 			r = 6; 	// chaser is probably a Five
@@ -1757,11 +1757,8 @@ public class Board
 		// is also positive.
 
 		if (r <= 7) {
-			int j = r;
-			if (!rankLess)
-				j--;
-			for (int i = j; i > 0; i--)
-				if (unknownRankAtLarge(color, i) != 0) {
+			for (int i = r; i > 0; i--)
+				if (unknownRankAtLarge(Settings.bottomColor, i) != 0) {
 					newRank = Rank.toRank(i);
 					break;
 				}
@@ -1798,6 +1795,22 @@ public class Board
 		}
 
 		return newRank;
+	}
+
+	protected Rank getChaseRank(Rank rank)
+	{
+		int r = rank.ordinal();
+		if (r <= 7)
+			return chaseRank[r-1];
+
+		return chaseRank[r];
+	}
+
+	protected Rank getChaseRank(Rank rank, boolean rankLess)
+	{
+		if (!rankLess)
+			return getChaseRank(rank);
+		return chaseRank[rank.ordinal()];
 	}
 
 	// Until version 10.1, bluffing determination relied on a simple count
@@ -1904,6 +1917,9 @@ public class Board
 				flag[p.getColor()] = p;
 		}
 
+		for (int r = 0; r < 15; r++)
+			chaseRank[r] = getChaseRank(r);
+
 		for (int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -1950,7 +1966,7 @@ public class Board
 					setSuspectedRank(p, Rank.SPY);
 
 			} else
-				setSuspectedRank(p, getChaseRank(p, rank, p.isRankLess()));
+				setSuspectedRank(p, getChaseRank(rank, p.isRankLess()));
 
 		} // for
 
@@ -3274,17 +3290,6 @@ public class Board
 			return false;
 
 		return isInvincible(p.getColor(), rank.ordinal());
-	}
-
-	//
-	// TBD: this should be assigned in constructor statically
-	//
-	public boolean isInvincibleWin(Piece p) 
-	{
-		Rank rank = p.getRank();
-		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
-			return false;
-		return (rank.ordinal() <= invincibleWinRank[p.getColor()]);
 	}
 
 	public long getHash()

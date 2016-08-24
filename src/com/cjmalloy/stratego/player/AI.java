@@ -1032,20 +1032,6 @@ public class AI implements Runnable
 		if (n < 1)
 			return bvalue;
 
-		BitGrid bg = new BitGrid();
-
-		// Find the neighbors of opponent pieces (1 - b.turn)
-		// (In other words, find the player's movable pieces
-		// that are under direct attack).
-
-		b.grid.getMovableNeighbors(1-b.bturn, bg);
-
-		// As qs is defined, if there are no neighbors,
-		// qs is the current value of the board
-
-		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return bvalue;
-
 		// If the opponent move was null and the player move
 		// is null, then the result is the same as if neither
 		// player move was null.  This can be thought of as
@@ -1064,6 +1050,23 @@ public class AI implements Runnable
 
 		if (alpha >= beta)
 			return best;
+
+		BitGrid bg = new BitGrid();
+
+		// Find the neighbors of opponent pieces (1 - b.turn)
+		// (In other words, find the player's movable pieces
+		// that are under direct attack).
+
+		b.grid.getMovableNeighbors(1-b.bturn, bg);
+
+		// As qs is defined, if there are no neighbors,
+		// qs is the current value of the board.
+		// Note: Version 10.3 checks this AFTER null move, because
+		// player might not have any movable pieces but opponent
+		// eight could be next to player flag!
+
+		if (bg.get(0) == 0 && bg.get(1) == 0)
+			return bvalue;
 
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
