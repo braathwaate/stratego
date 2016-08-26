@@ -4866,7 +4866,8 @@ public class TestingBoard extends Board
 		// opponent is a zealous bluffer, the AI does not
 		// assign indirect chase ranks, so the AI will attack anyway.
 
-				else if (!tp.wasKnown())
+				else if (!tp.wasKnown()
+					&& tp.isKnown())
 					vm += fpvalue - tpvalue / 3;
 
 				// Outcome is the negation as if ai were the attacker.
@@ -6206,11 +6207,17 @@ public class TestingBoard extends Board
 
 			assert !fp.isKnown() : "opponent piece must be unknown (" + fprank + "X" + tprank + ")";
 
+		// Any piece will take a SPY or FLAG
+
+			if (tprank == Rank.SPY
+				|| tprank == Rank.FLAG)
+				return Rank.WINS;
+
 		// By definition, attack on invincible rank loses or is even.
 		// But invincible eights should be used for attacking
 		// bombs rather than other eights.
 
-			if (isInvincible(tp)) {
+			else if (isInvincible(tp)) {
 				if (isPossibleUnknownSpyXOne((TestPiece)tp, fp))
 					return Rank.WINS;
 
@@ -6324,12 +6331,6 @@ public class TestingBoard extends Board
 						return Rank.EVEN;	// maybe not
 			}
 
-		// Any piece will take a SPY or FLAG
-
-			else if (tprank == Rank.SPY
-				|| tprank == Rank.FLAG)
-				return Rank.WINS;
-
 			return Rank.UNK;
 
 		} else if (tprank == Rank.UNKNOWN) {
@@ -6338,7 +6339,9 @@ public class TestingBoard extends Board
 
 			assert !tp.isKnown() : "opponent piece must be unknown (" + fprank + "X" + tprank + ")";
 
-			if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+			if (fprank == Rank.BOMB
+				|| fprank == Rank.FLAG
+				|| fprank == Rank.SPY)	// almost always
 				return Rank.LOSES;	// but has bluffing value
 
 		// If tp could be a bomb and fp is not an Eight,
@@ -6376,10 +6379,6 @@ public class TestingBoard extends Board
 				else if (fprank.ordinal() == lowestUnknownExpendableRank)
 					return Rank.EVEN;	// maybe not
 			}
-
-		// A spy almost always loses when attacking an unknown
-			else if (fprank == Rank.SPY)
-				return Rank.LOSES;	// maybe not
 
 			return Rank.UNK;
 		} // ai attacker
