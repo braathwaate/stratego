@@ -740,11 +740,10 @@ public class Board
 					continue;
 
 				Rank rank = op.getApparentRank();
-				if (fleeTp.getColor() == fp.getColor()
-					&& (rank == Rank.BOMB
-						|| (delayPiece != null
-							&& op != delayPiece
-							&& rank.ordinal() >= delayPiece.getApparentRank().ordinal())))	// new in version 9.5
+				if (rank == Rank.BOMB
+					|| (delayPiece != null
+						&& op != delayPiece
+						&& rank.ordinal() >= delayPiece.getApparentRank().ordinal()))	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);

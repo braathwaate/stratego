@@ -1346,7 +1346,7 @@ public class TestingBoard extends Board
 				&& p.getRank().ordinal() > dangerousKnownRank
 				&& p.getRank() != Rank.BOMB
 				&& p.getRank() != Rank.FLAG
-				&& lowerRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2)
+				&& lowerKnownOrSuspectedRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2)
 				unmovedValue[i] -= VALUE_MOVED*2;
 
 		} // i
