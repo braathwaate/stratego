@@ -2860,7 +2860,7 @@ public class TestingBoard extends Board
 						continue;
 
 					if (guarded == GUARDED_CAUTIOUS || guarded == GUARDED_OPEN_CAUTIOUS) {
-						int result = winFight(gp, attackPiece);
+						int result = winFight((TestPiece)gp, (TestPiece)attackPiece);
 						if (result == Rank.WINS
 							|| result == Rank.UNK)
 							isGuarded = true;
@@ -4844,33 +4844,7 @@ public class TestingBoard extends Board
 						|| !isExpendable(tp) && fp.isWeak()))
 					vm += fpvalue - tpvalue / 4;
 
-		// If an unknown opponent piece attacks an AI piece
-		// that was previously unknown, it is less likely
-		// that the unknown opponent is an adequate protector,
-		// because the opponent could not know for sure that
-		// the AI piece was strong.  For example,
-		// | R4 --
-		// | B5 B?
-		// | B? B?
-		// |------
-		// Red has the move.  Red Four is unknown and Blue
-		// Five is known.  R4?xB5 gains the value of Blue Five.
-		// The countermove B?xR4 has less value because R4?xB5
-		// could have been a surprise.
-		//
-		// This risky assumption makes the AI aggressive in
-		// cornering and attacking pieces.
-		// But note that if there is only one protector,
-		// the AI usually assigns the protector an indirect chase rank,
-		// deterring the AI from attacking.   Yet if the
-		// opponent is a zealous bluffer, the AI does not
-		// assign indirect chase ranks, so the AI will attack anyway.
-
-				else if (!tp.wasKnown()
-					&& tp.isKnown())
-					vm += fpvalue - tpvalue / 3;
-
-				// Outcome is the negation as if ai were the attacker.
+		// Outcome is the negation as if ai were the attacker.
 		// Note: prior to version 9.8, the number of
 		// adjacent unknowns were counted and used to decrease
 		// fpvalue to encourage the piece to pass the fewest
@@ -5717,7 +5691,9 @@ public class TestingBoard extends Board
 	// it has a high value and must be protected or
 	// attacked at all costs.
 
-		if (pflag.isKnown())
+		if (pflag.isKnown()
+			&& (color == Settings.topColor
+				|| unknownBombs[Settings.bottomColor] == 0))
 			v = 8888;
 		else {
 
@@ -6109,7 +6085,7 @@ public class TestingBoard extends Board
 		return winRank[fprank.ordinal()][tprank.ordinal()];
 	}
 
-	public int winFight(Piece fp, Piece tp)
+	public int winFight(TestPiece fp, TestPiece tp)
 	{
 		Rank fprank = fp.getRank();
 		Rank tprank = tp.getRank();
@@ -6285,13 +6261,52 @@ public class TestingBoard extends Board
 			if (riskExpendable && !fp.hasMoved())
 				return Rank.LOSES;	// maybe not
 
-		// What if the opponent rank has moved?  This
-		// usually means that the opponent rank is weak, since
-		// non-aggressive players move expendables to discover opponent
-		// ranks before moving the lower ranks to attack them.
-
-		// So in version 9.9, ranks with stealth values less
-		// than a unknown piece (i.e. Fours and Fives) are allowed
+		// If an unknown opponent piece attacks an AI piece
+		// that was previously unknown, it is less likely
+		// that the unknown opponent attacker is strong
+		// because the opponent could not know for sure that
+		// the AI piece was strong.  For example,
+		// | R4 --
+		// | B5 B?
+		// | B? B?
+		// |------
+		// Red has the move.  Red Four is unknown and Blue
+		// Five is known.  R4?xB5 gains the value of Blue Five.
+		// The countermove B?xR4 has less value because R4?xB5
+		// could have been a surprise.
+		//
+		// Thus B?xR4 is LOSES and R4 remains on the board.
+		// Even if R4 was attacked earlier and became known,
+		// R4xB5 is still a surprise.  For example,
+		// | R4 --
+		// | -- B?
+		// | B5 B?
+		// | B? B?
+		// |------
+		// Unknown Red Four moves down towards Blue Five.
+		// B?xR4 LOSES.  After R4xR5, B?xR4 should still
+		// be LOSES.  (TBD: This will be true in the search tree,
+		// yet if the opponent actually does play B?xR4,
+		// R4 will become known at the start of the next move,
+		// deterring it from playing R4xB5.)
+		//
+		// This risky assumption makes the AI aggressive in
+		// cornering and attacking pieces.
+		// But note that if there is only one protector,
+		// the AI usually assigns the protector an indirect chase rank,
+		// deterring the AI from attacking.   Yet if the
+		// opponent is a zealous bluffer, the AI does not
+		// assign indirect chase ranks, so the AI will attack anyway.
+		//
+		// Note that the loss of stealth for ranks (1-3) will
+		// deter them from approaching unknown pieces unless there
+		// is sizable material advantage in doing so.  Ranks 4 & 5
+		// will approach any unknown piece, because the unknown value
+		// exceeds the value of ranks 4 & 5.
+		//
+		// This replaces the less aggressive version 9.9 rule,
+		// where ranks with stealth values less
+		// than a unknown piece (i.e. Fours and Fives) were allowed
 		// to approach *moved* unknown pieces.  This dovetails
 		// with chase() because unknown moved pieces do not deter
 		// the chaser from its target.
@@ -6302,9 +6317,7 @@ public class TestingBoard extends Board
 		// idea is just to keep the opponent guessing.
 
 			if (tprank.ordinal() <= 5
-				&& !tp.isKnown()
-				&& !isStealthy(tp)
-				&& fp.hasMoved())
+				&& !tp.wasKnown())
 				return Rank.LOSES;	// maybe not
 
 		// If the attacker does not have a suspected rank,
@@ -6443,6 +6456,7 @@ public class TestingBoard extends Board
 
 		Rank fleeRank = unk.getActingRankFleeHigh();
 		if (fleeRank == Rank.UNKNOWN
+			&& !unk.isWeak()
 			&& isExpendable(p))
 			return true;
 
@@ -6457,6 +6471,7 @@ public class TestingBoard extends Board
 			return true;
 
 		if (fleeRank == Rank.UNKNOWN
+			&& !unk.isWeak()
 			&& isExpendable(p))
 			return true;
 

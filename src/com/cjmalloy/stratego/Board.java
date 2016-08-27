@@ -556,17 +556,15 @@ public class Board
 		return false;
 	}
 
-	protected Piece getLowestRankedDefender(Move m, Piece delayPiece)
+	protected Piece getLowestRankedOpponent(int color, int i, Piece delayPiece)
 	{
-		int to = m.getTo();
-		Piece fp = m.getPiece();
 		for (int d : dir) {
-			int j = to + d;
+			int j = i + d;
 			if (!Grid.isValid(j))
 				continue;
 			Piece op = getPiece(j);
 			if (op == null
-				|| op.getColor() == fp.getColor())
+				|| op.getColor() == color)
 				continue;
 			Rank rank = op.getApparentRank();
 
@@ -576,21 +574,6 @@ public class Board
 
 		}
 		return delayPiece;
-	}
-
-	void setForkedFleeRank(Piece chaser)
-	{
-		for (int d : dir) {
-			int j = chaser.getIndex() + d;
-			if (!Grid.isValid(j))
-				continue;
-			Piece op = getPiece(j);
-			if (op == null
-				|| op.getColor() == chaser.getColor())
-				continue;
-
-			op.setActingRankFlee(chaser.getApparentRank());
-		}
 	}
 
 	// Acting rank is a historical property of the known
@@ -622,52 +605,14 @@ public class Board
 
 	void genFleeRank(Piece fp, Piece tp)
 	{
-		Piece delayPiece = null;
-		Move m = getLastMove();
-
-		// movement aways
-		int from = m.getFrom();
-		for (int d : dir) {
-			int chaser = from + d;
-			if (!Grid.isValid(chaser))
-				continue;
-			Piece chasePiece = getPiece(chaser);
-			if (chasePiece != null
-				&& chasePiece.getColor() != fp.getColor()) {
-				// chase confirmed
-				Rank rank = chasePiece.getApparentRank();
-				if (rank == Rank.BOMB)
-					continue;
-
-		// fleeing delays implicit flee rank, see below
-
-				delayPiece = fp;
-
-		// if the chase piece is protected,
-		// nothing can be guessed about the rank
-		// of the fleeing piece.  It could be
-		// fleeing because it is a high ranked
-		// piece but it could also be
-		// a low ranked piece that wants to attack
-		// the chase piece, but does not because
-		// of the protection.
-
-				if (isProtected(chasePiece, fp))
-					continue;
-
-				fp.setActingRankFlee(rank);
-
-				setForkedFleeRank(chasePiece);
-			}
-		}
-
-		// Flee acting rank can be set implicitly if a player
-		// piece neglects to capture an adjacent opponent
-		// piece and the immediate player move was not a capture,
-		// a chase or the response to a chase.
+		// Flee acting rank is set on all adjacent unknown pieces.
+		// Thus, if the adjacent piece neglects to attack
+		// an adjacent opponent (and become known), it retains
+		// its unknown status, but because it fled, it can no
+		// longer bluff by chasing the same rank again.
 		//
 		// However, it is difficult to determine whether the
-		// player merely played some other move that requires
+		// player played some other move that requires
 		// immediate response and planned to move the fleeing piece
 		// later. So in version 9.1, this code was entirely removed,
 		// with the thought that was better to leave the flee rank at
@@ -711,13 +656,17 @@ public class Board
 		// | -- B?
 		// | B? --
 		// |xxxxxxx
-		// Red Seven moves down and forks two Unknowns.   Unknown Blue
-		// in the corner is a suspected Two and moves right.
-		// The flee rank on the other unknown Blue should be set
-		// because it neglected to attack the same piece that
-		// suspected Two fled from.  See setForkedFleeRank().
+		// Red Seven moves down and forks two Unknowns.
+		// Flee rank is set on both unknowns.  So if neither
+		// attacks Red Seven, Red Seven is safe to attack either
+		// one.
 
-		delayPiece = getLowestRankedDefender(getLastMove(), delayPiece);
+		// delayPiece is lowest of:
+		// 1. the piece just captured
+		// 2. a piece chased by the last move
+		// 3. a piece fled from by the last move
+		Piece delayPiece = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), tp);
+		delayPiece = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), delayPiece);
 
 		for ( int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
@@ -733,16 +682,28 @@ public class Board
 				if (!Grid.isValid(j))
 					continue;
 				Piece op = getPiece(j);
+
 				if (op == null
 					|| op.getColor() != 1 - fleeTp.getColor()
-					|| isProtected(op, fleeTp)
-					|| tp != null)	// TBD: test rank
+					|| isProtected(op, fleeTp))
 					continue;
 
+		// Handle this case:
+		// | -- R? --
+		// | B3 B? R5
+		// | -- -- --
+		// After R5xB? and B3xR5, unknown Red gains an immediate
+		// flee rank so that Red will realize that it must move
+		// away.
+
 				Rank rank = op.getApparentRank();
+				if (op == fp) {
+					fleeTp.setActingRankFlee(rank);
+					continue;
+				}
+
 				if (rank == Rank.BOMB
 					|| (delayPiece != null
-						&& op != delayPiece
 						&& rank.ordinal() >= delayPiece.getApparentRank().ordinal()))	// new in version 9.5
 					continue;
 
@@ -1387,7 +1348,7 @@ public class Board
 		//	the opponent chased a stronger piece.
 		//	And then the protector rank was set in error.
 
-			Piece defender = getLowestRankedDefender(m, chased);
+			Piece defender = getLowestRankedOpponent(m.getPiece().getColor(), m.getTo(), chased);
 			if (defender != chased)
 				return;
 		}
