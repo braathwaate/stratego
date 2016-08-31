@@ -1785,10 +1785,14 @@ public class Board
 	// (either chasing or fleeing, it doesn't matter)
 	// to accelerate the rank maturation in addition to
 	// the move count.
+	//
+	// Version 10.3 makes the Spy immediately suspected, because
+	// often it never moves and certainly doesn't chase.
 
 	boolean maybeBluffing(Piece p)
 	{
-		if (p.moves >= SUSPECTED_RANK_AGING_DELAY)
+		if (p.moves >= SUSPECTED_RANK_AGING_DELAY
+			|| p.getRank() == Rank.SPY)
 			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
@@ -2557,7 +2561,7 @@ public class Board
 
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
-		// bomb pattern are known.  This eliminates them
+		// bomb pattern are known bombs.  This eliminates them
 		// from the piece move lists, which means that
 		// they offer no protective value to pieces that
 		// bluff against lower ranked pieces.  This code
@@ -2566,8 +2570,13 @@ public class Board
 					if (maybe_count == 1) {
 						p.makeKnown();
 						grid.clearMovablePiece(p);
-					}
-					p.setSuspectedRank(Rank.BOMB);
+						p.setSuspectedRank(Rank.BOMB);
+
+		// If the piece already has a suspected rank, keep it,
+		// otherwise make it a suspected bomb
+
+					} else if (p.getRank() == Rank.UNKNOWN)
+						p.setSuspectedRank(Rank.BOMB);
 
 				}
 			} else if (p.getRank() == Rank.BOMB

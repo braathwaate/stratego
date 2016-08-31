@@ -1392,6 +1392,23 @@ public class TestingBoard extends Board
 
 	protected void chaseWithUnknown(Piece[][] plan, Piece p, int tmp[])
 	{
+		assert !isInvincibleDefender(p) : "Do not chase an invincible rank " + p.getRank() + " with unknowns!";
+
+		// Chase the opponent Two and Three
+		// at high priority if the opponent has not yet divulged
+		// the location of its Spy or One.  This may also
+		// convince the opponent that the unknown chaser
+		// is actually a lower rank, making the opponent think
+		// that his rank is locally invincible,
+		// then wham! the player's lowest rank can make the capture.
+
+		int priority = DEST_PRIORITY_CHASE;
+		if ((p.getRank() == Rank.TWO
+			|| p.getRank() == Rank.THREE)
+			&& hasUnsuspectedSpy(p.getColor())
+			&& hasUnsuspectedOne(p.getColor()))
+			priority = DEST_PRIORITY_CHASE_ATTACK;
+
 		boolean found = false;
 		int valuableRank = 0;
 		int valuableRankValue = 0;
@@ -1415,9 +1432,9 @@ public class TestingBoard extends Board
 
 			if (isExpendable(1-p.getColor(), r)) {
 				if (plan == planAPiece)
-					genNeededPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+					genNeededPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), r, priority);
 				else
-					genNeededPlanB(tmp, 1-p.getColor(), r, DEST_PRIORITY_CHASE);
+					genNeededPlanB(tmp, 1-p.getColor(), r, priority);
 				found = true;
 			} else if (valuableRank == 0 || valuableRankValue < pieceValue(1-p.getColor(), r)) {
 				valuableRank = r;
@@ -1430,9 +1447,9 @@ public class TestingBoard extends Board
 
 		if (!found && valuableRank != 0) {
 			if (plan == planAPiece)
-				genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+				genPlanA(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, priority);
 			else
-				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, DEST_PRIORITY_CHASE);
+				genPlanB(rnd.nextInt(2), tmp, 1-p.getColor(), valuableRank, priority);
 		}
 	}
 
@@ -1493,11 +1510,13 @@ public class TestingBoard extends Board
 
 			if (found != 0) {
 
-		// Most pieces chase at low priority.
-		// The exception is a Three chasing a Four, when the opponent Two
+		// Most pieces chase at low priority, except:
+		//
+		// Three chasing a Four, when the opponent Two
 		// is known or suspected.  This makes the Three invincible
-		// IF it wins the Four, i.e. 3x4 followed by ... 1?x3 is positive,
-		// because the value of the Four plus the value of the One stealth
+		// IF it wins the Four, i.e. 3x4 followed by
+		// ... 1?x3 is positive, because the value of the Four
+		// plus the value of the One stealth
 		// is greater than the value of the Three.  (This is similar
 		// to where the opponent Two and Threes are known or suspected,
 		// making the player Four invincible, because 1?x4 is positive).
@@ -1921,7 +1940,8 @@ public class TestingBoard extends Board
 				} else if (j != 1)
 					genPlanA(rnd.nextInt(2), destTmpA, 1-p.getColor(), j, priority);
 				// tbd: PlanB as well
-				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
+				if (!isInvincible(p))
+					chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
 
 			}
 		} // for
@@ -4612,7 +4632,8 @@ public class TestingBoard extends Board
 
 			else if (foray[fprank.ordinal()]
 				&& (isExpendable(fp) && !tp.isWeak()
-					|| !isExpendable(fp) && tp.isWeak()))
+					|| !isExpendable(fp)
+						&& (tp.isWeak() || isFleeing(fp, tp))))
 				vm += unknownValue(fp, tp) - fpvalue/4;
 
 			else {
@@ -6618,20 +6639,33 @@ public class TestingBoard extends Board
 	// piece or move away.
 	//
 	// Finally, the most aggressive approach is to rely on
-	// setup information, perhaps assuming that any piece
-	// from a weak location is not the Spy or that the Spy
-	// is shadowing the Two.
+	// setup information.  This is outright guessing, but some
+	// bots and players alike assume that the Spy
+	// was placed near the Two from the beginning.  If a player
+	// always relies on this assumption, then the opponent
+	// will learn this strategy in successive games, and then
+	// pretty much any neighboring piece to the Two becomes
+	// an effective Spy.  So when the AI relies on setup information
+	// to determine the Spy location, it only assumes that
+	// the Spy is not on the back row.
 	//
 	// The AI usually opts for the mid aggressive approach because
-	// the most aggressive approach can be learned
+	// the most aggressive approaches can be learned
 	// and then used to defeat the AI (i.e., if the player
 	// learns to bluff with its Spy, it can cause the AI
 	// to lose its One).
 	//
 	// Yet if the opponent has a dangerous known or unknown rank,
 	// the AI is sure to lose additional material once its
-	// One becomes known, so the AI switches to the absolutely
-	// most aggressive approach.
+	// One becomes known, so the AI becomes more aggressive.
+	//
+	// Finally, the AI is aggressive in trying to get the
+	// opponent to divulge the location of the Spy.   Thus, once
+	// the opponent Two is discovered, the AI chases it with
+	// unknown pieces until it either traps the Two between
+	// unknown pieces (one of which could the One) or the
+	// Two stops with an unknown protector, which the AI then
+	// assumes is the Spy and tries to attack it.
 
 	boolean isPossibleUnknownSpyXOne(TestPiece fp, Piece tp)
 	{
@@ -6661,26 +6695,6 @@ public class TestingBoard extends Board
 				|| tp.isWeak()
 				|| tp.getRank() == Rank.BOMB)
 			return false;
-
-	// If the One is not yet known at the outset of an exchange,
-	// then it is less likely that the opponent Spy
-	// will happen to be in position to capture the One.
-	// While risky, the AI assumes that the opponent Spy
-	// is shadowing the opponent Two, so unless
-	// the One attacks the Two, the unknown AI One is safe from
-	// capture by an unknown piece.  (If the AI does lose its One
-	// and the AI still has its Spy, the AI usually can still win
-	// anyway).
-
-		if (!fp.wasKnown()
-			&& rankAtLarge(Settings.bottomColor, Rank.TWO) != 0) {
-			UndoMove um = getLastMove(2);
-			if (um != null
-				&& um.tp != null
-				&& um.tp.getRank() == Rank.TWO)
-				return true;
-			return false;
-		}
 
 		return true;
 	}
@@ -6853,6 +6867,12 @@ public class TestingBoard extends Board
 	{
 		return hasSpy(c)
 			&& suspectedRankAtLarge(c, Rank.SPY) == 0;
+	}
+
+	boolean hasUnsuspectedOne(int c)
+	{
+		return rankAtLarge(c, Rank.ONE) != 0
+			&& suspectedRankAtLarge(c, Rank.ONE) == 0;
 	}
 
         boolean isThreat(Piece fp, TestPiece tp)
