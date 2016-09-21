@@ -43,7 +43,6 @@ public enum Rank
 
 	static public final int WINS = 1;
 	static public final int EVEN = -1;
-	static public final int UNK = -2;
 	static public final int LOSES = 0;
 
 	static public Rank toRank(int rank)

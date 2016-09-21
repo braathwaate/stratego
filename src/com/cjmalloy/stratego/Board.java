@@ -602,6 +602,14 @@ public class Board
 	// might in fact be incorrect, the opponent may
 	// at least suspect that the fleer would flee again from a
 	// piece of the same rank.
+	//
+	// When a piece forks two or more opponent pieces, setting the
+	// flee rank is just a guess if subsequently one of the
+	// opponent pieces attacks,
+	// because the neighboring pieces *could* be as strong
+	// as the opponent piece that attacked.   Statistically,
+	// however, the neighboring pieces are less likely to attack,
+	// so the AI assigns the flee rank to all of them.
 
 	void genFleeRank(Piece fp, Piece tp)
 	{
@@ -2104,25 +2112,23 @@ public class Board
 			if (tp != null
 				&& tp.getRank() == Rank.UNKNOWN
 				&& !tp.hasMoved()) {
-				boolean found = false;
+				int found = 0;
 				if (i != 78 && i != 87)	// top end pieces are often bombs
 				for ( int d : dir ) {
 					int j = i + d;
-					if (!Grid.isValid(j))
+					if (!Grid.isValid(j) || d == 11)
 						continue;
 					Piece p = getPiece(j);
 
 					if (p != null
 						&& !(p.hasMoved()
-							|| p.isKnown())) {
-						found = true;
-						break;
-					}
+							|| p.isKnown()))
+						found++;
 				}
 
 	// transform the piece into a suspected bomb.
 
-				if (!found)
+				if (found == 0)
 					tp.setSuspectedRank(Rank.BOMB);
 			}
 		}
@@ -2537,11 +2543,13 @@ public class Board
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
-		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
+		for (int j = 0; maybe[bestGuess][j] != 0; j++) {
 			assert Grid.isValid(maybe[bestGuess][j]) : maybe[bestGuess][j] + " is not valid ";
 			Piece p = getPiece(maybe[bestGuess][j]);
 			if (p == null
-				|| (p.isKnown() && p.getRank() != Rank.BOMB)
+				|| !(p.getRank() == Rank.BOMB
+					|| p.getRank() == Rank.FLAG
+					|| p.getRank() == Rank.UNKNOWN)
 				|| p.hasMoved()) {
 				isBombedFlag[color] = false;
 				continue;
