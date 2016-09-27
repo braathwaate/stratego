@@ -716,6 +716,23 @@ public class Board
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
+
+		// A piece that was left open to attack is probably weak
+		// as well.  For example,
+		// xx -- R? xx
+		// xx B3 B? xx
+		// -- -- -- --
+		// Unknown Blue has been fleeing unknown Red.   Then
+		// Blue played some other move.   This probably means
+		// that unknown Blue is weak; otherwise unknown Blue
+		// would have continued fleeing to avoid discovery.
+		// But instead unknown Blue stopped fleeing with
+		// Blue Three as protection, thinking that unknown Red
+		// is also weak, because it has been chasing an unknown.
+		// By making fleeTp, it means that R?xB? will be
+		// WINS and so the AI will see the countermove B3xR?.
+
+				fleeTp.setWeak(true);
 			}
 		}
 	}

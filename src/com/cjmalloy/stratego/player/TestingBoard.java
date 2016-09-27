@@ -3651,7 +3651,7 @@ public class TestingBoard extends Board
 			}
 
 		// On the previous move, if the AI moved an unknown piece
-		// adjacent to an opponent known piece of the same rank,j
+		// adjacent to an opponent known piece of the same rank,
 		// and the opponent attacked the AI piece, it was an EVEN
 		// exchange and the opponent normally wins the AI piece stealth.
 		// However if the opponent piece was not invincible, the AI
@@ -4190,7 +4190,7 @@ public class TestingBoard extends Board
 							vm += 1;
 						else {
 							vm -= fpvalue;
-							vm += fpvalue/ 20;
+							vm += fpvalue/ 10;
 							if (tp.hasMoved())
 								vm += fpvalue/ 10;
 							else if (tprank != Rank.BOMB)
@@ -4694,15 +4694,23 @@ public class TestingBoard extends Board
 		// information gleaned from piece movements in an attempt
 		// to reduce the effect of bluffing.
 
-					if (isFleeing(fp, tp))
+					if (isFleeing(fp, tp)
+						&& tp.hasMoved())
 						fpvalue = 0;
 
-					else if (foray[fprank.ordinal()]
-						&& (isExpendable(fp) && !tp.isWeak()
+					else {
+						boolean iw = isWeak(tp);
+						if (foray[fprank.ordinal()]
+						&& (isExpendable(fp) && !iw
 							|| !isExpendable(fp)
-								&& tp.isWeak()))
-						fpvalue = fpvalue/4;
+								&& iw))
+							fpvalue = fpvalue/4;
 
+		// If the AI is losing, then it aggressively attacks
+		// even with known pieces
+						else if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
+							fpvalue /= 2;
+					}
 
 					vm += unknownValue(fp, tp) - fpvalue;
 
@@ -4950,8 +4958,8 @@ public class TestingBoard extends Board
 
 		// If the AI is losing, then it aggressively attacks
 		// even with known pieces
-		//			if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
-		//				tpvalue /= 2;
+					if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
+						tpvalue /= 2;
 
 					vm += tpvalue - fpvalue;
 					vm = vm / distanceFactor(tp, fp);
@@ -5147,6 +5155,19 @@ public class TestingBoard extends Board
 		undoList.add(null);
 	}
 
+	// The AI thinks that a piece is probably weak if:
+	// 	- it comes from a weak square
+	//	- it chases an unknown
+	// 	- it chases an expendable piece
+
+	public boolean isWeak(Piece p)
+	{
+		return p.isWeak()
+			|| p.getActingRankChase() == Rank.UNKNOWN
+			|| (p.getActingRankChase() != Rank.NIL
+				&& isExpendable(1-p.getColor(), p.getActingRankChase().ordinal()));
+	}
+
 	// If the prior move was to the target square,
 	// then the opponent must consider whether the ai is bluffing.
 	// This could occur if the opponent moves a piece next to an
@@ -5191,7 +5212,8 @@ public class TestingBoard extends Board
 		// Bluffing doesn't work:
 		//	- if the AI piece is known
 		//	- if the opponent piece is low valued
-		//	- if the AI piece comes from a weak position
+		//	- if the AI piece appears to be weak
+		//		(but will try anyway if its flag is at risk)
 		// 	- if the AI piece has fled from this same piece rank before
 		//		(or neglected to attack)
 		// 	- if the AI piece has fled from some other piece rank before
@@ -5202,8 +5224,6 @@ public class TestingBoard extends Board
 		//		For example, if a Five passed by an AI piece,
 		//		the AI piece can no longer bluff against a
 		//		Five, Four, or Three, but could against a Two or One.
-		//	- if the AI piece has chased a low-value
-		//		(unknown or expendable) piece
 		//	- if the AI piece is the flag or flag bomb
 		//		and the opponent piece could be an eight
 		// 	- if the unknown AI piece is near the opponent flag,
@@ -5211,15 +5231,12 @@ public class TestingBoard extends Board
 
 		if (fp.isKnown()
 			|| hasLowValue(tp)
-			|| (fp.isWeak() && !isFlagBombAtRisk(tp))
+			|| (isWeak(fp) && !isFlagBombAtRisk(tp))
 			|| fp.getActingRankFleeLow() == tp.getRank()
 			|| (fp.getActingRankFleeLow() != Rank.NIL
 				&& fp.getActingRankFleeLow() != Rank.UNKNOWN
 				&& tp.getRank() != Rank.ONE	// Spy flees from any other piece
 				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow()) > stealthValue(tp) * 7 / 10)
-			|| fp.getActingRankChase() == Rank.UNKNOWN
-			|| (fp.getActingRankChase() != Rank.NIL
-				&& isExpendable(Settings.bottomColor, fp.getActingRankChase().ordinal()))
 			|| ((fp.getRank() == Rank.FLAG || fp.getRank() == Rank.BOMB)
 				&& fp.aiValue() != 0
 				&& (tp.getRank() == Rank.EIGHT || tp.getMaybeEight()))
@@ -6281,25 +6298,71 @@ public class TestingBoard extends Board
 			return LOSES;	// most likely
 		}
 
-		// Version 10.4 moved the isFleeing() check to
+		if (fprank == Rank.UNKNOWN) {
+
+		// Any piece will take a SPY or FLAG
+
+			if (tprank == Rank.SPY
+				|| tprank == Rank.FLAG)
+				return WINS;
+
+		// By definition, attack on invincible rank LOSES
+		// But invincible eights should be used for attacking
+		// bombs rather than other eights.
+		//
+		// Version 10.4 removed:
+		//	|| tprank.ordinal() == lowestUnknownNotSuspectedRank
+		// that made the exchange EVEN when the opponent
+		// invincible piece of the same rank is unknown.
+		// The bug is that the ONE should not disappear, because
+		// of a possible SpyxOne if the piece was protected.
+		//
+		// This bug could have been fixed
+		// by making the One WINS and leaving the code in
+		// for other ranks.   But an invincible piece should
+		// expect to win an unknown piece in most cases, yet it
+		// is important that winning suspected ranks is more
+		// positive to avoid the possibility of an even exchange
+		// with an unknown.
+		//
+		// Of course, there are situations where the AI will
+		// guess wrong causing loss of the game.  For example:
+		// RF RB
+		// RB --
+		// R1 --
+		// -- B?
+		// B8 --
+		// The AI might approach Unknown Blue, because it thinks
+		// it will win, but the exchange is even because unknown
+		// Blue is actually Blue One. So Blue Eight
+		// marches right to the flag bomb structure and wins the game.
+
+			else if (isInvincible(tp)) {
+				if (isPossibleUnknownSpyXOne((TestPiece)tp, fp))
+					return WINS;
+
+				if (tprank.ordinal() >= 8)
+					return EVEN;	// could be LOSES
+				else
+					return LOSES; // could be EVEN
+
+		// Version 10.4 added the isFleeing() check to
 		// the move value assessment (LOSES, EVEN, WINS)
-		// instead to using it to determine the move result.
+		// instead of using it to determine the move result
+		// if the AI piece is expendable and the opponent piece
+		// is thought to be strong.
+		//
 		// A fleeing piece could be of superior or inferior rank,
-		// so even if an opponent piece flees from an AI piece,
+		// so in this case,
 		// the AI assumes that it will lose its piece in
 		// an encounter, but that the encounter will be
 		// net positive for the AI.
 		//
-		// It also narrows the result where the AI has an invincible
-		// piece on the attack and the opponent has the same rank.
-		// In this case, attacking a fleeing unknown opponent piece is
-		// EVEN.   This encourages an unknown AI invincible piece
-		// to maintain cover until it can win a known rather than
-		// chasing the first unknown it comes into contact with.
-		// Yet a known AI invincible piece should attack
-		// fleeing unknowns because EVEN will award stealth,
-		// but it may prefer knowns because then it WINS.
-		//
+		// In addition, the isFleeing() check in the move
+		// value assignment applies to suspected ranks as well.
+		// So a suspected lower ranked opponent piece  that fled
+		// from an AI piece is a positive encounter but not a WIN.
+		// 
 		// In addition, not all suspected ranks are equal,
 		// because a suspected rank that fled from an AI
 		// rank poses no threat to it.  For example, a suspected
@@ -6336,28 +6399,6 @@ public class TestingBoard extends Board
 		// does not lose the value of its piece).   This is
 		// similar to WINS, but the AI piece is removed from
 		// the board.
-
-		if (fprank == Rank.UNKNOWN) {
-
-		// Any piece will take a SPY or FLAG
-
-			if (tprank == Rank.SPY
-				|| tprank == Rank.FLAG)
-				return WINS;
-
-		// By definition, attack on invincible rank loses or is even.
-		// But invincible eights should be used for attacking
-		// bombs rather than other eights.
-
-			else if (isInvincible(tp)) {
-				if (isPossibleUnknownSpyXOne((TestPiece)tp, fp))
-					return WINS;
-
-				if (tprank.ordinal() >= 8
-					|| tprank.ordinal() == lowestUnknownNotSuspectedRank)
-					return EVEN;	// could be LOSES
-				else
-					return LOSES; // could be EVEN
 
 			} else if (isFleeing(tp, fp)
 				&& (!isExpendable(tp)
@@ -6464,14 +6505,7 @@ public class TestingBoard extends Board
 		// with chase() because unknown moved pieces do not deter
 		// the chaser from its target.
 
-		// This is a non-symmetric rule; the rank is not given
-		// a WIN in attacking the unknown piece, because the
-		// unknown piece could easily be a stronger piece.  The
-		// idea is just to keep the opponent guessing.
-
-			if ((tprank == Rank.FIVE
-				|| tprank == Rank.FOUR
-				|| tprank == Rank.THREE)
+			if (tprank.ordinal() <= 5
 				&& !tp.wasKnown())
 				return LOSES;	// maybe not
 
@@ -6544,13 +6578,12 @@ public class TestingBoard extends Board
 			else if (fprank != Rank.EIGHT && isPossibleBomb(tp))
 				return UNK;
 
-		// By definition, invincible rank wins or is even
+		// By definition, invincible rank WINS (or is even)
 		// on attack of unknown moved pieces.
 		// But invincible eights should be used for attacking
 		// bombs rather than other eights.
 			else if (isInvincible(fp)) {
-				if (fprank.ordinal() >= 8
-					|| fprank.ordinal() == lowestUnknownNotSuspectedRank)
+				if (fprank.ordinal() >= 8)
 					return EVEN;	// maybe not, could be WINS
 				else
 					return WINS;	// maybe not, could be EVEN
@@ -6558,6 +6591,10 @@ public class TestingBoard extends Board
 				&& (!isExpendable(fp)
 					|| tp.isWeak()))
 					return WINS;	// maybe not
+
+			else if (fprank.ordinal() <= 5
+				&& !fp.wasKnown())
+				return WINS;	// maybe not
 
 			else if ((tp.getActingRankChase() != Rank.NIL
 				|| (foray[fprank.ordinal()]
