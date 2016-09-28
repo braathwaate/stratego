@@ -1357,7 +1357,6 @@ public class AI implements Runnable
 			throw new InterruptedException();
 		}
 
-		int alphaOrig = alpha;
 		long hashOrig = getHash();
 		int index = (int)(hashOrig % ttable[b.bturn].length);
 		TTEntry entry = ttable[b.bturn][index];
@@ -1428,7 +1427,7 @@ public class AI implements Runnable
 		assert hashOrig == getHash() : "hash changed";
 
 		TTEntry.Flags entryFlags;
-		if (vm <= alphaOrig)
+		if (vm <= alpha)
 			entryFlags = TTEntry.Flags.UPPERBOUND;
 		else if (vm >= beta)
 			entryFlags = TTEntry.Flags.LOWERBOUND;
