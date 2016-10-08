@@ -4711,11 +4711,11 @@ public class TestingBoard extends Board
 
 		// If the AI is losing, then it aggressively attacks
 		// even with known pieces
-						else if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
-							fpvalue /= 2;
+		//				else if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
+		//					fpvalue /= 2;
 					}
 
-					vm += unknownValue(fp, tp) - fpvalue;
+					vm += unknownValue(fp, fpvalue, tp) - fpvalue;
 
 		// Prior to version 9.7, if the AI attacked an unknown
 		// unmoved piece, the tpvalue was reduced
@@ -4939,7 +4939,7 @@ public class TestingBoard extends Board
 		// probability that fp is a bomb
 		// and cannot move
 
-				fpvalue = unknownValue(tp, fp);
+				fpvalue = unknownValue(tp, tpvalue, fp);
 
 				if (isFleeing(tp, fp))
 					vm -= fpvalue;
@@ -4961,8 +4961,8 @@ public class TestingBoard extends Board
 
 		// If the AI is losing, then it aggressively attacks
 		// even with known pieces
-					if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
-						tpvalue /= 2;
+		//			if (isWinning(Settings.bottomColor) >= VALUE_FIVE)
+		//				tpvalue /= 2;
 
 					vm += tpvalue - fpvalue;
 					vm = vm / distanceFactor(tp, fp);
@@ -5033,7 +5033,7 @@ public class TestingBoard extends Board
 	// that it will gain more stealth value because
 	// the remaining pieces must be lower ranked.
 
-	public int unknownValue(Piece fp, Piece tp)
+	public int unknownValue(Piece fp, int fpvalue, Piece tp)
 	{
 		assert tp.getRank() == Rank.UNKNOWN : "target piece is known? (" + tp.getRank() + ")";
 		assert lowestUnknownExpendableRank != 0 : "unknownValue: unknown rank should be known.";
@@ -5114,6 +5114,7 @@ public class TestingBoard extends Board
 		if (fprank == 8)
 			fprank = 9;
 		tpvalue += values[fp.getColor()][fprank] / 6;
+		tpvalue += riskOfWin(fpvalue, tp);
 
 		return tpvalue;
 	}
@@ -6253,15 +6254,15 @@ public class TestingBoard extends Board
 
 		// AI IS DEFENDER (tp)
 
-		if (!fp.isKnown()
-			&& tp.getColor() == Settings.topColor) {
-
 		if (tprank == Rank.BOMB
 			&& fp.getMaybeEight()) {
 			if (tp.isKnown() || tp.aiValue() != 0)
 				return WINS;	// maybe not
 			return LOSES;	// most likely
 		}
+
+		if (!fp.isKnown()
+			&& tp.getColor() == Settings.topColor) {
 
 		if (fprank == Rank.UNKNOWN) {
 
@@ -7209,8 +7210,8 @@ public class TestingBoard extends Board
 			up = 11;
 
 		for (int i = oppPiece.getIndex()+up; ; i += up) {
-			if (lowRankNearby(c, i))
-				break;
+			// if (lowRankNearby(c, i))
+			//	break;
 			Piece p = getPiece(i);
 			if (p != null) {
 				if (p.getColor() != c)
