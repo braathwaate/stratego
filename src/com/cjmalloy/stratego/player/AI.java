@@ -365,7 +365,7 @@ public class AI implements Runnable
 		// BF BB -- -- --
 
 				int v = b.planValue(fp, i, t);
-				if (v > 0 && v > vbest) {
+				if (v > vbest) {
 					tbest = t;
 					vbest = v;
 				}

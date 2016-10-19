@@ -21,13 +21,11 @@ import com.cjmalloy.stratego.Piece;
 public class TestPiece extends Piece
 {
         protected Piece orig;
-	boolean wasKnown;
 
-	public TestPiece(Piece p, boolean wk) 
+	public TestPiece(Piece p) 
 	{
 		super(p);
 		orig = p;
-		wasKnown = wk;
 	}
 
 	public int movesOrig()
@@ -35,8 +33,4 @@ public class TestPiece extends Piece
 		return orig.moves;
 	}
 
-	public boolean wasKnown()
-	{
-		return wasKnown;
-	}
 }

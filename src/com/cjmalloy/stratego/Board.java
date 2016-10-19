@@ -1190,13 +1190,27 @@ public class Board
 
 			if (p == null) {
 				UndoMove um3 = getLastMove(3);
-				UndoMove um7 = getLastMove(7);
 
-		// oversimplication of a Two Squares check
+		// If moving to the open square is prevented by
+		// Two Squares OR could possibly lead to Two Squares
+		// then the open square is not really an option.
+		// So if the chased player made some other move (um1)
+		// that left its chased piece open to attack,
+		// check the chased player prior move (um3).   If
+		// the chased piece just came from the open square, then
+		// perhaps it won't move back because it leads to a
+		// Two Squares ending.
+		//
+		// Note that if the chased piece sees that it is trapped
+		// in an area with no protection, the best bluff
+		// is to stop early, leaving an obvious open square.
+		// This indicates to the AI that it has protection.
+		// But if the piece, alternates between two open squares,
+		// the AI believes that the chased piece
+		// is trapped without any protection.
 
 				if (um3 != null
-					&& um7 != null
-					&& um3.getMove() == um7.getMove())
+					&& um3.getFrom() == i)
 					continue;
 
 		// check if the open square was occupied by the
@@ -2604,11 +2618,23 @@ public class Board
 						p.setSuspectedRank(Rank.BOMB);
 
 				}
-			} else if (p.getRank() == Rank.BOMB
-				&& maybe_count == 1) {
+			} else {
+
+		// color is AI
+				if (p.getRank() == Rank.BOMB
+					&& maybe_count == 1) {
 					p.makeKnown();
 					grid.clearMovablePiece(p);
 				}
+
+		// If the AI setup is a ruse where the flag is outside
+		// of the last potential bomb structure,
+		// clear isBombedFlag
+
+				if (flagp != flag[color]
+					&& maybe_count == 1)
+					isBombedFlag[color] = false;
+			}
 		} // j
 	}
 	// ********* end of suspected ranks
