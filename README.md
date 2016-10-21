@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.10.2][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.10.2/stratego_v0.10.2.jar
+[Stratego player v0.10.4][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.10.4/stratego_v0.10.4.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -26,8 +26,9 @@ or set up your computer to select which program opens the jar file.
 
 Finally, you can try to run it from the command line:
 
-	java -jar stratego_v0.10.0.jar
+	java -jar stratego_v0.10.4.jar
 
+For a more challenging game, click the Settings menu and set the difficulty level to the middle (about 1 second) and enable the Two Squares rule.
 
 # About the AI (Artificial Intelligence)
 

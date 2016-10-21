@@ -3501,7 +3501,7 @@ public class TestingBoard extends Board
 		boolean fpsuspected = fp.isSuspectedRank();
 
 		int rank = fprank.ordinal();
-		if (!fp.isKnown()
+		if (!fpknown
 			&& fp.moves == 0)
 			vm += unmovedValue[from];
 
@@ -3842,10 +3842,8 @@ public class TestingBoard extends Board
 
 					// fp is known
 
-					else if (tp.isKnown())
+					else {
 						vm += tpvalue - fpvalue;
-
-					else { // tp is unknown
 
 		// If the attacker is invincible, then the attacker knows
 		// that it cannot lose the exchange, but because this
@@ -3877,7 +3875,7 @@ public class TestingBoard extends Board
 
 						if (isInvincible(fp)
 							&& !(fprank == Rank.ONE && hasSpy(Settings.topColor)))
-							vm -= 10;
+							vm = -makePositive(-vm, values[Settings.topColor][unknownRank[Settings.topColor]]/2);
 
 		// If the defender is an unknown AI piece,
                 // then an attacker (not an invincible attacker, see above)
@@ -3899,8 +3897,6 @@ public class TestingBoard extends Board
 		// piece survives, and thus the transposition table
 		// returns a correct result).
 
-						else
-							vm += tpvalue - fpvalue;
 					}
 
 		// Unknown AI pieces also have bluffing value
@@ -3927,12 +3923,10 @@ public class TestingBoard extends Board
 		// make an even exchange.
 
 				if (tp.isKnown()) {
+					vm += tpvalue - fpvalue;
 					if (isInvincible(tp)
-						&& !fp.isKnown()
 						&& !(tprank == Rank.ONE && hasSpy(Settings.topColor)))
-						vm += 10;
-					else
-						vm += tpvalue - fpvalue;
+						vm = makePositive(vm, values[Settings.topColor][unknownRank[Settings.topColor]]/2);
 				} else {
 
 					assert !tp.isKnown() : "defender is known?"; 
@@ -4319,7 +4313,6 @@ public class TestingBoard extends Board
 				vm -= stealthValue(fp);
 
 				if (fpcolor == Settings.topColor) {
-					vm += tpvalue;
 
 		// If a piece has a suspected rank but has not yet moved,
 		// and an AI piece (except Eight) attacks it,
@@ -4335,24 +4328,25 @@ public class TestingBoard extends Board
 						&& !isFleeing(fp, tp))
 						vm -= riskOfLoss(fp, tp);
 
-		// Because of the loss of stealth, an AI win is often
-		// negative.  Yet the opponent does not know this,
-		// so the value must at least be the bluffing value.
-
-					if (depth != 0
-						&& isEffectiveBluff(fp, tp, m))
-						vm = Math.max(vm, VALUE_BLUFF);
 
 		// If unknown fp was protecting a known piece that tp won
-		// on the prior move, the AI is debited an additional
-		// amount to discourage it from protecting the piece,
+		// on the prior move, the AI does not receive the value
+		// of the won piece, but instead receives back the known
+		// piece value and loses the stealth of the protector.
+		// In other words, the value of the board is reset to
+		// the prior move minus the stealth of the protector.
+		//
+		// This discourages the AI from protecting the piece,
 		// because when a known attacked piece ceases to move, the
 		// opponent will guess that the protector is a lower ranked
 		// piece, thus losing its stealth without any gain.
-		// It is better for the attacked piece to flee.  Only
+		//
+		// Often it is better for the attacked piece to flee.  Only
 		// when the fleeing piece is cornered should it stop
-		// at the protector; the opponent then has to guess
-		// whether the cornered piece is protected or not.
+		// at the protector if the value of the known piece is worth
+		// more than the stealth of the protector.  Thus, the
+		// opponent has to guess whether the cornered piece
+		// is protected or not.
 		//
 		// But if the unknown piece approached the attacker,
 		// the attacker cannot be sure which unknown piece
@@ -4373,6 +4367,7 @@ public class TestingBoard extends Board
 		// So the AI only receives the value for the win
 		// only if the lost piece was itself an effective bluffer.
 
+					UndoMove m1 = getLastMove(1);
 					UndoMove m2 = getLastMove(2);
 					if (depth != 0
 						&& !fp.isKnown()
@@ -4380,7 +4375,17 @@ public class TestingBoard extends Board
 						&& m2.tp != null
 						&& !isEffectiveBluff(m2.tp, tp, m2.getMove())
 						&& tp == m2.getPiece())
-						vm = Math.min(vm, VALUE_BLUFF);
+						vm -= (m2.value - m1.value);
+					else
+						vm += tpvalue;
+
+		// Because of the loss of stealth, an AI win is often
+		// negative.  Yet the opponent does not know this,
+		// so the value must at least be the bluffing value.
+
+					if (depth != 0
+						&& isEffectiveBluff(fp, tp, m))
+						vm = Math.max(vm, VALUE_BLUFF);
 
 					fp.makeKnown();
 				}
@@ -4707,12 +4712,15 @@ public class TestingBoard extends Board
 
 					else {
 						boolean iw = isWeak(tp);
-						if ((foray[fprank.ordinal()]
-							|| isWinning(Settings.bottomColor) >= VALUE_FIVE && tp.hasMoved())
-						&& (isExpendable(fp) && !iw
+						if (isExpendable(fp) && !iw
 							|| !isExpendable(fp)
-								&& iw))
-							fpvalue = fpvalue/4;
+								&& iw) {
+							fpvalue /= 2;
+							if (tp.hasMoved()
+								&& (foray[fprank.ordinal()]
+								|| isWinning(Settings.bottomColor) >= VALUE_FIVE))
+								fpvalue /= 2;
+						}
 
 					}
 
@@ -4944,11 +4952,14 @@ public class TestingBoard extends Board
 
 				if (isFleeing(tp, fp))
 					vm -= fpvalue;
-				else if ((foray[tprank.ordinal()]
-					|| isWinning(Settings.bottomColor) >= VALUE_FIVE)
-					&& (isExpendable(tp) && !fp.isWeak()
-						|| !isExpendable(tp) && fp.isWeak()))
-					vm += tpvalue / 4 - fpvalue;
+				else if (isExpendable(tp) && !fp.isWeak()
+					|| !isExpendable(tp) && fp.isWeak()) {
+					tpvalue /= 2;
+					if (foray[tprank.ordinal()]
+						|| isWinning(Settings.bottomColor) >= VALUE_FIVE)
+						tpvalue /= 2;
+					vm += tpvalue - fpvalue;
+				}
 
 		// Outcome is the negation as if ai were the attacker.
 		// Note: prior to version 9.8, the number of
@@ -7406,5 +7417,20 @@ public class TestingBoard extends Board
 
 		return true;
 	}
-}
 
+	// Return a result between 0 and vm, depending on the value vm.
+	// The more negative vm is, the closer to zero.
+	// The more positive vm is, the closer to vm.
+
+	int makePositive(int vm, int v)
+	{
+		if (vm > v)
+			return vm;
+		else if (vm > 0)
+			return (v + vm)/2;
+		else if (vm > -v * 10)
+			return -vm/20;
+		else
+			return 0;
+	}
+}

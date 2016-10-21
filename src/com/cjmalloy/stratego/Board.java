@@ -1157,7 +1157,18 @@ public class Board
 
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
+		boolean activeProtector = false;
 		int open = 0;
+		UndoMove um1 = getLastMove(1);
+
+		// If the opponent attacked the chaser on the prior move
+		// (and obviously lost), the chaser was probably unknown,
+		// (unless the opponent is an idiot), so its rank
+		// cannot possibly determine the protector until the opponent
+		// declines to move the chased piece.
+
+		if (um1.tp == chaser)
+			return;
 
 		// If a piece moved adjacent to the chased piece,
 		// and the chased piece has more than one adjacent
@@ -1165,8 +1176,6 @@ public class Board
 		// that actively moved adjacent to the chase piece
 		// is the protector.
 
-		boolean activeProtector = false;
-		UndoMove um1 = getLastMove(1);
 		if (Grid.isAdjacent(um1.getTo(), i)) {
 			open++;	// adjacent square was open
 			Piece p = um1.getPiece();
@@ -1326,9 +1335,8 @@ public class Board
 		//	- a protector stepped in to protect one or both
 		//		of the pieces
 
-			UndoMove m = getLastMove();
-			if (Grid.steps(m.getTo(), chaser.getIndex()) == 2
-				&& !Grid.isAdjacent(m.getTo(), chased.getIndex()))
+			if (Grid.steps(um1.getTo(), chaser.getIndex()) == 2
+				&& !Grid.isAdjacent(um1.getTo(), chased.getIndex()))
 				return;
 
 		// If both the chased piece and the protector are unknown,
@@ -1357,7 +1365,7 @@ public class Board
 		// -- B? R5
 		// B? -- -- 
 
-			if (m.getPiece() == chased) {
+			if (um1.getPiece() == chased) {
 				if (!chased.isKnown())
 					return;
 
@@ -1387,7 +1395,7 @@ public class Board
 		//	the opponent chased a stronger piece.
 		//	And then the protector rank was set in error.
 
-			Piece defender = getLowestRankedOpponent(m.getPiece().getColor(), m.getTo(), chased);
+			Piece defender = getLowestRankedOpponent(um1.getPiece().getColor(), um1.getTo(), chased);
 			if (defender != chased)
 				return;
 		}
@@ -1423,7 +1431,7 @@ public class Board
 		// is probably a Seven or a Nine.  The lower unknown
 		// should gain a chase rank of Five.
 
-			if (m.getPiece() != unknownProtector
+			if (um1.getPiece() != unknownProtector
 				&& chaser.getApparentRank().ordinal() >= 5
 				&& !chased.isKnown())
 				return;
@@ -1444,8 +1452,8 @@ public class Board
 		// of the consequence.
 
 			if (chased.getApparentRank().ordinal() >= 5
-				&& chased == m.getPiece()
-				&& m.tp != null)
+				&& chased == um1.getPiece()
+				&& um1.tp != null)
 				return;
 
 		// TBD: If the unknown protector is part of a potential
@@ -1920,8 +1928,11 @@ public class Board
 				flag[p.getColor()] = p;
 		}
 
-		for (int r = 0; r < 15; r++)
+		for (int r = 1; r < 15; r++)
 			chaseRank[r] = getChaseRank(r);
+
+		// The only piece that chases a One is a One
+		chaseRank[0] = getChaseRank(1);
 
 		for (int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
