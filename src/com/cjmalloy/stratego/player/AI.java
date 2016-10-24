@@ -1389,7 +1389,7 @@ public class AI implements Runnable
 					if (entry.bestMove != 0)
 						killerMove.setMove(entry.bestMove);
 					log(DETAIL, " exact " + index + " " + negQS(entry.exactValue) + " " + negQS(entry.exactValue + dvr));
-					return entry.bestValue + dvr;
+					return entry.exactValue + dvr;
 				} else if (entry.flags == TTEntry.Flags.LOWERBOUND)
 					alpha = Math.max(alpha, entry.bestValue + dvr);
 				else if (entry.flags== TTEntry.Flags.UPPERBOUND)
