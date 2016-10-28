@@ -1536,14 +1536,14 @@ public class AI implements Runnable
 		// the AI flag could be attacked successfully,
 		// and only some of the moves considered the attack.
 
-		if (ttMove != -1) {
+		if (ttMove != -1
+			&& ttMove != 0) {
 
 		// use best move from transposition table for move ordering
 		// best move entries in the table are not tried
 		// if a duplicate of the killer move
 
-			if (ttMove != 0
-				&& !isValidMove(ttMove)) {
+			if (!isValidMove(ttMove)) {
 				ttMove = -1;
 				log(PV, n + ":" + ttMove + " bad tt entry");
 			} else {
@@ -1738,8 +1738,15 @@ public class AI implements Runnable
 		// generation.  If the null move causes alpha-beta
 		// pruning, then the move generation is skipped,
 		// saving a heap of time.
+		//
+		// Note: Prior to Version 10.4, if ttmove was null,
+		// it was tried in the ttmove code.  But we don't
+		// know if a null move is valid until after we
+		// check isPruned.  So version 10.4 now always
+		// tries the null move after killer move and
+		// before move generation.
 
-			if (isPruned && ttMove != 0) {
+			if (isPruned) {
 
 			logMove(n, 0, b.getValue(), MoveType.NU);
 			MoveResult mt = makeMove(n, 0);
@@ -1774,8 +1781,7 @@ public class AI implements Runnable
 		ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 		if (getMoves(bg, moveList, n)
 			&& b.depth != -1
-			&& !isPruned
-			&& ttMove != 0)
+			&& !isPruned)
 			addMove(moveList[INACTIVE], 0);
 
 		outerloop:

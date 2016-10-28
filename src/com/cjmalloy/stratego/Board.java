@@ -980,15 +980,24 @@ public class Board
 			chased.setActingRankChaseEqual(Rank.SIX);
 
 		else if (arank == Rank.NIL 
-			|| arank.ordinal() > chaserRank.ordinal()
+			|| arank.ordinal() >= chaserRank.ordinal()
 
-		// If an unknown piece has IS_LESS set (because it protected
-		// a piece) and then chases an AI piece,  clear IS_LESS
+		// Prior to Version 10.4, if an unknown piece had IS_LESS set
+		// (because it protected a piece) and then chased an AI piece,
+		// it always cleared IS_LESS
 		// (actual chases are better indicators of actual rank
 		// than protectors because of bluffing when an opponent
 		// piece is trapped.
+		//
+		// However, if the player wasn't bluffing, then information
+		// about a potential stronger piece is lost.  For example,
+		// An unknown Two protected a Four from attack.   Then
+		// the Two chased a Four.  Prior to Version 10.4, the AI
+		// would guess that the Two was a Three.   So Version 10.4
+		// retains the rank from IS_LESS if the rank is plausible.
 
-			|| chased.isRankLess()) {
+			|| (chased.isRankLess()
+				&& arank.ordinal() < chaserRank.ordinal() - 1)) {
 
 			chased.setActingRankChaseEqual(chaserRank);
 		}

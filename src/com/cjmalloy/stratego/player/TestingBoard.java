@@ -886,7 +886,8 @@ public class TestingBoard extends Board
 		// discovered, it will certainly go on a rampage.
 
 				if (dangerousUnknownRank != 99
-					&& r <= dangerousUnknownRank)
+					&& r <= dangerousUnknownRank
+					&& r != 1)
 					v = 0;
 
 		// Prior to version 9.9, opponent stealth remained constant
@@ -986,14 +987,43 @@ public class TestingBoard extends Board
 			valueStealth[c][r-1] = valueStealth[c][r-1] * 10 / (10 - u);
 		// Handle special cases
 
-		// The stealth of the opponent One must always be higher than
-		// the AI's lowest piece value.  Otherwise, the AI will
-		// never attack the suspected One and make it known,
-		// and consequently, the AI Spy will never attack,
-		// because the One must be known for the Spy to attack it.
-
-		if (hasSpy(Settings.topColor))
-			valueStealth[Settings.bottomColor][0] = Math.max(valueStealth[Settings.bottomColor][0], minPieceValue(Settings.topColor) * 5 / 4);
+		// Prior to version 10.4, the AI always set
+		// the stealth of the opponent One higher than
+		// the AI's lowest piece value.  Otherwise, the AI would
+		// not attack the suspected One and make it known,
+		// and consequently, the AI Spy would not attack,
+		// because the One must be known for the Spy to attack it,
+		// because the Spy risks total loss if it is wrong
+		// (see riskOfLoss()).
+		//
+		// While this makes sense in an endgame where the AI has a
+		// spare expendable piece, the loss of a piece can
+		// cause loss of the game in other situations.
+		// And valueStealth is adjusted (see above) in situations
+		// where the AI has an excess piece count majority.
+		//
+		// So to be consistent with the 
+		// the strategy of leaving suspected pieces unknown
+		// (see prior comments, "rampage" and
+		// "opponent stealth remained constant"), version 10.4 also
+		// leaves the suspected One unknown.   So in an endgame
+		// where the opponent has two unknown pieces (the suspected
+		// One and say a Seven buried in a bomb structure),
+		// the AI Spy must be bold enough to approach the suspected One
+		// and attack it if possible; othewise the game would
+		// end in a draw.
+		//
+		// For the AI Spy to attack the suspected One, the
+		// suspected One value must be greater than the AI Spy
+		// value (see WINS).   This happens in two ways.
+		// (1) The value of AI Spy is tied to the value of the opponent
+		// Three and Four (see adjustPieceValues(), and so
+		// drops as AI Threes and Fours are removed
+		// from the board.   (2) The suspected value of the opponent One
+		// increases with moves (see actualValue()).
+		//
+		// TBD: These kind of endgames may need to be handled
+		// in a more specific way, such as a database of endings.
 	}
 
 	// Is the AI winning? If so, its pieces are worth less
@@ -3657,8 +3687,8 @@ public class TestingBoard extends Board
 			if (depth != 0
 				&& m2 != null
 				&& Grid.isAlternatingMove(m, m2)
-				&& m3 != null
-				&& !Grid.isPossibleTwoSquaresChase(m2, m3))
+				&& (m3 == null
+					|| !Grid.isPossibleTwoSquaresChase(m2, m3)))
 				vm += values[1-fpcolor][unknownRank[1-fpcolor]]/3;
 
 			int v = planValue(fp, from, to);
@@ -4713,7 +4743,7 @@ public class TestingBoard extends Board
 					else {
 						boolean iw = isWeak(tp);
 						if (isExpendable(fp) && !iw
-							|| !isExpendable(fp)
+							|| fprank.ordinal() <= 5
 								&& iw) {
 							fpvalue /= 2;
 							if (tp.hasMoved()
@@ -4953,7 +4983,7 @@ public class TestingBoard extends Board
 				if (isFleeing(tp, fp))
 					vm -= fpvalue;
 				else if (isExpendable(tp) && !fp.isWeak()
-					|| !isExpendable(tp) && fp.isWeak()) {
+					|| tprank.ordinal() <= 5  && fp.isWeak()) {
 					tpvalue /= 2;
 					if (foray[tprank.ordinal()]
 						|| isWinning(Settings.bottomColor) >= VALUE_FIVE)
@@ -6682,14 +6712,6 @@ public class TestingBoard extends Board
 			return false;
 
 		if (fleerank >= rank)
-			return true;
-
-		// If the unknown piece fled from Rank 5 and up,
-		// and the player piece is one rank higher,
-		// then the risk is small.
-
-		else if (fleerank >= 5
-			&& fleerank + 1 == rank)
 			return true;
 
 		return false;
