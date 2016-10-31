@@ -577,14 +577,10 @@ public class Board
 	}
 
 	// Acting rank is a historical property of the known
-	// opponent piece ranks that a moved piece was adjacent to.
+	// opponent piece ranks that a player piece was adjacent to.
 	//
-	// Acting rank is calculated factually, but is of
+	// Although acting rank is calculated factually, it is of
 	// questionable use in the heuristic because of bluffing.
-	//
-	// If a piece moves away from an unprotected
-	// opponent attacker, it inherits a flee acting rank
-	// of the lowest rank that it fled from.
 	// High flee acting ranks are probably of
 	// little use because unknown low ranks may flee
 	// to prevent discovery.
@@ -611,64 +607,64 @@ public class Board
 	// however, the neighboring pieces are less likely to attack,
 	// so the AI assigns the flee rank to all of them.
 
+	// Flee acting rank is set on all adjacent unknown pieces.
+	// Thus, if the adjacent piece neglects to attack
+	// an adjacent opponent (and become known), it retains
+	// its unknown status, but because it fled, it can no
+	// longer bluff by chasing the same rank again.
+	//
+	// However, it is difficult to determine whether the
+	// player played some other move that requires
+	// immediate response and planned to move the fleeing piece
+	// later. So in version 9.1, this code was entirely removed,
+	// with the thought that was better to leave the flee rank at
+	// NIL until the piece actually flees.
+	//
+	// But the removal of the code meant that if an opponent piece
+	// passes by an unknown player piece, and the player
+	// piece neglects to attack, the flee rank would not be set,
+	// and so the player would still
+	// think that the piece would still be useful for
+	// chasing the opponent piece away.  But of course
+	// the opponent would call the bluff, and attack the
+	// moved piece, because now the opponent knows it is
+	// a weaker piece.
+	//
+	// So the code was restored for version 9.5, adding
+	// additional checks to guess if the last move played
+	// should delay the setting of flee rank.  This is definitely
+	// tricky, and undoubtably does not handle all cases,
+	// but this code is essential to prevent an opponent from using
+	// low ranked pieces to probe the player's ranks and
+	// baiting them to move.
+
+	// New code in Version 9.5.
+	// Check for a possible delay before setting the flee rank.
+	// - if the player chases an equal or lower ranked piece.
+	// - if the player flees from a equal or lower attacker
+	//
+	// For example,
+	// xx xx B3 -- xx 
+	// -- R4 -- R? -- 
+	// -- B? -- -- --
+	// Unknown Blue approaches Red Four, so unknown Blue
+	// now is a suspected Three.  Unknown Red moves up
+	// and attacks Blue Three.  Blue Three moves away.  Do not set
+	// a flee rank on unknown Blue, because a lower ranked
+	// Blue piece was moved instead.
+	//
+	// Contrast with this example:
+	// | R7 --
+	// | -- B?
+	// | B? --
+	// |xxxxxxx
+	// Red Seven moves down and forks two Unknowns.
+	// Flee rank is set on both unknowns.  So if neither
+	// attacks Red Seven, Red Seven is safe to attack either
+	// one.
+
 	void genFleeRank(Piece fp, Piece tp)
 	{
-		// Flee acting rank is set on all adjacent unknown pieces.
-		// Thus, if the adjacent piece neglects to attack
-		// an adjacent opponent (and become known), it retains
-		// its unknown status, but because it fled, it can no
-		// longer bluff by chasing the same rank again.
-		//
-		// However, it is difficult to determine whether the
-		// player played some other move that requires
-		// immediate response and planned to move the fleeing piece
-		// later. So in version 9.1, this code was entirely removed,
-		// with the thought that was better to leave the flee rank at
-		// NIL until the piece actually flees.
-		//
-		// But the removal of the code meant that if an opponent piece
-		// passes by an unknown player piece, and the player
-		// piece neglects to attack, the flee rank would not be set,
-		// and so the player would still
-		// think that the piece would still be useful for
-		// chasing the opponent piece away.  But of course
-		// the opponent would call the bluff, and attack the
-		// moved piece, because now the opponent knows it is
-		// a weaker piece.
-		//
-		// So the code was restored for version 9.5, adding
-		// additional checks to guess if the last move played
-		// should delay the setting of flee rank.  This is definitely
-		// tricky, and undoubtably does not handle all cases,
-		// but this code is essential to prevent an opponent from using
-		// low ranked pieces to probe the player's ranks and
-		// baiting them to move.
-
-		// New code in Version 9.5.
-		// Check for a possible delay before setting the flee rank.
-		// - if the player chases an equal or lower ranked piece.
-		// - if the player flees from a equal or lower attacker
-		//
-		// For example,
-		// xx xx B3 -- xx 
-		// -- R4 -- R? -- 
-		// -- B? -- -- --
-		// Unknown Blue approaches Red Four, so unknown Blue
-		// now is a suspected Three.  Unknown Red moves up
-		// and attacks Blue Three.  Blue Three moves away.  Do not set
-		// a flee rank on unknown Blue, because a lower ranked
-		// Blue piece was moved instead.
-		//
-		// Contrast with this example:
-		// | R7 --
-		// | -- B?
-		// | B? --
-		// |xxxxxxx
-		// Red Seven moves down and forks two Unknowns.
-		// Flee rank is set on both unknowns.  So if neither
-		// attacks Red Seven, Red Seven is safe to attack either
-		// one.
-
 		// delayPiece is lowest of:
 		// 1. the piece just captured
 		// 2. a piece chased by the last move
@@ -717,6 +713,8 @@ public class Board
 
 				fleeTp.setActingRankFlee(rank);
 
+		// Should the piece also be set "weak"?
+
 		// A piece that was left open to attack is probably weak
 		// as well.  For example,
 		// xx -- R? xx
@@ -731,8 +729,12 @@ public class Board
 		// is also weak, because it has been chasing an unknown.
 		// By making fleeTp, it means that R?xB? will be
 		// WINS and so the AI will see the countermove B3xR?.
-
-				fleeTp.setWeak(true);
+		//
+		// But if multiple pieces are forked, only one of them
+		// can move.  And if a piece is trapped, it cannot move.
+		// So a piece really cannot be set to weak without
+		// further situational analysis.
+		//		fleeTp.setWeak(true);
 			}
 		}
 	}
@@ -1887,10 +1889,10 @@ public class Board
 	//
 	protected void genSuspectedRank()
 	{
-		int piecesNotBomb[] = new int[2];
+		int piecesMovable[] = new int[2];
 		for (int c = RED; c <= BLUE; c++) {
                         piecesInTray[c] = 0;
-                        piecesNotBomb[c] = 0;
+                        piecesMovable[c] = 0;
 			flag[c] = null;
 			unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
                         for (int j=0;j<15;j++) {
@@ -1929,8 +1931,9 @@ public class Board
 			if ((p.hasMoved()
 				|| p.isKnown()
 				|| unknownBombs[p.getColor()] == 0)
-				&& p.getRank() != Rank.BOMB)
-				piecesNotBomb[p.getColor()]++;
+				&& p.getRank() != Rank.BOMB
+				&& p.getRank() != Rank.FLAG)
+				piecesMovable[p.getColor()]++;
 
 			if (p.getRank() == Rank.FLAG
 				&& p.getColor() == Settings.topColor)
@@ -2011,7 +2014,7 @@ public class Board
 		// If all pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesNotBomb[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.ordinal()-1];
+		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesMovable[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.ordinal()-1];
 		if (possibleUnknownMovablePieces[c] == 0) {
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
@@ -2023,7 +2026,8 @@ public class Board
 					continue;
 				if (p.isKnown())
 					continue;
-				if (p.hasMoved()) {
+				if (p.hasMoved()
+					|| unknownBombs[c] == 0) {
 					if (unknownRank != 0) {
 						p.setRank(Rank.toRank(unknownRank));
 						p.makeKnown();
@@ -2616,7 +2620,7 @@ public class Board
 		// (See riskOfLoss()).
 
 				if (eightAttack
-					&& p.getRank() != Rank.BOMB) {
+					&& !p.isKnown()) {
 
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the

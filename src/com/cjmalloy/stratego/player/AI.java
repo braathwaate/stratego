@@ -1426,8 +1426,14 @@ public class AI implements Runnable
 
 		assert hashOrig == getHash() : "hash changed";
 
+		// Note: this is the same as Marsland
+		// (A Review of Game Tree Pruning, p. 15)
+		// with a slight improvement by qualifying UPPERBOUND
+		// by n > 1.  This is because the called negamax
+		// function is always exact when n == 0.
+
 		TTEntry.Flags entryFlags;
-		if (vm <= alpha)
+		if (vm <= alpha && n > 1)
 			entryFlags = TTEntry.Flags.UPPERBOUND;
 		else if (vm >= beta)
 			entryFlags = TTEntry.Flags.LOWERBOUND;

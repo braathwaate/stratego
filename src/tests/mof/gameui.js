@@ -781,13 +781,15 @@ function onSetWebMoveResponse()
 		UIState.ServiceCallInProgress = false;
 		
 		if (Service.status == 0) {	
-			require('util').debug('ERROR');
+			require('util').debug('ERROR onSetWebMoveResponse');
+
+			// try to resend the move again
 			//submit SetWebMove request to web service
 			Service.open("POST", Constants.ServiceURL, true);
 			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
 			Service.setRequestHeader("SOAPAction", "http://www.jayoogee.com/StrategyWebGame/SetWebMove");
 			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[startRow][startCol].Type));
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectMOve.StartRow][UIState.SelectMove.StartCol].Type));
 			
 			UIState.ServiceCallInProgress = true;
 		} else if (Service.status == 200)
@@ -906,7 +908,7 @@ function onSetComputerMoveResponse()
 		UIState.ServiceCallInProgress = false;
 		
 		if (Service.status == 0) {
-			require('util').debug('ERROR');
+			require('util').debug('ERROR onSetComputerMoveResponse');
 			// retry on error
 			//submit SetWebMove request to web service
 			Service.open("POST", Constants.ServiceURL, true);

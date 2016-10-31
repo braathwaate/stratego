@@ -261,7 +261,13 @@ public class TestingBoard extends Board
 	{
 		super(t);
 
+		genSuspectedRank();
+		genUnknownWeakRankAtLarge();
+
 		// mark weak pieces before copying below
+		// markWeakPieces depends on hasFewWeakRanks
+		// which depends on genSuspectedRank
+		// and genUnknownWeakRankAtLarge
 		markWeakPieces();
 
 		value = 0;
@@ -311,11 +317,6 @@ public class TestingBoard extends Board
 			}
 		}
 
-		// call genSuspectedRank early before calling aiValue()
-		// but after trayRank and knownRank are calculated
-		// because genSuspectedRank depends on unknownRankAtLarge()
-		genSuspectedRank();
-		genUnknownWeakRankAtLarge();
 		adjustPieceValues();
 		genDangerousRanks();
 		genForay();	// depends on sumValues, dangerousUnknownRank
@@ -2594,7 +2595,7 @@ public class TestingBoard extends Board
 		// while using its Eight to attack.
 
                         values[1-c][Rank.EIGHT.ordinal()]
-                                += (30 - lowerRankCount[c][8])*2;
+                                += (30 - lowerRankCount[c][8])*VALUE_EIGHT/15;
 		}
 
 		// Making the flag known eliminates the flag
