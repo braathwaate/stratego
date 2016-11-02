@@ -1059,14 +1059,19 @@ public class AI implements Runnable
 
 		b.grid.getMovableNeighbors(1-b.bturn, bg);
 
-		// As qs is defined, if there are no neighbors,
-		// qs is the current value of the board.
 		// Note: Version 10.3 checks this AFTER null move, because
 		// player might not have any movable pieces but opponent
-		// eight could be next to player flag!
+		// eight could be next to player flag! (Version 10.4
+		// actually fixed the bug by returning "best" instead
+		// of "bvalue").
+		//
+		// As qs is defined, if there are no neighbors,
+		// qs is the value of the board if the player makes
+		// a null move, allowing the opponent's movable pieces
+		// to continue racking up points.
 
 		if (bg.get(0) == 0 && bg.get(1) == 0)
-			return bvalue;
+			return best;
 
 		for (int bi = 0; bi < 2; bi++) {
 			int k;

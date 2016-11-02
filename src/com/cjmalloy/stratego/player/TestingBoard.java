@@ -393,7 +393,7 @@ public class TestingBoard extends Board
 
 		// targetUnknownBlockers();
 
-		assert flag[Settings.topColor] != null : "AI flag unknown";
+		assert flag[Settings.topColor] != 0 : "AI flag unknown";
 	}
 
 	int missingValue(int c, int r)
@@ -2049,13 +2049,13 @@ public class TestingBoard extends Board
 	// computation.)
 	//
 
-	private void defendFlag(Piece flagp)
+	private void defendFlag(int flagi)
 	{
+		Piece flagp = getPiece(flagi);
 		int color = flagp.getColor();
-		int flagi = flagp.getIndex();
 
 		if (color == Settings.topColor
-			&& flagp != flag[color])
+			&& flagi != flag[color])
 			return;
 
 		// Even when the flag is not completely bombed,
@@ -2433,8 +2433,8 @@ public class TestingBoard extends Board
 
 	private void aiFlagSafety()
 	{
-		Piece pflag = flag[Settings.topColor];
-		int flagi = pflag.getIndex();
+		int flagi = flag[Settings.topColor];
+		Piece pflag = getPiece(flagi);
 		int color = pflag.getColor();
 
 		assert pflag.getRank() == Rank.FLAG : "aiFlag not ai flag?";
@@ -2561,9 +2561,10 @@ public class TestingBoard extends Board
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
-		Piece pflag = flag[c];
-		if (pflag == null)
+		int flagi = flag[c];
+		if (flagi == 0)
 			continue;
+		Piece pflag = getPiece(flagi);
 
                 // revalue eights
                 // (Note: maybe_count == 0 calls setExpendableEights even
@@ -2660,7 +2661,7 @@ public class TestingBoard extends Board
                         && isBombedFlag[c]
                         && eightAttack)
 				for (int d : dir) {
-					int j = flag[c].getIndex() + d;
+					int j = flag[c] + d;
 					if (!Grid.isValid(j))
 						continue;
 
@@ -2668,8 +2669,8 @@ public class TestingBoard extends Board
 						maybe_count[c] - open_count[c] <= opponentEightsAtLarge);
 				}
 
-		defendFlag(pflag);
-		genDestFlag(pflag.getIndex());
+		defendFlag(flagi);
+		genDestFlag(flagi);
 
 		// Unmoved pieces that remain in structures that could
 		// contain the flag should remain unmoved if possible,
@@ -3099,6 +3100,9 @@ public class TestingBoard extends Board
 
 	protected Rank getLowestAdjacentEnemyRank(int color, int to)
 	{
+		if (!grid.hasAttack(color, to))
+			return Rank.NIL;
+
 		int minRank = 99;
 		for (int d : dir) {
 			Piece tp = getPiece(to + d);
@@ -3563,10 +3567,10 @@ public class TestingBoard extends Board
 		// pieces in the lanes while the opponent pieces
 		// ran amok.
 	
-		if (flag[1-fpcolor] != null &&
+		if (flag[1-fpcolor] != 0 &&
 			fp.moves - fp.movesOrig() == 0) {
-			if (Grid.steps(to, flag[1-fpcolor].getIndex())
-				- Grid.steps(from, flag[1-fpcolor].getIndex()) < 0)
+			if (Grid.steps(to, flag[1-fpcolor])
+				- Grid.steps(from, flag[1-fpcolor]) < 0)
 				vm++;
 			else
 				vm--;
@@ -3624,8 +3628,7 @@ public class TestingBoard extends Board
 
 			if (fpcolor == Settings.topColor) {
 
-			if (!fp.isKnown()
-				&& grid.hasAttack(fpcolor, to)) {
+			if (!fp.isKnown()) {
 
 		// By approaching any enemy piece for the first time,
 		// the AI piece loses part of its stealth, if the opponent
@@ -3642,7 +3645,8 @@ public class TestingBoard extends Board
 		// to determine piece ranks through these kinds of movements.
 
 				Rank oppRank = getLowestAdjacentEnemyRank(fpcolor, to);
-				if (oppRank != fp.getActingRankChase()
+				if (oppRank != Rank.NIL
+					&& oppRank != fp.getActingRankChase()
 					&& oppRank != Rank.BOMB
 					&& oppRank != Rank.FLAG) {
 					fp.setActingRankChaseEqual(oppRank);
@@ -3663,10 +3667,13 @@ public class TestingBoard extends Board
 		// did not award the stealth, because the opponent may
 		// not realize that the AI is bluffing.
 		//
-		// But if the opponent piece is an invincible One, a defending
-		// unknown AI piece *could* be the Spy, so an unknown
-		// AI piece moving to this square is credited with
-		// restoring the lost stealth and adding the bluffing value.
+		// But if the opponent piece is an invincible One,
+		// (and the AI approached it with its unknown One,
+		// then the opponent played 1x1, creating an EVEN exchange),
+		// an adjacent unknown AI piece *could* be the Spy,
+		// so an unknown AI piece moving to this "ghost" square
+		// is credited with restoring the lost stealth
+		// and adding the bluffing value.
 		// (very rare occurrence).
 
 			if (m2 != null && m2.getTo() == to) {
@@ -3679,6 +3686,20 @@ public class TestingBoard extends Board
 			}
 
 			} // fp is AI
+
+		// If an AI piece disappeared from the board on the last move
+		// by attacking an unknown opponent piece,
+		// it is possible that the AI piece could have actually won
+		// the attack.  So if the opponent moves to the square
+		// where the AI piece disappeared (the "ghost" square),
+		// and an opponent piece moves to this square,
+		// the opponent is rewarded if it is of lower rank.
+
+			else if (m2 != null
+				&& m2.getTo() == to
+				&& !m2.tpcopy.isKnown()
+				&& m2.getPiece().getRank().ordinal() > fprank.ordinal())
+					vm += pieceValue(m2.getPiece())/2;
 
 		// Take the wind out of the sails of any back-and-forth chase.
 		// (But not too much to discourage a series of chases that
@@ -4129,8 +4150,6 @@ public class TestingBoard extends Board
 
 				if (fpcolor == Settings.topColor) {
 
-					vm += stealthValue(tp);
-		
 		// TBD: If the target piece has a suspected rank, then
 		// the ai is just guessing that it loses, so
 		// there is a small chance that it could win.
@@ -4160,7 +4179,7 @@ public class TestingBoard extends Board
 								&& hasSpy(fpcolor)))
 						&& !unknownScoutFarMove
 						&& isEffectiveBluff(fp, tp, m)) {
-						vm = Math.max(vm, valueBluff(m, fp, tp) - valueBluff(tp, fp));
+						vm += Math.max(stealthValue(tp), valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 						setPiece(fp, to);
 						break;
@@ -4187,12 +4206,21 @@ public class TestingBoard extends Board
 		// and gain its value.
 
 					if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
-						vm -= pieceValue(fpcolor, unknownRank[fpcolor]);
+
+		// TBD: If the AI doesn't have any unknown ranks,
+		// then the bombs and flag really should be known,
+		// and cleared from movable pieces,
+		// but this happened, and caused an assert failure
+		// in pieceValue();
+						if (unknownRank[fpcolor] != Rank.UNKNOWN.ordinal())
+							vm -= pieceValue(fpcolor, unknownRank[fpcolor]);
 						setPiece(fp, from);
 						setPiece(tp, to);
 						break;
 					}
 
+					vm += stealthValue(tp);
+		
 		// If the opponent is a suspected rank,
 		// the AI doesn't lose its entire piece value.
 		// So if the AI has the choice between certain loss
@@ -4737,7 +4765,7 @@ public class TestingBoard extends Board
 		// information gleaned from piece movements in an attempt
 		// to reduce the effect of bluffing.
 
-					if (isFleeing(fp, tp)
+		 			if (isFleeing(fp, tp)
 						&& tp.hasMoved())
 						fpvalue = 0;
 
@@ -4756,7 +4784,6 @@ public class TestingBoard extends Board
 					}
 
 					vm += unknownValue(fp, fpvalue, tp) - fpvalue;
-
 		// Prior to version 9.7, if the AI attacked an unknown
 		// unmoved piece, the tpvalue was reduced
 		// by the number of pieces remaining, because it was thought
@@ -4828,10 +4855,6 @@ public class TestingBoard extends Board
 		// ?? ?? R4 ?? ??
 		// ?? ?? B2    ??
 
-		// TBD: to solve this, check all adjacent squares
-		// to the "to" square for known enemy pieces and
-		// adjust vm appropriately.
-
 		// If the AI piece does not survive, it is prone
 		// to the following blunder.  In the position below,
 		// Red Four may attack the unknown piece because
@@ -4839,17 +4862,32 @@ public class TestingBoard extends Board
 		// cannot see the easy recapture.
 		// R4
 		// B?
-		// B3
+		// B2
 
-		// However, because the AI piece always loses its actual
-		// value, the recapture is redundant.  vm is always
-		// negative in this case.
+		// A more complex example is
+		// R4 -- --
+		// B? -- --
+		// B2 B4 R3
+		// Now R4xB? is not a blunder, because after B2xR4
+		// Red plays R3xB4.
 
-		// Indeed, it is rare that vm is positive.  The only
-		// case is a known AI Scout attack, because the
-		// value of a known AI Scout is very low and may
-		// be higher than the stealth of the unknown that it
-		// attacks.
+		// Thus, the issue cannot be handled by simply checking
+		// all adjacent squares to the "to" square
+		// for known enemy pieces and adjusting vm appropriately.
+
+		// Since the AI piece does not survive, the target
+		// square becomes a "ghost" square.   If the opponent
+		// moves to the ghost square on the next move, it
+		// is rewarded with half the value of the AI piece
+		// that occupied the square, if it was removed in
+		// a contest with an unknown or suspected piece.
+		// This is handled in the case for a move to an open
+		// square.
+
+		// TBD: But this also impacts the forward pruning code,
+		// because with the disappearance of the AI piece,
+		// the countermove may not be generated if it is
+		// outside the pruning area.
 
 		// AI piece is removed.
 
@@ -6405,9 +6443,16 @@ public class TestingBoard extends Board
 		// does not lose the value of its piece).   This is
 		// similar to WINS, but the AI piece is removed from
 		// the board.
+		//
+		// Yet if the AI piece is strong, it must assume that
+		// it will win against any fleeing or weak pieces.
+		// Otherwise, it may attack these pieces, even if they
+		// are protected, because it would assume it will lose
+		// the attack and therefore not see the counter capture
+		// by the the protector.
 
 			} else if (isFleeing(tp, fp)
-				&& (!isExpendable(tp)
+				&& (tprank.ordinal() <= 4
 					|| fp.isWeak()))
 					return LOSES;	// maybe not
 
@@ -6594,7 +6639,7 @@ public class TestingBoard extends Board
 				else
 					return WINS;	// maybe not, could be EVEN
 			} else if (isFleeing(fp, tp)
-				&& (!isExpendable(fp)
+				&& (fprank.ordinal() <= 4
 					|| tp.isWeak()))
 					return WINS;	// maybe not
 
@@ -6730,10 +6775,12 @@ public class TestingBoard extends Board
 	// more than a Seven.  But usually an endgame is all about
 	// lower ranks winning, so Sevens are worth more.
 	//
-	// If an Eight is worth 5 points less,
-	// then an unknown Seven may not want to attack an Eight
-	// and lose its stealth.  And a known Seven will not attack
-	// a protected Eight. 
+	// Note: If an expendable Eight is worth less than Seven stealth,
+	// then an unknown Seven will not attack an Eight
+	// and lose its stealth.
+	//
+	// Note: A known Seven will not attack a protected expendable Eight,
+	// because the value gained is less.
 	//
 	// An expendable Eight is probably always worth more
 	// than a Nine (cannot think of an example
@@ -6746,8 +6793,9 @@ public class TestingBoard extends Board
 
 	void setExpendableEights(int color)
 	{
-		values[color][Rank.EIGHT.ordinal()] = values[color][Rank.SEVEN.ordinal()] - 3;
-		values[color][Rank.NINE.ordinal()] = values[color][Rank.EIGHT.ordinal()] - 5;
+		values[color][8] = values[color][Rank.SEVEN.ordinal()] - VALUE_EIGHT/10;
+		valueStealth[color][7] = valueStealth[color][6];
+		values[color][9] = values[color][Rank.EIGHT.ordinal()] - VALUE_EIGHT/10;
 	}
 
 	boolean isNineTarget(Piece p)
@@ -7056,8 +7104,8 @@ public class TestingBoard extends Board
 
 	boolean isNearOpponentFlag(int to)
 	{
-		return flag[Settings.bottomColor] != null &&
-			Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 3;
+		return flag[Settings.bottomColor] != 0 &&
+			Grid.steps(to, flag[Settings.bottomColor]) <= 3;
 	}
 
 	boolean isNearOpponentFlag(Piece p)
@@ -7068,10 +7116,10 @@ public class TestingBoard extends Board
 
 	public boolean isFlagBombAtRisk(Piece p)
 	{
-		Piece flagp = flag[1-p.getColor()];
+		int flagi = flag[1-p.getColor()];
 		return p.getMaybeEight()
-			&& flagp != null
-			&& Grid.steps(p.getIndex(), flagp.getIndex()) <= 4;
+			&& flagi != 0
+			&& Grid.steps(p.getIndex(), flagi) <= 4;
 	}
 
 	// If the opponent has an unsuspected Spy, it is dangerous for
@@ -7256,7 +7304,7 @@ public class TestingBoard extends Board
 		int c = m1.getPiece().getColor();
 
 		if (rankAtLarge(1-c, Rank.NINE) < 4
-			|| hasFewWeakRanks(c, 10))
+			|| hasFewWeakRanks(c, 4))
 			return;
 
 		// If the piece is still on the board

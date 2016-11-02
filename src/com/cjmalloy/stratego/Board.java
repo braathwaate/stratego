@@ -74,7 +74,7 @@ public class Board
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
 	protected int[] possibleUnknownMovablePieces = new int[2];
-	protected Piece[] flag = new Piece[2];  // flags
+	protected int[] flag = new int[2];  // flags
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int guessedRankCorrect = 1;
@@ -1893,7 +1893,7 @@ public class Board
 		for (int c = RED; c <= BLUE; c++) {
                         piecesInTray[c] = 0;
                         piecesMovable[c] = 0;
-			flag[c] = null;
+			flag[c] = 0;
 			unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
                         for (int j=0;j<15;j++) {
                                 trayRank[c][j] = 0;
@@ -1937,7 +1937,7 @@ public class Board
 
 			if (p.getRank() == Rank.FLAG
 				&& p.getColor() == Settings.topColor)
-				flag[p.getColor()] = p;
+				flag[p.getColor()] = i;
 		}
 
 		for (int r = 1; r < 15; r++)
@@ -2224,7 +2224,7 @@ public class Board
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
 
-		Piece flagp = flag[c];
+		Piece flagp = getPiece(flag[c]);
 		if (flagp != null && flagp.isKnown())
 			continue;
 
@@ -2314,8 +2314,8 @@ public class Board
 
 			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
-				flag[c] = getPiece(maybe[bestGuess][0]);
-				flag[c].setSuspectedRank(Rank.FLAG);
+				flag[c] = maybe[bestGuess][0];
+				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
 			}
 
 		} else if (c == Settings.bottomColor) {
@@ -2463,7 +2463,7 @@ public class Board
 	// assert flagp != null : "Well, where IS the flag?";
 
 			if (flagp != null) {
-				flag[c] = flagp;
+				flag[c] = flagp.getIndex();
 				flagp.setSuspectedRank(Rank.FLAG);
 			}
 
@@ -2586,7 +2586,8 @@ public class Board
 
 	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
 	{
-		Piece flagp = getPiece(maybe[bestGuess][0]);
+		int flagi = maybe[bestGuess][0];
+		Piece flagp = getPiece(flagi);
 		int color = flagp.getColor();
 
 		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
@@ -2655,7 +2656,7 @@ public class Board
 		// of the last potential bomb structure,
 		// clear isBombedFlag
 
-				if (flagp != flag[color]
+				if (flagi != flag[color]
 					&& maybe_count == 1)
 					isBombedFlag[color] = false;
 			}

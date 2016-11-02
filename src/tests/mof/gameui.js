@@ -789,7 +789,7 @@ function onSetWebMoveResponse()
 			Service.setRequestHeader("Content-Type", "text/xml;charset=utf-8");
 			Service.setRequestHeader("SOAPAction", "http://www.jayoogee.com/StrategyWebGame/SetWebMove");
 			Service.onreadystatechange = onSetWebMoveResponse;
-			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectMOve.StartRow][UIState.SelectMove.StartCol].Type));
+			Service.send(createSetWebMoveRequest(UIState.SelectedMove.StartRow, UIState.SelectedMove.StartCol, UIState.SelectedMove.EndRow, UIState.SelectedMove.EndCol, GameInfo.FigureMatrix[UIState.SelectedMove.StartRow][UIState.SelectedMove.StartCol].Type));
 			
 			UIState.ServiceCallInProgress = true;
 		} else if (Service.status == 200)
