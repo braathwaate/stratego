@@ -1484,27 +1484,39 @@ public class AI implements Runnable
 		return true;
 	}
 
-	boolean isValidDest(int move)
+	boolean isValidDest(int to)
 	{
-		int to = Move.unpackTo(move);
 		Piece tp = b.getPiece(to);
 		if (tp != null && tp.getColor() == b.bturn)
 			return false;
 		return true;
 	}
 
-	boolean isValidScoutMove(int move)
+	boolean isValidMove(BitGrid bg, int move)
 	{
 		int from = Move.unpackFrom(move);
 		int to = Move.unpackTo(move);
-		int dir = Grid.dir(to, from);
-		from += dir;
+
+		if (Grid.isAdjacent(from, to))
+			return isValidDest(to) && bg.testBit(from);
+
+		// Test for a valid scout move
+		// (Note: Scout moves need not be inside the bg pruning area).
+
 		Piece p = b.getPiece(from);
-		while (p == null && to != from) {
+		if (p == null
+			|| p.getColor() != b.bturn)
+			return false;
+
+		int dir = Grid.dir(to, from);
+		while (to != from) {
 			from += dir;
 			p = b.getPiece(from);
+			if (p != null
+				&& p.getColor() == 1- b.bturn)
+				return false;
 		}
-		return (to == from);
+		return true;
 	}
 
 // Silly Java warning:
@@ -1598,10 +1610,7 @@ public class AI implements Runnable
 
 		if (km != -1
 			&& km != ttMove
-			&& bg.testBit(Move.unpackFrom(km))
-			&& isValidDest(km) 
-			&& (Grid.isAdjacent(km)
-				|| isValidScoutMove(km))) {
+			&& isValidMove(bg, km)) {
 			logMove(n, km, b.getValue(), MoveType.KM);
 			MoveResult mt = makeMove(n, km);
 			if (mt == MoveResult.OK) {

@@ -33,4 +33,8 @@ public class TestPiece extends Piece
 		return orig.moves;
 	}
 
+	public int indexOrig()
+	{
+		return orig.getIndex();
+	}
 }

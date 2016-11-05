@@ -4325,7 +4325,7 @@ public class TestingBoard extends Board
 
 						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
 						vm += riskOfLoss(tp, fp);
-						vm = vm / distanceFactor(tp, fp);
+						vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
 						vm -= fpvalue;
 					}
 
@@ -4569,7 +4569,7 @@ public class TestingBoard extends Board
 								unknownScoutFarMove,
 								tp,
 								tpvalue);
-							vm = vm / distanceFactor(tp, fp);
+							vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
 						}
 
 					} else if (!isFleeing(tp, fp)) {
@@ -4581,7 +4581,7 @@ public class TestingBoard extends Board
 							unknownScoutFarMove,
 							tp,
 							tpvalue);
-						vm = vm / distanceFactor(tp, fp);
+						vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
 						if (fp.isSuspectedRank())
 							vm -= riskOfWin(tpvalue, fp);
 
@@ -5043,7 +5043,7 @@ public class TestingBoard extends Board
 
 
 					vm += tpvalue - fpvalue;
-					vm = vm / distanceFactor(tp, fp);
+					vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
 
 		// vm is usually quite positive.  But in an endgame when
 		// the opponent has no expendable pieces, it becomes
@@ -5974,12 +5974,26 @@ public class TestingBoard extends Board
 	// the horizon effect is limited as well.
 	// Yet it is still important.
 	//
-	// Note that this rule still means that if an AI piece
-	// approaches an opponent piece that is far away,
-	// it is still a threat.  That is why opponent "moves"
-	// (the distance the opponent piece travels during
-	// tree evalution) is used, and not the distance between
-	// the attacker and defender.
+	// Note that the closer the opponent moves towards the AI piece
+	// during tree evaluation, the danger does not increase,
+	// prediction of moves by unknown pieces is hypothetical.
+	// But the closer an AI piece is to an opponent piece at the
+	// start of tree evaluation, the higher the probability of attack.
+	//
+	// Prior to Version 10.4, this was handled by using opponent "moves"
+	// (the number of times the opponent piece moved during
+	// tree evalution), and not the distance between the two pieces.
+	// But this was an error because if the opponent piece moved
+	// back and forth during tree evaluation, it increased its number
+	// of moves and was deemed less of a threat.
+	//
+	// Version 10.4 now uses the distance
+	// between the current location of the AI piece and the original
+	// location of the opponent piece.
+	//
+	// TBD: This isn't perfect, because
+	// it does not take into account the Lakes, so the AI will sense
+	// danger across the lakes although none exists.
 	//
 	// TBD: As search depth is increased, the distance
 	// factor should be reduced.  The distance factor
@@ -5988,23 +6002,28 @@ public class TestingBoard extends Board
 	// the idea is that the further the attacker,
 	// the more likely it has some other target in mind
 
-	protected int distanceFactor(Piece aiPiece, TestPiece oppPiece)
+	protected int distanceFactor(Piece aiPiece, TestPiece oppPiece, boolean unknownScoutFarMove)
 	{
+		// If the opponent Piece is invincible, then the AI
+		// believes the outcome is inevitable.
+
 		// If both the AI and opponent Pieces have apparent
 		// ranks (including suspected rank), then the AI believes
 		// the outcome is inevitable.
 
-		if (aiPiece.getApparentRank() != Rank.UNKNOWN
-			&& oppPiece.getApparentRank() != Rank.UNKNOWN)
+		if (unknownScoutFarMove
+			|| isInvincible(oppPiece)
+			|| (aiPiece.getApparentRank() != Rank.UNKNOWN
+			&& oppPiece.getApparentRank() != Rank.UNKNOWN))
 			return 1;
 
 		// But if either piece is unknown, then the outcome
 		// is less certain, because the AI piece might not be the target
 		// of an attack by the opponent piece.
 
-		int d = oppPiece.moves - oppPiece.movesOrig();
+		int d = Grid.steps(aiPiece.getIndex(), oppPiece.indexOrig());
 
-	// double the distance
+		// double the distance
 
 		return Math.max(1, d+d);
 	}

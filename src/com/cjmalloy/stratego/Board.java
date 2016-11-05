@@ -1280,8 +1280,15 @@ public class Board
 		// xx -- B? xx
 		// Red Four moves down and forks Blue Five and unknown Blue.
 		// Unknown Blue moves left.  Unknown Blue is not a protector.
+		//
+		// And if the AI thinks that the protector could be weak,
+		// it isn't a protector either.   This especially applies
+		// to unmoved front row pieces in the lanes, which the AI
+		// thinks are weak or bombs, and certainly unlikely solitary
+		// protectors!
 
-			else if (p.getActingRankFleeLow() != chaserRank)
+			else if (p.getActingRankFleeLow() != chaserRank
+				&& !p.isWeak())
 				
 				unknownProtector = p;
 		} // dir
@@ -1818,8 +1825,16 @@ public class Board
 	protected Rank getChaseRank(Rank rank)
 	{
 		int r = rank.ordinal();
-		if (r <= 7)
-			return chaseRank[r-1];
+		if (r <= 7) {
+			Rank chaser = chaseRank[r-1];
+
+		// While it is less probable that the same rank
+		// chased the same rank, it certainly is possible
+		// and is a better guess than Unknown.
+
+			if (chaser != Rank.UNKNOWN)
+				return chaser;
+		}
 
 		return chaseRank[r];
 	}
