@@ -1512,9 +1512,12 @@ public class AI implements Runnable
 		while (to != from) {
 			from += dir;
 			p = b.getPiece(from);
-			if (p != null
-				&& p.getColor() == 1- b.bturn)
-				return false;
+			if (p != null) {
+				if (p.getColor() != 1 - b.bturn
+					|| from != to)
+					return false;
+				return true;
+			}
 		}
 		return true;
 	}
