@@ -3697,17 +3697,17 @@ public class TestingBoard extends Board
 			} // fp is AI
 
 		// If an AI piece disappeared from the board on the last move
-		// by attacking an unknown opponent piece,
+		// by attacking an unknown (or suspected) opponent piece,
 		// it is possible that the AI piece could have actually won
-		// the attack.  So if the opponent moves to the square
+		// the attack.  So if an opponent piece moves to the square
 		// where the AI piece disappeared (the "ghost" square),
-		// and an opponent piece moves to this square,
-		// the opponent is rewarded if it is of lower rank.
-
+		// the opponent is rewarded if it is of lower rank or unknown.
+		
 			else if (m2 != null
 				&& m2.getTo() == to
 				&& !m2.tpcopy.isKnown()
-				&& m2.getPiece().getRank().ordinal() > fprank.ordinal())
+				&& (!fp.isKnown()
+					|| m2.getPiece().getRank().ordinal() > fprank.ordinal()))
 					vm += pieceValue(m2.getPiece())/2;
 
 		// Take the wind out of the sails of any back-and-forth chase.
@@ -4095,24 +4095,8 @@ public class TestingBoard extends Board
 		// a suspected opponent piece in an exchange with a
 		// known AI piece, but at least both are positive.)
 		//
-		// The solution is to remove both pieces from the
-		// board but debit if there is a protecting opponent piece.
-		//
-		// Note: It is tempting to credit the opponent move,
-		// but the opponent move will likely be forward pruned,
-		// because the AI piece is gone!
-
-					for (int d : dir) {
-						Piece p = getPiece(to+d);
-						if (p == null
-							|| p.getColor() != Settings.bottomColor)
-							continue;
-
-						if (isThreat(p, fp)) {
-							vm -= values[Settings.topColor][fprank.ordinal()]/2;
-							break;
-						}
-					}
+		// As of Version 10.4, this issue is handled by the "ghost"
+		// square code when tp is null.
 
 				} // tp is not known
 		// Unknown AI pieces also have bluffing value
@@ -4893,10 +4877,11 @@ public class TestingBoard extends Board
 		// This is handled in the case for a move to an open
 		// square.
 
-		// TBD: But this also impacts the forward pruning code,
+		// Note: This impacts the forward pruning code,
 		// because with the disappearance of the AI piece,
 		// the countermove may not be generated if it is
-		// outside the pruning area.
+		// outside the pruning area.  This is solved by
+		// adding the "to" square to the unsafeGrid in AI.
 
 		// AI piece is removed.
 
@@ -6951,6 +6936,26 @@ public class TestingBoard extends Board
 		if (fp.getRank() != Rank.ONE)
 			return false;
 
+	// If the AI One is unknown, then it is highly unlikely that the
+	// opponent will play SpyxUnknown, because it could lose it's Spy.
+	// This is important because winFight() awards a WIN to the unknown
+	// attacker, which would make any unknown attack overly negative
+	// if the One is trapped when it really risks only its stealth.
+	// 
+	// Note that if the AI One is suspected, an opponent might play
+	// SpyxUnknown, which is exactly what the AI does, if it
+	// heavily suspects the opponent One.   So this check could be
+	// conditioned on chase rank; if the AI has chased an opponent
+	// Two for instance, then it is fair game even if it is unknown.
+	//
+	// But this gets into the Princess Bride scenario of
+	// the poisoned drink "you were thinking that I was thinking
+	// that you were thinking ... ", so it is best not to overthink
+	// this too much.
+
+		if (!fp.isKnown())
+			return false;
+
 		if (tp.getRank() == Rank.SPY)
 			return true;
 
@@ -7166,24 +7171,6 @@ public class TestingBoard extends Board
 		return rankAtLarge(c, Rank.ONE) != 0
 			&& suspectedRankAtLarge(c, Rank.ONE) == 0;
 	}
-
-        boolean isThreat(Piece fp, TestPiece tp)
-        {
-                assert fp.getColor() == Settings.bottomColor;
-
-                if (!fp.isKnown()
-                        && !fp.isSuspectedRank()) {
-                        if (isInvincible(Settings.topColor, tp.getRank().ordinal())) {
-                                if (tp.getRank() == Rank.ONE)
-                                        return isPossibleUnknownSpyXOne(tp, fp);
-                                return false;
-                        }
-                        return true;
-                }
-
-                Rank fprank = fp.getRank();
-                return fp.getRank().ordinal() < tp.getRank().ordinal();
-        }
 
 	boolean isStealthy(Piece p, int r)
 	{
