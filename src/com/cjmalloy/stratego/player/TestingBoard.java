@@ -3675,14 +3675,23 @@ public class TestingBoard extends Board
 		// is credited with restoring the lost stealth
 		// and adding the bluffing value.
 		// (very rare occurrence).
+		//
+		// Version 10.4 extended this concept to other EVEN exchanges.
 
-			if (m2 != null && m2.getTo() == to) {
-				Rank m2fprank = m2.getPiece().getRank();
-				if (m2fprank == Rank.ONE
-					&& !m2.tpcopy.isKnown()
-					&& !fp.isKnown()
-					&& hasSpy(Settings.topColor))
-					vm += stealthValue(m2.tp) - valueBluff(m2.tp, fp);
+			if (m2 != null
+				&& m2.getTo() == to
+				&& depth != 0
+				&& !unknownScoutFarMove) {
+				Piece m2fp = m2.getPiece();
+				Rank m2fprank = m2fp.getRank();
+				if (m2fprank != Rank.UNKNOWN
+					&& !(m2.fpcopy.isKnown()
+						&& m2.tpcopy.isKnown())
+					&& (!isInvincible(m2fp)
+					|| (m2fprank == Rank.ONE
+						&& hasSpy(fpcolor)))
+					&& isEffectiveBluff(fp, m2fp, m))
+					vm += valueBluff(m, fp, m2fp) - valueBluff(m2fp, fp);
 			}
 
 			} // fp is AI
@@ -4434,7 +4443,7 @@ public class TestingBoard extends Board
 						&& m2.tp != null
 						&& !isEffectiveBluff(m2.tp, tp, m2.getMove())
 						&& tp == m2.getPiece())
-						vm -= (m2.value - m1.value);
+						vm += (m2.value - m1.value);
 					else
 						vm += tpvalue;
 
