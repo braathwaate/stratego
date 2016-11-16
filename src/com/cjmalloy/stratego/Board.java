@@ -73,7 +73,7 @@ public class Board
 	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
-	protected int[] possibleUnknownMovablePieces = new int[2];
+	protected int[] remainingUnmovedUnknownPieces = new int[2];
 	protected int[] flag = new int[2];  // flags
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
@@ -1904,12 +1904,11 @@ public class Board
 	//
 	protected void genSuspectedRank()
 	{
-		int piecesMovable[] = new int[2];
+		int piecesMovableOrKnown[] = new int[2];
 		for (int c = RED; c <= BLUE; c++) {
                         piecesInTray[c] = 0;
-                        piecesMovable[c] = 0;
+                        piecesMovableOrKnown[c] = 0;
 			flag[c] = 0;
-			unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
                         for (int j=0;j<15;j++) {
                                 trayRank[c][j] = 0;
                                 knownRank[c][j] = 0;
@@ -1943,12 +1942,9 @@ public class Board
 
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().ordinal()-1]++;
-			if ((p.hasMoved()
-				|| p.isKnown()
-				|| unknownBombs[p.getColor()] == 0)
-				&& p.getRank() != Rank.BOMB
-				&& p.getRank() != Rank.FLAG)
-				piecesMovable[p.getColor()]++;
+			if (p.hasMoved()
+				|| (p.isKnown() && p.getRank() != Rank.FLAG))
+				piecesMovableOrKnown[p.getColor()]++;
 
 			if (p.getRank() == Rank.FLAG
 				&& p.getColor() == Settings.topColor)
@@ -2026,11 +2022,12 @@ public class Board
 				unknownRank = r;
 			}
 
-		// If all pieces have been accounted for,
+		// If all movable pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		possibleUnknownMovablePieces[c] = 40 - piecesInTray[c] - piecesMovable[c]- 1 - Rank.getRanks(Rank.BOMB) + trayRank[c][Rank.BOMB.ordinal()-1];
-		if (possibleUnknownMovablePieces[c] == 0) {
+		unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
+		remainingUnmovedUnknownPieces[c] = 40 - piecesInTray[c] - piecesMovableOrKnown[c];
+		if (remainingUnmovedUnknownPieces[c] == unknownBombs[c] + 1) {
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
 					continue;
@@ -2041,8 +2038,7 @@ public class Board
 					continue;
 				if (p.isKnown())
 					continue;
-				if (p.hasMoved()
-					|| unknownBombs[c] == 0) {
+				if (p.hasMoved()) {
 					if (unknownRank != 0) {
 						p.setRank(Rank.toRank(unknownRank));
 						p.makeKnown();
@@ -2068,7 +2064,7 @@ public class Board
 				Rank rank = p.getRank();
 
 				if (c == Settings.topColor)
-					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai pieces not bomb or flag?";
+					assert (rank == Rank.FLAG || rank == Rank.BOMB) : "remaining ai piece " + rank + " should be bomb or flag.  UnknownBombs = " + unknownBombs[c];
 				else if (unknownBombs[c] != 0) {
 		// Set setSuspectedRank (not rank)
 		// because the piece is suspected to
@@ -2080,10 +2076,11 @@ public class Board
 		// Eight X Bomb is a WIN.
 		//
 					p.setSuspectedRank(Rank.BOMB);
-				}
+				} else {
 
-		// if all the bombs have been found, then the flag
-		// is somewhere in the remaining unmoved pieces.
+					p.setRank(Rank.FLAG);
+					flag[c] = p.getIndex();
+				}
 
 				} // not moved
 			} // for

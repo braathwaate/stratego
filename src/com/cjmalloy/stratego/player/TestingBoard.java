@@ -197,17 +197,19 @@ public class TestingBoard extends Board
 	// to discover a Four (40 stealth)
 	// but not a Five (16 stealth).  
 
-	private static final int VALUE_THREE = 800;
-	private static final int VALUE_FOUR = 400;
-	private static final int VALUE_FIVE = 200;
-	private static final int VALUE_SIX = 100;
+	private static final int VALUE_ONE = 3200;
+	private static final int VALUE_TWO = VALUE_ONE/2;
+	private static final int VALUE_THREE = VALUE_TWO/2;
+	private static final int VALUE_FOUR = VALUE_THREE/2;
+	private static final int VALUE_FIVE = VALUE_FOUR/2;
+	private static final int VALUE_SIX = VALUE_FIVE/2;
 	private static final int VALUE_SEVEN = 72;
 	private static final int VALUE_EIGHT = 60;	// variable
 	private static final int VALUE_NINE = 40;
 	private static final int [] startValues = {
 		0,
-		3200,	// 1 Marshal
-		1600, 	// 2 General
+		VALUE_ONE,	// 1 Marshal
+		VALUE_TWO, 	// 2 General
 		VALUE_THREE, 	// 3 Colonel
 		VALUE_FOUR,	// 4 Major
 		VALUE_FIVE,	// 5 Captain
@@ -600,7 +602,7 @@ public class TestingBoard extends Board
 
 	int minPieceValue(int color)
 	{
-		int min = 9999;
+		int min = VALUE_ONE * 2;
 		for (int r = 1; r <= 10; r++)
 			if (rankAtLarge(color, r) != 0)
 				if (pieceValue(color, r) < min)
@@ -2013,10 +2015,10 @@ public class TestingBoard extends Board
 	// nUnknownWeakRankAtLarge is rarely zero.
 	// But this should not deter valuable ranks from attack.
 	// So the AI subtracts a percentage (1/3) of
-	// possibleUnknownMovablePieces in determining safety.
+	// remainingUnmovedUnknownPieces in determining safety.
 	private boolean hasFewWeakRanks(int color, int n)
 	{
-		return nUnknownWeakRankAtLarge[color] - (possibleUnknownMovablePieces[color] / 3) <= n;
+		return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3) <= n;
 	}
 
 	// Target ai or opponent flag
@@ -2437,7 +2439,7 @@ public class TestingBoard extends Board
 		Piece pflag = getPiece(flagi);
 		int color = pflag.getColor();
 
-		assert pflag.getRank() == Rank.FLAG : "aiFlag not ai flag?";
+		assert pflag.getRank() == Rank.FLAG : "aiFlag is " + pflag.getRank() + " at " + flagi +"?";
 		assert color == Settings.topColor : "flag routines only for ai flag";
 		// initially all bombs are worthless (0)
 		// value remaining bombs around ai flag
@@ -3385,7 +3387,7 @@ public class TestingBoard extends Board
 	// If the AI attacks an unknown piece, it creates a known Unknown.
 	// A known Unknown (isKnown() and isSuspectedRank() are both true)
 	// has a suspected rank, so its value is diminished in
-	// aiValue(), and it is also known, so a further attack on
+	// actualValue(), and it is also known, so a further attack on
 	// the opponent piece does not garner its stealth value.
 	//
 	// Note: rankWon can be the Flag in which case the newRank
@@ -3446,7 +3448,7 @@ public class TestingBoard extends Board
 			assert newRank != Rank.UNKNOWN : "Piece " + p.getRank() + " " + p.isSuspectedRank() + " " + p.getActingRankChase() + " " + p.isKnown() + " should not have won (invincible)" + rankWon + " at " + p.getIndex() + " because lowestUnknownNotSuspectedRank is " + lowestUnknownNotSuspectedRank;
 		}
 
-		// Suspected ranks have much less value (see aiValue()).
+		// Suspected ranks have much less value (see actualValue()).
 		// The AI cannot attack a trapped low ranked opponent
 		// piece with a losing piece just to increase its value.
 		// So when the AI attacks an unknown opponent piece
@@ -4284,6 +4286,22 @@ public class TestingBoard extends Board
 
 					else if ((fprank == Rank.BOMB || fprank == Rank.FLAG)
 						&& !isInvincibleDefender(tp)) {
+
+		// When an opponent (suspected) flag bomb attacks an AI eight,
+		// remove both pieces; otherwise, if the Eight were left on board,
+		// it could continue to obtain points in the search tree by attacking
+		// other flag bombs, which could allow it to leave material hanging.
+		// (Removing both pieces is also correct if the bomb turns out to be
+		// an opponent Eight; and if the bomb turns out to be a superior rank,
+		// at least the AI makes a half-right guess).
+		
+						if (tprank == Rank.EIGHT
+							&& fp.aiValue() != 0) {
+							vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
+							vm -= fpvalue;
+							break;
+						}
+
 						if (!tp.isKnown()
 							|| isExpendable(tp)
 							|| (tprank == Rank.ONE
@@ -4597,7 +4615,6 @@ public class TestingBoard extends Board
 
 					makeWinner(fp, tprank, false);
 				}
-
 
 				fp.moves++;
 				setPiece(fp, to); // won
@@ -5015,8 +5032,8 @@ public class TestingBoard extends Board
 
 				if (isFleeing(tp, fp))
 					vm -= fpvalue;
-				else if (isExpendable(tp) && !fp.isWeak()
-					|| tprank.ordinal() <= 5  && fp.isWeak()) {
+				else if (isExpendable(tp) && !isWeak(fp)
+					|| tprank.ordinal() <= 5  && isWeak(fp)) {
 					tpvalue /= 2;
 					if (foray[tprank.ordinal()]
 						|| isWinning(Settings.bottomColor) >= VALUE_FIVE)
@@ -5844,11 +5861,12 @@ public class TestingBoard extends Board
 	// suspected because it is in the only bomb structure)
 	// it has a high value and must be protected or
 	// attacked at all costs.
+	// (But this value must be less than alpha/beta).
 
 		if (pflag.isKnown()
 			&& (color == Settings.topColor
 				|| unknownBombs[Settings.bottomColor] == 0))
-			v = 8888;
+			v = VALUE_ONE * 2;
 		else {
 
 	// Set the flag value higher than a worthwhile bomb
@@ -6015,7 +6033,7 @@ public class TestingBoard extends Board
 		// is less certain, because the AI piece might not be the target
 		// of an attack by the opponent piece.
 
-		int d = Grid.steps(aiPiece.getIndex(), oppPiece.indexOrig());
+		int d = Grid.steps(aiPiece.getIndex(), oppPiece.indexOrig()) - 1;
 
 		// double the distance
 
@@ -6120,9 +6138,6 @@ public class TestingBoard extends Board
 
 	public int actualValue(Piece p)
 	{
-		// Piece aiValue does not depend on being known
-		// because the ai sets it when the piece value is obvious.
-
 		int v = p.aiValue();
 
 		Rank rank = p.getRank();
