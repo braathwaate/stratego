@@ -4616,9 +4616,16 @@ public class TestingBoard extends Board
 					makeWinner(fp, tprank, false);
 				}
 
+		// Capture of the flag is the rare case when it is safe
+		// to reward earlier capture, because unwanted transpositions are
+		// avoided because the search ends (see endOfSearch()).
+
+				if (tprank == Rank.FLAG)
+					vm += vm * Math.max(10 - depth, 0)/30;
+
 				fp.moves++;
 				setPiece(fp, to); // won
-				//vm = 0; // fubar
+
 				break;
 
 			case UNK:
@@ -6037,7 +6044,7 @@ public class TestingBoard extends Board
 
 		// double the distance
 
-		return Math.max(1, d+d);
+		return Math.max(1, d);
 	}
 
 	protected int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int v)

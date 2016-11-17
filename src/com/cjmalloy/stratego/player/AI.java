@@ -672,7 +672,7 @@ public class AI implements Runnable
 			genSafe(unsafeGrid);
 
 		// Never prune off a move to the last square, because
-		// it may be an unoccupied "ghost" sqaure. See TestingBoard.
+		// it may be an unoccupied "ghost" square. See TestingBoard.
 		UndoMove um = b.getLastMove(1);
 		if (um != null)
 			unsafeGrid.setBit(um.getTo());

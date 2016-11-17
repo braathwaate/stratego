@@ -2889,8 +2889,9 @@ public class Board
 		if (m2.tp != null)
 			return false;
 
+		Piece fp = getPiece(from);
 		// not the same piece?
-		if (!m2.getPiece().equals(getPiece(from)))
+		if (!m2.getPiece().equals(fp))
 			return false;
 
 		// not an adjacent move (i.e., nine far move)
@@ -2997,9 +2998,27 @@ public class Board
 		// then Blue Four tries to move back right,
 		// isPossibleTwoSquares should return true.
 		// (Thus Blue Four is seen to be trapped in very few ply).
-		// 
 
 		if (!Grid.isAlternatingMove(m, oppmove1))
+			return false;
+
+		// A move is forced only if the subject piece could be in any danger.
+		// For example,
+		// |-- -- -- -- --
+		// |-- -- -- -- --
+		// |-- B4 -- -- R6
+		// |BF BB R8 -- --
+		// |xxxxxxxxxxxxxx
+		// Blue Four moves up.  Red Six moves up.  Now if Blue Four
+		// tries to move back down, its move was not forced, and
+		// isPossibleTwoSquares should return false.
+		//
+		// Although the obvious move for Red is to play 8XB when Blue Four
+		// moves up, if it thought Blue would not move back,
+		// it might try to delay the capture.   This has happened in play.
+		//
+		// Note that the following check does not handle all cases.
+		if (!isThreat(oppmove1.getPiece(), fp))
 			return false;
 
 		UndoMove oppmove3 = getLastMove(3);
