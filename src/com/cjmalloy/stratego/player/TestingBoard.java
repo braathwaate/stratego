@@ -6044,7 +6044,7 @@ public class TestingBoard extends Board
 
 		// double the distance
 
-		return Math.max(1, d);
+		return Math.max(1, d+d);
 	}
 
 	protected int apparentWinValue(Piece fp, Rank fprank, boolean unknownScoutFarMove, Piece tp, int v)

@@ -2100,7 +2100,7 @@ public class AI implements Runnable
 	// no matter how they occur.   The only way to make these positions
 	// not equivalent is to make the hash change.
 	//
-	// This is done correcting in the bluffing code,
+	// This is done correctly in the bluffing code,
 	// by changing which pieces survive during an attack,
 	// so the bluffing code can condition based on depth.
 	//
