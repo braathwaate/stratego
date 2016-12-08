@@ -1383,20 +1383,39 @@ public class AI implements Runnable
 			entry = new TTEntry();
 			entry.moveRoot = -1;
 			ttable[b.bturn][index] = entry;
-		} else if (entry.hash == hashOrig) {
-			if (entry.depth >= n) {
 
 		// Note that the same position from prior moves
 		// (moveRoot != entry.moveRoot)
 		// does not have the same score,
 		// because the AI assigns less value to attacks
-		// at greater depths.  However, the best move 
-		// is still useful and often will generate the best score.
+		// at greater depths.
+		//
+		// However, until version 11, the best move was used from the prior move.
+		// This was normally worthwhile.  But if the opponent piece became
+		// suspected after the prior move, the best move might now
+		// be pruned off.  For example,
+		// -- RS --
+		// -- -- xx
+		// -- -- xx
+		// -- -- B?
+		// R4 BB --
+		// Red has the move and is worried about B?xRS if unknown Blue
+		// turns out to be a Scout.  But if Red Four moves up, then
+		// unknown Blue approaches Red Four, unknown Blue is thought to
+		// be a Three, and so the AI no longer believes that unknown Blue
+		// could be a Scout.  Yet the (old) transposition table still could
+		// contain B?xRS.
+		//
+		// TBD: This problem stems from not updating rank during
+		// the tree search, but then updating rank after the player really
+		// makes the move.   But chase rank is updated, so maybe the solution
+		// is to use chase rank to index the hash table?  Still, the
+		// scouts array is updated only after each physical move, so
+		// this may not work.
 
-			if (moveRoot == entry.moveRoot
-				&& (searchType == entry.type
-					|| entry.type == TTEntry.SearchType.BROAD)) {
-
+		} else if (entry.hash == hashOrig
+			&& moveRoot == entry.moveRoot) {
+			if (entry.depth >= n) {
 				if (entry.exactDepth >= n) {
 					returnMove.setMove(entry.bestMove);
 					if (entry.bestMove != 0)
@@ -1416,12 +1435,11 @@ public class AI implements Runnable
 					return entry.bestValue;
 				}
 				}
-			} // same moveroot
 			} // entry.depth > n
 
 			ttmove = entry.bestMove;
 
-		} // entry has same hash
+		} // entry has same hash and root
 
 		int vm;
 		if (n < 1 || endOfSearch()) {
@@ -1575,14 +1593,13 @@ public class AI implements Runnable
 		if (ttMove != -1
 			&& ttMove != 0) {
 
-		// use best move from transposition table for move ordering
-		// best move entries in the table are not tried
-		// if a duplicate of the killer move
+		// Use best move from transposition table for move ordering.
 
-			if (!isValidMove(ttMove)) {
-				ttMove = -1;
-				log(PV, n + ":" + ttMove + " bad tt entry");
-			} else {
+		// Note: if the move is not valid, it can only mean that
+		// two different positions had the same hash, which we
+		// hope is statistically near impossible.
+
+			// assert isValidMove(ttMove) : n + ":" + ttMove + " bad tt entry";
 
 			logMove(n, ttMove, b.getValue(), MoveType.TE);
 			MoveResult mt = makeMove(n, ttMove);
@@ -1608,7 +1625,7 @@ public class AI implements Runnable
 				bestmove = ttMove;
 			} else
 				log(DETAIL, " " + mt);
-			}
+
 		} // ttmove
 
 		// Try the killer move before move generation

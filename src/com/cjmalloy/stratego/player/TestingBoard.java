@@ -6632,12 +6632,14 @@ public class TestingBoard extends Board
 		// removed and hasLowValue() was used to qualify,
 		// which should eliminate high value Miners.
 
-			else if ((fp.getActingRankChase() != Rank.NIL
-					|| riskExpendable)
+			else if (tprank.ordinal() <= lowestUnknownExpendableRank) {
+
+				if ((fp.getActingRankChase() != Rank.NIL
+					&& tprank.ordinal() <= 7)
+					|| riskExpendable
 					|| (foray[tprank.ordinal()]
-						&& fp.isWeak())
-				&& hasLowValue(tp)) {
-					if (tprank.ordinal() <= lowestUnknownExpendableRank)
+						&& fp.isWeak()
+						&& hasLowValue(tp)))
 						return LOSES;	// maybe not
 			}
 
@@ -6682,11 +6684,19 @@ public class TestingBoard extends Board
 				&& !wasKnown(fp, null, getLastMove(2)))
 				return WINS;	// maybe not
 
-			else if ((tp.getActingRankChase() != Rank.NIL
-				|| (foray[fprank.ordinal()]
-					&& tp.isWeak()))
-				&& hasLowValue(fp)) {
-				if (fprank.ordinal() <= lowestUnknownExpendableRank)
+			else if (fprank.ordinal() <= lowestUnknownExpendableRank) {
+
+			// if the AI piece is lower than the lowest opponent expendable
+			// rank remaining, and the AI thinks that the opponent piece
+			// is expendable, then this is a WIN for the AI
+
+				if (tp.getActingRankChase() != Rank.NIL
+					&& fprank.ordinal() <= 7) 
+					return WINS;	// maybe not
+
+				if (foray[fprank.ordinal()]
+					&& tp.isWeak()
+					&& hasLowValue(fp))
 					return WINS;	// maybe not
 			}
 

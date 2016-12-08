@@ -2318,11 +2318,11 @@ public class Board
 				if (usualFlagLocation(c, maybe[i][0]))
 					genDestBombedFlag(maybe, maybe_count[c], open_count[c], i);
 
-		// Pick the stucture that looks most likely and
+		// Pick the structure that looks most likely and
 		// mark it as containing the flag.
 
 			if (bestGuess == 99)
-				bestGuess = getBestGuess(maybe, maybe_count[c]);
+				bestGuess = getBestGuess(c, maybe, maybe_count[c]);
 
 			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
@@ -2484,12 +2484,19 @@ public class Board
 		} // color c
 	}
 
-	int getBestGuess(int[][] maybe, int maybe_count)
+	int getBestGuess(int color, int[][] maybe, int maybe_count)
 	{
 		int size = 0;
 		int bestGuess = 99;
 		int bestGuessGuards = 0;
 		for (int i = 0; i < maybe_count; i++) {
+
+		// patterns closest to the back row are much more plausible
+
+			if (bestGuess != 99
+				&& Grid.yside(color, Grid.getY(maybe[i][0]))
+					> Grid.yside(color, Grid.getY(maybe[bestGuess][0])))
+				break;
 
 			int nb;
 
@@ -2511,8 +2518,7 @@ public class Board
 			}
 			nb--;
 
-		// patterns closest to the back row are preferred
-			nb += i;
+		// add more for possible extended bomb structures
 
 			int start = i;
 			while (i < maybe_count - 1
@@ -2580,17 +2586,17 @@ public class Board
 		// So the AI looks for a combination of small size and
 		// large number of defenders.
 
-			Piece flag = getPiece(maybe[start][0]);
-			int guards = grid.movablePieceCount(flag.getColor(), maybe[start][0], 2)*2
-				+ grid.movablePieceCount(1-flag.getColor(), maybe[start][0], 1);
+			int guards = grid.movablePieceCount(color, maybe[start][0], 2)*2
+				+ grid.movablePieceCount(1-color, maybe[start][0], 1);
 
-			if (size == 0
+			if (bestGuess == 99
 				|| guards > bestGuessGuards
 				|| nb < size) {
 				bestGuess = start;
 				size = nb;
 				bestGuessGuards = guards;
 			}
+
 		} // i
 		return bestGuess;
 	}
