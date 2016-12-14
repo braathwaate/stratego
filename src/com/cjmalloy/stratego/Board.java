@@ -1346,15 +1346,11 @@ public class Board
 		// which happens to be an isolated bomb.
 
 		// Thus it can be hard to determine whether a protector
-		// is involved or not.  A simple approximation is:
-		// If the prior opponent move was any piece to a square that is
-		// two away from the chaser, it may mean:
-		//	- one of the adjacent forked pieces fled
-		//	- a protector stepped in to protect one or both
-		//		of the pieces
+		// is involved or not.  But if the opponent did move a piece
+		// away from the chaser, do not set the chase rank on
+		// any adjacent piece.
 
-			if (Grid.steps(um1.getTo(), chaser.getIndex()) == 2
-				&& !Grid.isAdjacent(um1.getTo(), chased.getIndex()))
+			if (Grid.steps(um1.getFrom(), chaser.getIndex()) == 1)
 				return;
 
 		// If both the chased piece and the protector are unknown,
@@ -1963,21 +1959,8 @@ public class Board
 			Piece p = getPiece(i);
 			if (p == null
 				|| p.getColor() != Settings.bottomColor
-				|| (p.isKnown() && !p.isSuspectedRank()))
+				|| p.isKnown())
 				continue;
-
-		// If the opponent still has any unknown Eights,
-		// assume that the suspected rank can also be an Eight,
-		// due to the possibility of bluffing to get at the flag.
-		// (The maybeEight status can be cleared during the search
-		// tree if a Seven or lower ranked piece attacks the unknown)
-
-			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0
-				|| (p.isSuspectedRank()
-					&& !maybeBluffing(p)))
-				p.setMaybeEight(false);
-			else
-				p.setMaybeEight(true);
 
 			Rank rank = p.getActingRankChase();
 			if (rank == Rank.NIL)
@@ -2004,6 +1987,19 @@ public class Board
 
 			} else
 				setSuspectedRank(p, getChaseRank(rank, p.isRankLess()));
+
+		// If the opponent still has any unknown Eights,
+		// assume that the suspected rank can also be an Eight,
+		// due to the possibility of bluffing to get at the flag.
+		// (The maybeEight status can be cleared during the search
+		// tree if a Seven or lower ranked piece attacks the unknown)
+
+			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0
+				|| (p.isSuspectedRank()
+					&& !maybeBluffing(p)))
+				p.setMaybeEight(false);
+			else
+				p.setMaybeEight(true);
 
 		} // for
 

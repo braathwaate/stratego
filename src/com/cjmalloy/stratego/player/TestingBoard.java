@@ -205,7 +205,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_SIX = VALUE_FIVE/2;
 	private static final int VALUE_SEVEN = 72;
 	private static final int VALUE_EIGHT = 60;	// variable
-	private static final int VALUE_NINE = 40;
+	private static final int VALUE_NINE = 30;
 	private static final int [] startValues = {
 		0,
 		VALUE_ONE,	// 1 Marshal
@@ -693,16 +693,16 @@ public class TestingBoard extends Board
 	// Twos have been removed, the stealth of the One
 	// drops in half.
 	//
-	// A One stealth value is equal to 3200 *.1 (320 +- 106 points)
+	// A One stealth value is equal to 6400 *.1 (640 +- 213 points)
 	// if both Twos and all the Threes are still on the board.
 	//
-	// A Two stealth value is equal to 1000 *.1 (200 +- 66 points)
+	// A Two stealth value is equal to 4000 *.1 (400 +- 133 points)
 	// if all Threes and two of the Fours are still on the board.
 	//
-	// A Three stealth value is equal to 1200 *.1 (120 +- 40 points)
+	// A Three stealth value is equal to 2400 *.1 (240 +- 80 points)
 	// if six Fours are still on the board.
 	//
-	// A Four stealth value is equal to 600 * .1 (60 +- 20 points)
+	// A Four stealth value is equal to 1200 * .1 (120 +- 40 points)
 	// if six Fives are still on the board.
 	//
 	// Stealth value for pieces (6-9) derives not from opponent piece value,
@@ -3712,18 +3712,6 @@ public class TestingBoard extends Board
 					|| m2.getPiece().getRank().ordinal() > fprank.ordinal()))
 					vm += pieceValue(m2.getPiece())/2;
 
-		// Take the wind out of the sails of any back-and-forth chase.
-		// (But not too much to discourage a series of chases that
-		// lead to material gain of an unknown piece).
-
-			UndoMove m3 = getLastMove(3);
-			if (depth != 0
-				&& m2 != null
-				&& Grid.isAlternatingMove(m, m2)
-				&& (m3 == null
-					|| !Grid.isPossibleTwoSquaresChase(m2, m3)))
-				vm += values[1-fpcolor][unknownRank[1-fpcolor]]/3;
-
 			int v = planValue(fp, from, to);
 
 		// Scouts go too fast, so limit the points to one
@@ -4790,7 +4778,8 @@ public class TestingBoard extends Board
 						boolean iw = isWeak(tp);
 						if (isExpendable(fp) && !iw
 							|| fprank.ordinal() <= 5
-								&& iw) {
+								&& iw
+								&& tp.hasMoved()) {
 							fpvalue /= 2;
 							if (tp.hasMoved()
 								&& (foray[fprank.ordinal()]
@@ -4801,6 +4790,7 @@ public class TestingBoard extends Board
 					}
 
 					vm += unknownValue(fp, fpvalue, tp) - fpvalue;
+
 		// Prior to version 9.7, if the AI attacked an unknown
 		// unmoved piece, the tpvalue was reduced
 		// by the number of pieces remaining, because it was thought
@@ -4835,10 +4825,15 @@ public class TestingBoard extends Board
 		// of a Three.  R4x(?unmoved) is UNK, but gains the
 		// stealth value of a Two.  This is a difference of only
 		// a few points.
-
-					if (tp.moves == 0
-						&& !foray[fprank.ordinal()])
-						vm = Math.min(-10, vm - 10);
+		//
+		// Version 11 deleted this rule altogether.  If an AI piece
+		// is forced between a choice between attacking a moved
+		// or unmoved piece, the earlier code:
+		//	if (isFleeing(fp, tp)
+		//		&& tp.hasMoved())
+		//		fpvalue = 0;
+		// means attacking the moved piece is always preferred
+		// (recall that all adjacent pieces that fail to attack are fleeing).
 
 				}
 
@@ -5921,8 +5916,16 @@ public class TestingBoard extends Board
 		// only one opponent Scout still remaining, there is still
 		// sustantial risk to the Spy (and the undiscovered One).
 
-		if (unknownScoutFarMove)
-			return 5 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
+		if (unknownScoutFarMove) {
+			int risk = 5 + unknownRankAtLarge(fp.getColor(), Rank.NINE)/2;
+
+		// An unknown moved piece is slightly more risky because an
+		// unmoved piece *could* be a bomb
+
+			if (!fp.hasMoved())
+				risk--;
+			return risk;
+		}
 		// High ranking pieces
 
 		int r = rank.ordinal();
@@ -6367,15 +6370,15 @@ public class TestingBoard extends Board
 
 		// AI IS DEFENDER (tp)
 
-		if (tprank == Rank.BOMB
-			&& fp.getMaybeEight()) {
-			if (tp.isKnown() || tp.aiValue() != 0)
+		if (!fp.isKnown()
+			&& tp.getColor() == Settings.topColor) {
+
+		if (tprank == Rank.BOMB) {
+			if (fp.getMaybeEight()
+				&& (tp.isKnown() || tp.aiValue() != 0))
 				return WINS;	// maybe not
 			return LOSES;	// most likely
 		}
-
-		if (!fp.isKnown()
-			&& tp.getColor() == Settings.topColor) {
 
 		if (fprank == Rank.UNKNOWN) {
 

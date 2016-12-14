@@ -257,7 +257,7 @@ public class Piece implements Comparable<Piece>
 		//	because the AI Two was invincible and then not.
 		// 	This could cause the AI Two to become cornered.
 
-		if (r == Rank.NIL && moves != 0)
+		if (actingRankChase == Rank.NIL && moves != 0)
 			moves = 1;
 
 		// actingRankChase of unknown takes precedence over

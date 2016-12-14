@@ -67,9 +67,10 @@ public class AI implements Runnable
 	// best moves because non-forced losing attacks are
 	// discarded.  All moves are dynamically ordered as well.
 
-	static final int ACTIVE = 0;
-	static final int INACTIVE = 1;
-	static final int FAR = 2;
+	static final int NULL = 0;
+	static final int ACTIVE = 1;
+	static final int INACTIVE = 2;
+	static final int FAR = 3;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -695,9 +696,6 @@ public class AI implements Runnable
 
 	private boolean getMoves(BitGrid bg, ArrayList<Integer>[] moveList, int n)
 	{
-		for (int i = 0; i <= FAR; i++)
-			moveList[i] = new ArrayList<Integer>();
-
 		boolean isPruned = false;
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
@@ -1723,7 +1721,11 @@ public class AI implements Runnable
 
 			BitGrid bgpruned = new BitGrid();
 			getMovablePieces(-n, bgpruned);
+
 			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
+			for (int i = 0; i <= FAR; i++)
+				moveList[i] = new ArrayList<Integer>();
+
 			getMoves(bgpruned, moveList, -n);
 			int bestPrunedMoveValue = -22222;
 			int bestPrunedMove = -1;
@@ -1781,7 +1783,14 @@ public class AI implements Runnable
 			} // pruned move found
 			} // isPruned
 
-		} else {
+		}
+
+		ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
+		for (int i = 0; i <= FAR; i++)
+			moveList[i] = new ArrayList<Integer>();
+
+		outerloop:
+		for (int mo = NULL; mo <= FAR; mo++) {
 
 		// If legal moves were pruned before move
 		// generation, then try the null move before move
@@ -1796,46 +1805,20 @@ public class AI implements Runnable
 		// tries the null move after killer move and
 		// before move generation.
 
-			if (isPruned) {
-
-			logMove(n, 0, b.getValue(), MoveType.NU);
-			MoveResult mt = makeMove(n, 0);
-			if (mt == MoveResult.OK) {
-
-				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove);
-
-				b.undo();
-
-				log(DETAIL, " " + negQS(vm));
-
-				if (vm > bestValue) {
-					bestValue = vm;
-					bestmove = 0;
-				}
-				alpha = Math.max(alpha, vm);
-
-				if (alpha >= beta) {
-					hh[0]+=n;
-					returnMove.setMove(0);
-					return vm;
-				}
-			} else
-				log(DETAIL, " " + mt);
-
-			} // isPruned
-
-		}
+			if (mo == NULL) {
+				if (!isPruned
+					|| b.depth == -1)
+					continue;
+				addMove(moveList[NULL], 0);
 
 		// FORWARD PRUNING
 		// Add null move if not processed already
-		ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
-		if (getMoves(bg, moveList, n)
-			&& b.depth != -1
-			&& !isPruned)
-			addMove(moveList[INACTIVE], 0);
 
-		outerloop:
-		for (int mo = 0; mo <= FAR; mo++) {
+			} else if (mo == ACTIVE) {
+				if (getMoves(bg, moveList, n)
+					&& b.depth != -1
+					&& !isPruned)
+					addMove(moveList[INACTIVE], 0);
 
 		// Scout far moves are expensive to generate and
 		// because of the loss of stealth are often
@@ -1844,7 +1827,7 @@ public class AI implements Runnable
 		// They are generated separately because they are
 		// not forward pruned based on enemy distance like other moves.
 
-			if (mo == FAR)
+			} else if (mo == FAR)
 				getScoutMoves(moveList[mo], n, b.bturn);
 
 		// Sort the move list.
@@ -1857,8 +1840,9 @@ public class AI implements Runnable
 
 		// skip ttMove and killerMove
 
-				if (max == ttMove
-					|| (max != 0 && max == km))
+				if (max != 0
+					&& (max == ttMove
+						|| max == km))
 					continue;
 
 				logMove(n, max, b.getValue(), MoveType.GE);
@@ -2343,8 +2327,22 @@ public class AI implements Runnable
 		} // bp data
 		} // fp bi
 
+		// Prior to Version 11, deepSearch was exactly equal to
+		// the distance to the attacker.  But if the target AI piece
+		// moved away from the attacker, it no longer saw the attacker,
+		// and could easily become trapped.  For example:
+		// |BB -- B1
+		// |-- R2 B3
+		// |xxxxxxxx
+		// Blue One is two steps away and deepSearch is set.  But Red Two
+		// might move to the left, trapping itself because deepSearch would
+		// prevent it from seeing Blue One at that distance.
+		//
+		// So Version 11 adds one more square to the search depth.
+		// This means that deep search goes broader and shallower.
+
 		if (deepSearch != 0) {
-			deepSearch *= 2;
+			deepSearch = (deepSearch + 1) * 2;
 			log("Deep search (" + deepSearch + ") in effect");
 		}
 	}
