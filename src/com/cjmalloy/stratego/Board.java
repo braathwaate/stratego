@@ -1198,10 +1198,10 @@ public class Board
 		}
 
 		for (int d : dir) {
-			int j = i + d;
-			if (!Grid.isValid(j))
+			int open_square = i + d;
+			if (!Grid.isValid(open_square))
 				continue;
-			Piece p = getPiece(j);
+			Piece p = getPiece(open_square);
 
 		// If an adjacent square is open, assume that the chased piece
 		// is not cornered.  This assumption is usually valid,
@@ -1230,18 +1230,20 @@ public class Board
 		// is trapped without any protection.
 
 				if (um3 != null
-					&& um3.getFrom() == i)
+					&& open_square == um3.getFrom())
 					continue;
 
-		// check if the open square was occupied by the
-		// piece that just moved
+		// check if the open square was occupied by some other
+		// piece that just moved to make a getaway square for
+		// the chased piece
 
-				if (j == um1.getFrom())
+				if (open_square == um1.getFrom()
+					&& um1.getPiece() != chased)
 					continue;
 
 		// assume the move to the open square is a decent flee move
 
-				if (!isGuarded(chased.getColor(), j))
+				if (!isGuarded(chased.getColor(), open_square))
 					open++;
 				continue;
 			}
@@ -1962,6 +1964,11 @@ public class Board
 				|| p.isKnown())
 				continue;
 
+			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0)
+				p.setMaybeEight(false);
+			else
+				p.setMaybeEight(true);
+
 			Rank rank = p.getActingRankChase();
 			if (rank == Rank.NIL)
 				continue;
@@ -1988,18 +1995,15 @@ public class Board
 			} else
 				setSuspectedRank(p, getChaseRank(rank, p.isRankLess()));
 
-		// If the opponent still has any unknown Eights,
-		// assume that the suspected rank can also be an Eight,
-		// due to the possibility of bluffing to get at the flag.
-		// (The maybeEight status can be cleared during the search
-		// tree if a Seven or lower ranked piece attacks the unknown)
+		// If the AI believes the suspected rank is not an Eight,
+		// then clear maybeEight so that that the suspected
+		// rank does not win a flag bomb during tree search.
+		// While risky, the AI has to make this assumption
+		// to avoid losing material by a direct attack on the suspected piece.
 
-			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0
-				|| (p.isSuspectedRank()
-					&& !maybeBluffing(p)))
+			if (!maybeBluffing(p)
+				&& p.getRank() != Rank.EIGHT)
 				p.setMaybeEight(false);
-			else
-				p.setMaybeEight(true);
 
 		} // for
 
