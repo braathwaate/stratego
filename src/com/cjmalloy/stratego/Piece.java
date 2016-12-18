@@ -28,8 +28,7 @@ public class Piece implements Comparable<Piece>
 	private Rank rank = null;
 
 	private int value = 0;
-	private Rank actingRankFleeLow = Rank.NIL;
-	private Rank actingRankFleeHigh = Rank.NIL;
+	private int actingRankFlee = 0;
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
 	
@@ -53,6 +52,7 @@ public class Piece implements Comparable<Piece>
 		color = c;
 		actualRank = r;
 		rank = r;
+		clearActingRankFlee();
 	}
 
 	public Piece(Piece p) 
@@ -67,8 +67,7 @@ public class Piece implements Comparable<Piece>
 		moves = p.moves;
 		rank = p.rank;
 		actualRank = p.actualRank;
-		actingRankFleeLow = p.actingRankFleeLow;
-		actingRankFleeHigh = p.actingRankFleeHigh;
+		actingRankFlee = p.actingRankFlee;
 		actingRankChase = p.actingRankChase;
 		flags = p.flags;
 		value = p.value;
@@ -79,8 +78,7 @@ public class Piece implements Comparable<Piece>
 	{
 		moves = 0;
 		actingRankChase = Rank.NIL;
-		actingRankFleeLow = Rank.NIL;
-		actingRankFleeHigh = Rank.NIL;
+		clearActingRankFlee();
 		flags = 0;
 		value = 0;
 		index = 0;
@@ -159,6 +157,7 @@ public class Piece implements Comparable<Piece>
 	{
 		flags |= IS_KNOWN;
 		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT);
+		clearActingRankFlee();
 	}
 
 	public int getColor() 
@@ -262,13 +261,9 @@ public class Piece implements Comparable<Piece>
 
 		// actingRankChase of unknown takes precedence over
 		// actingRankFlee (see setActingRankFlee)
-		if (r == Rank.UNKNOWN) {
-			if (actingRankFleeLow == Rank.UNKNOWN)
-				actingRankFleeLow = Rank.NIL;
 
-			if (actingRankFleeHigh == Rank.UNKNOWN)
-				actingRankFleeHigh = Rank.NIL;
-		}
+		if (r == Rank.UNKNOWN)
+			actingRankFlee &= ~(1 << Rank.UNKNOWN.ordinal());
 
 		actingRankChase = r;
 	}
@@ -290,16 +285,25 @@ public class Piece implements Comparable<Piece>
 		return (flags & IS_LESS) != 0;
 	}
 
+	public boolean isFleeing(Rank rank)
+	{
+		return (actingRankFlee & (1 << rank.ordinal())) != 0;
+	}
+
 	public Rank getActingRankFleeLow()
 	{
 		assert !isKnown() : "actingRankFleeLow: piece must be unknown";
-		return actingRankFleeLow;
+		if (actingRankFlee == 0)
+			return Rank.NIL;
+		return Rank.toRank(Integer.numberOfTrailingZeros(actingRankFlee));
 	}
 
 	public Rank getActingRankFleeHigh()
 	{
 		assert !isKnown() : "actingRankFleeHigh: piece must be unknown";
-		return actingRankFleeHigh;
+		if (actingRankFlee == 0)
+			return Rank.NIL;
+		return Rank.toRank(31 - Integer.numberOfLeadingZeros(actingRankFlee));
 	}
 
 	public void setActingRankFlee(Rank r)
@@ -314,19 +318,12 @@ public class Piece implements Comparable<Piece>
 			&& actingRankChase == Rank.UNKNOWN)
 			return;
 
-		if (actingRankFleeLow == Rank.NIL
-			|| actingRankFleeLow.ordinal() > r.ordinal())
-			actingRankFleeLow = r;
-
-		if (actingRankFleeHigh == Rank.NIL
-			|| actingRankFleeHigh.ordinal() < r.ordinal())
-			actingRankFleeHigh = r;
+		actingRankFlee |= (1 << r.ordinal());
 	}
 
 	public void clearActingRankFlee()
 	{
-		actingRankFleeLow = Rank.NIL;
-		actingRankFleeHigh = Rank.NIL;
+		actingRankFlee = 0;
 	}
 
 	public boolean isSuspectedRank()

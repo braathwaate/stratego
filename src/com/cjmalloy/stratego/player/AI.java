@@ -75,7 +75,7 @@ public class AI implements Runnable
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
 	private TTEntry[][] ttable = new TTEntry[2][2<<18]; // 262144
-	private final int QSMAX = 6;	// maximum qs search depth
+	private final int QSMAX = 4;	// maximum qs search depth
 	int bestMove = 0;
 	long stopTime = 0;
 	int moveRoot = 0;
@@ -1006,7 +1006,7 @@ public class AI implements Runnable
 	// TBD: Should QSMAX be even?  Should it be limited at all?
 	//
 	// The reason why QSMAX is even is that it superficially gives
-	// the opponent a chance to respond in kind.  But this fails
+	// the player a chance to respond in kind.  But this fails
 	// when the player does not have a successful capture, because
 	// then the player loses its turn by pushing a null move.
 	// This allows the opponent to move first,
@@ -1029,7 +1029,7 @@ public class AI implements Runnable
 	// be unlimited.
 	//
 	// Another idea: allow the player to push a null move without
-	// decrementing n.
+	// decrementing n.  Implemented by Version 11.
 
 	private int qs(int n, int alpha, int beta)
 	{
@@ -1048,7 +1048,7 @@ public class AI implements Runnable
 			best = bvalue;
 		else {
 			b.pushNullMove();
-			best = -qs( n-1, -beta, -alpha);
+			best = -qs( n, -beta, -alpha);
 			b.undo();
 		}
 		alpha = Math.max(alpha, best);
@@ -1120,18 +1120,19 @@ public class AI implements Runnable
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
-				if (tp != null
-					&& tp.getColor() != 1 - b.bturn)
+
+				if (tp == null) {
+				 	if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+						continue;
+					b.move(Move.packMove(i, t));
+
+				} else if (tp.getColor() != 1 - b.bturn)
 					continue;
 
-				if (tp == null
-				 	&& (fprank == Rank.BOMB || fprank == Rank.FLAG))
-					continue;
-
-				b.move(Move.packMove(i, t));
-				int v = -negQS(b.getValue()) - bvalue;
-
-				if (tp != null && v < 0) {
+				else {
+					boolean wasKnown = tp.isKnown();
+					b.move(Move.packMove(i, t));
+					int v = -negQS(b.getValue()) - bvalue;
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
@@ -1202,11 +1203,17 @@ public class AI implements Runnable
 		// R7xB? is a losing move, but is necessary because
 		// unknown Blue is maybe an Eight and is close to the flag
 		// bomb structure.
+		//
+		// Version 11 allows negative moves if the target piece
+		// was unknown and unmoved to support foray mining where an expendable
+		// piece attacks while a power piece sits in wait.
 
-					if (tp == b.getPiece(t)	// lost the attack
+					if ((wasKnown || tp.hasMoved())
+						&& v < 0
+						&& tp == b.getPiece(t)	// lost the attack
 						&& enemies < 2) {
-						b.undo();
-						continue;
+							b.undo();
+							continue;
 					}
 				}
 		
@@ -1988,6 +1995,7 @@ public class AI implements Runnable
 			
 			UndoMove m = b.getLastMove(1);
 			if (m.tp != null
+				&& (m.tpcopy.isKnown() || m.tpcopy.hasMoved())
 				&& (!b.isFlagBombAtRisk(m.tpcopy)
 					|| m.getPiece().getRank() == Rank.NINE)) {
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));

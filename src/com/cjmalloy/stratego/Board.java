@@ -832,6 +832,9 @@ public class Board
 
 	void setDirectChaseRank(Piece chaser, Piece chased, int i)
 	{
+		if (chased.isKnown())
+			return;
+
 		Move m = getLastMove();
 		if (m.getPiece() != chased)
 			return;
@@ -852,41 +855,18 @@ public class Board
 			&& wasTrapped(chased, m.getFrom()))
 			return;
 
-		// Prior to version 9.6, if a chase piece had a
+		// Prior to version 9.6, if a chased piece had a
 		// protector, it did not acquire a chase rank, because
-		// the strong piece could be either the chase piece or
-		// or the protector:
-		//	|| unknownProtector != null
-		//	|| (knownProtector != null
-		//		&& knownProtector.getRank().ordinal() < chaser.getRank().ordinal()))
+		// the strong piece could be either the chased piece or
+		// or the protector.
 		//
-		// Then in TestingBoard, the chase piece acquired a
-		// temporary suspected rank so that the AI would treat
-		// the chase piece as a strong piece.
+		// After version 9.6, this code was removed, because
+		// the chaser could very well be a strong piece and
+		// the AI should attack it to confirm its suspicion.
 		//
-		// In version 9.6, this code was removed, because
-		// of this example:
-		// B? B? R2
-		// -- -- -- B?
-		// Red Two has been approached by unknown Blue, and
-		// so the chaser acquired a temporary suspected rank of One.
-		// This lead Red Two to believe that it was invincible,
-		// so moved down.  But on the next move, it was no
-		// longer invincible, and was trapped!
-		//
-		// The problem could have been solved by only resetting
-		// Piece.moves to prevent Red Two from becoming invincible.
-		// This code change was made as well, but it is
-		// thought that setting a permanent chase rank is better,
-		// to encourage the AI to try to identify
-		// the chase piece by attacking it with a piece of
-		// expendable rank.  Then, if it is unable to do so
-		// within the allotted number of moves, the chase rank
-		// matures, and from then on the AI believes that the
-		// chase piece was the actual chaser.
-		//
-		// In version 9.10, the code was restored,
-		// with the idea that if a neighboring piece has exactly
+		// In version 9.10, the AI tries to determine if
+		// the protector is strong.
+		// The idea was that if a neighboring piece has exactly
 		// the same chase rank (or a known rank of one less),
 		// then no chase rank should be assigned.   For example,
 		// R2 --
@@ -894,6 +874,14 @@ public class Board
 		// Unknown Blue has just approached Red Two, but it is
 		// protected by Blue One.  Unknown Blue should not
 		// earn a chase rank of Two.
+		//
+		// Version 11.0 clarifies this concept by restating it:
+		// A chase rank is assigned to the chased piece
+		// only if the protector is predicted to lose or tie an encounter
+		// with the chaser.
+
+		Rank arank = chased.getActingRankChase();
+		Rank chaserRank = chaser.getApparentRank();
 
 		for (int d : dir) {
 			int j =  i + d;
@@ -901,20 +889,11 @@ public class Board
 			if (p == null
 				|| p.getColor() != chased.getColor())
 				continue;
-
-			if (p.isKnown()) {
-				if (p.getRank().ordinal() + 1 == chaser.getRank().ordinal())
-					return;
-			} else if (p.getActingRankChase() == chaser.getRank())
+			if (p.getApparentRank().winFight(chaserRank) != 1
+				|| p.isFleeing(chaserRank))
 				return;
 		}
 		
-		if (chased.isKnown())
-			return;
-
-		Rank arank = chased.getActingRankChase();
-		Rank chaserRank = chaser.getApparentRank();
-
 		// An unknown chase rank, once set, is never changed to
 		// a rank lower than Six.  This prevents being duped
 		// by random bluffing, where a high rank piece chases
