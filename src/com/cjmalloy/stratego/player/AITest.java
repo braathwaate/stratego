@@ -72,8 +72,10 @@ public class AITest extends View
 	public AITest(boolean graphics) 
 	{
 		engine = new AIEngine(this);
-		if (graphics)
+		if (graphics) {
 			wview = new WView();
+			wview.showBoard(engine.getBoard());
+		}
                 scan = new Scanner(System.in);
 
 	try
@@ -110,9 +112,7 @@ public class AITest extends View
 		// board
 		for (int i = 0; i < 10; i++)
 			scan.nextLine();
-		engine.requestUserMove(move);	// make the move on board
-		if (wview != null)
-			wview.update();
+		engine.requestUserMove(move);	// make the user move on board
         }
 
 	/**
@@ -153,8 +153,6 @@ public class AITest extends View
 			p.saveActualRank();
 			p.setShown(false);
 		}
-		if (wview != null)
-			wview.showBoard(engine.getBoard());
 		printBoard();
 	}
 
@@ -338,8 +336,7 @@ public class AITest extends View
 
 	public synchronized void moveComplete(Move m)
 	{
-		if (wview != null)
-			wview.update();
+		update();
 		aimove.release();
 	}
 
@@ -363,5 +360,11 @@ public class AITest extends View
 		}
 		result.add(new String(token));
 		return result;
+	}
+
+	public void update()
+	{
+		if (wview != null)
+			wview.update();
 	}
 }

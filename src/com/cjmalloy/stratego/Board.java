@@ -876,21 +876,34 @@ public class Board
 		// earn a chase rank of Two.
 		//
 		// Version 11.0 clarifies this concept by restating it:
-		// A chase rank is assigned to the chased piece
-		// only if the protector is predicted to lose or tie an encounter
-		// with the chaser.
+		// A chase rank is always assigned to the chased piece
+		// unless the protector is stronger than the chaser.
 
 		Rank arank = chased.getActingRankChase();
 		Rank chaserRank = chaser.getApparentRank();
 
+		if (chaserRank != Rank.UNKNOWN)
 		for (int d : dir) {
 			int j =  i + d;
 			Piece p = getPiece(j);
 			if (p == null
 				|| p.getColor() != chased.getColor())
 				continue;
-			if (p.getApparentRank().winFight(chaserRank) != 1
-				|| p.isFleeing(chaserRank))
+
+			Rank prank = p.getApparentRank();
+
+			// If the protector is unknown, then the AI should
+			// assign a chase rank to the chased piece.
+			// (Although the protector could be strong, the AI
+			// assumes that the chased piece is the strong piece.)
+			if (prank == Rank.UNKNOWN)
+				continue;
+
+			// Both chaser and defender have known or suspected ranks.
+			// If the defender would win the chaser,
+			// then the AI does not assign a chase rank to the chased piece.
+
+			if (prank.winFight(chaserRank) == Rank.WINS)
 				return;
 		}
 		

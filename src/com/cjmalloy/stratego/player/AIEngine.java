@@ -122,6 +122,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 				// perhaps the move finished the game
 				if (status != Status.PLAYING)
 					return;
+				view.update();
 				requestCompMove();
 			} else
 				ai.logFlush("ILLEGAL MOVE");
