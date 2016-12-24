@@ -36,12 +36,13 @@ public class Piece implements Comparable<Piece>
 
 	// a known piece can be not shown
 	// a shown piece can be unknown to the computer
-	static private final int IS_SUSPECTED = 1 << 0;
-	static private final int MAYBE_EIGHT = 1 << 1;	// unknown piece could be an eight
-	static private final int IS_LESS = 1 << 2;
-	static private final int IS_WEAK = 1 << 3;
-	static private final int IS_KNOWN = 1 << 4;	// known to players
+	static private final int MAYBE_EIGHT = 1 << 0;	// unknown piece could be an eight
+	static private final int IS_WEAK = 1 << 1;
+	static private final int IS_KNOWN = 1 << 2;	// known to players
+	static private final int IS_LESS = 1 << 3;
+	static private final int IS_SUSPECTED = 1 << 4;
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
+	static private final int IS_FORAY = 1 << 6;	// foray lane piece
 	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
@@ -156,7 +157,7 @@ public class Piece implements Comparable<Piece>
 	public void makeKnown()
 	{
 		flags |= IS_KNOWN;
-		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT);
+		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT | IS_FORAY);
 		clearActingRankFlee();
 	}
 
@@ -350,6 +351,19 @@ public class Piece implements Comparable<Piece>
 		return (flags & IS_WEAK) != 0;
 	}
 
+	public void setForay(boolean b)
+	{
+		if (b)
+			flags |= IS_FORAY;
+		else
+			flags &= ~IS_FORAY;
+	}
+
+	public boolean isForay()
+	{
+		return (flags & IS_FORAY) != 0;
+	}
+
 	public void setMaybeEight(boolean b)
 	{
 		if (b)
@@ -378,10 +392,21 @@ public class Piece implements Comparable<Piece>
 		return uniqueID - p.uniqueID;
 	}
 
-	// returns all flags that affect the board position
+	// Returns all piece flags that affect the board hash.
+
+	// For example, equivalent pieces are:
+	// all known pieces of the same rank
+	// all unknown pieces of the same rank (suspected)
+	// all unknown unranked pieces that are maybe an eight
+	// all unknown unranked pieces that are marked weak
+	//
+	// TBD: not quite true, because unknown pieces can have
+	// chase rank that makes them differ, so this could result
+	// in undesired transposition cache equivalency
+
 	public int getStateFlags()
 	{
-		return flags & ~IS_SHOWN;
+		return flags & (MAYBE_EIGHT | IS_WEAK | IS_KNOWN);
 	}
 	
 	public boolean equals(Object p)

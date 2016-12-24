@@ -54,7 +54,7 @@ public class Board
 	// correllating against all setups in the database
 	protected Piece[] setup = new Piece[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
-	protected static long[][][][][] boardHash = new long[2][32][2][15][121];
+	protected static long[][][][][] boardHash = new long[2][8][2][15][121];
 
 	protected class BoardHistory {
 		public long hash;
@@ -121,7 +121,7 @@ public class Board
 	//
 
 		for ( int c = RED; c <= BLUE; c++)
-		for ( int k = 0; k < 32; k++)
+		for ( int k = 0; k < 8; k++)
 		for ( int m = 0; m < 2; m++)
 		for ( int r = 0; r < 15; r++)
 		for ( int i = 12; i <= 120; i++) {
@@ -1246,10 +1246,10 @@ public class Board
 			if (p.getApparentRank() != Rank.UNKNOWN
 				&& chaserRank != Rank.UNKNOWN
 				&& (p.getApparentRank().ordinal() < chaserRank.ordinal()
-						|| p.getApparentRank() == Rank.SPY && chaserRank == Rank.ONE))
+					|| p.getApparentRank() == Rank.SPY && chaserRank == Rank.ONE))
 					return;
 
-			else if (p.getApparentRank() != Rank.UNKNOWN
+			else if (p.getApparentRank().ordinal() < chasedRank.ordinal()
 				&& chaserRank == Rank.UNKNOWN) {
 				assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
 				if (knownProtector == null
@@ -1259,13 +1259,8 @@ public class Board
 			} else if (p.isKnown())
 				continue;
 
-			// more than one unknown protector?
-
 			else if (activeProtector)
 				continue;
-
-			else if (unknownProtector != null)
-				return;
 
 		// If the protector fled from the chaser,
 		// it isn't a protector.  For example,
@@ -1281,10 +1276,15 @@ public class Board
 		// thinks are weak or bombs, and certainly unlikely solitary
 		// protectors!
 
-			else if (p.getActingRankFleeLow() != chaserRank
-				&& !p.isWeak())
+			else if (!p.isFleeing(chaserRank) && !p.isWeak()) {
+
+		// more than one unknown protector?
+
+				if (unknownProtector != null)
+					return;
 				
 				unknownProtector = p;
+			}
 		} // dir
 
 		if (unknownProtector != null) {
@@ -2480,7 +2480,6 @@ public class Board
 	{
 		int size = 0;
 		int bestGuess = 99;
-		int bestGuessGuards = 0;
 		for (int i = 0; i < maybe_count; i++) {
 
 		// patterns closest to the back row are much more plausible
@@ -2581,12 +2580,11 @@ public class Board
 			int guards = grid.movablePieceCount(color, maybe[start][0], 2)*2
 				+ grid.movablePieceCount(1-color, maybe[start][0], 1);
 
+			nb = nb * 100 / Math.max(1, guards);
 			if (bestGuess == 99
-				|| guards > bestGuessGuards
 				|| nb < size) {
 				bestGuess = start;
 				size = nb;
-				bestGuessGuards = guards;
 			}
 
 		} // i
@@ -3357,13 +3355,18 @@ public class Board
 		return isInvincible(p.getColor(), rank.ordinal());
 	}
 
+	public boolean isInvincibleDefender(int color, int r) 
+	{
+		if (r == 1 && hasSpy(1-color))
+			return false;
+
+		return isInvincible(color, r);
+	}
+
 	public boolean isInvincibleDefender(Piece p) 
 	{
 		Rank rank = p.getRank();
-		if (rank == Rank.ONE && hasSpy(1-p.getColor()))
-			return false;
-
-		return isInvincible(p.getColor(), rank.ordinal());
+		return isInvincibleDefender(p.getColor(), rank.ordinal());
 	}
 
 	public long getHash()
