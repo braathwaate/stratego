@@ -2172,7 +2172,6 @@ public class Board
 				&& tp.getRank() == Rank.UNKNOWN
 				&& !tp.hasMoved()) {
 				int found = 0;
-				if (i != 78 && i != 87)	// top end pieces are often bombs
 				for ( int d : dir ) {
 					int j = i + d;
 					if (!Grid.isValid(j) || d == 11)

@@ -42,7 +42,6 @@ public class Piece implements Comparable<Piece>
 	static private final int IS_LESS = 1 << 3;
 	static private final int IS_SUSPECTED = 1 << 4;
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
-	static private final int IS_FORAY = 1 << 6;	// foray lane piece
 	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
@@ -157,7 +156,7 @@ public class Piece implements Comparable<Piece>
 	public void makeKnown()
 	{
 		flags |= IS_KNOWN;
-		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT | IS_FORAY);
+		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT);
 		clearActingRankFlee();
 	}
 
@@ -349,19 +348,6 @@ public class Piece implements Comparable<Piece>
 	public boolean isWeak()
 	{
 		return (flags & IS_WEAK) != 0;
-	}
-
-	public void setForay(boolean b)
-	{
-		if (b)
-			flags |= IS_FORAY;
-		else
-			flags &= ~IS_FORAY;
-	}
-
-	public boolean isForay()
-	{
-		return (flags & IS_FORAY) != 0;
 	}
 
 	public void setMaybeEight(boolean b)

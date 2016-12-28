@@ -102,6 +102,7 @@ public class AI implements Runnable
 	};
 
 	static private long twoSquaresHash;
+	static private long firstMoveHash;
 	static {
 		Random rnd = new Random();
 		long n = rnd.nextLong();
@@ -114,6 +115,12 @@ public class AI implements Runnable
 			twoSquaresHash = -n;
 		else
 			twoSquaresHash = n;
+
+		n = rnd.nextLong();
+		if (n < 0)
+			firstMoveHash = -n;
+		else
+			firstMoveHash = n;
 	}
 
 
@@ -2013,120 +2020,20 @@ public class AI implements Runnable
 	{
 		if (Grid.isPossibleTwoSquaresChase(b.getLastMove(1), b.getLastMove(2)))
 			return b.getHash() ^ twoSquaresHash;
-		else
-			return b.getHash();
+
+		// For the player's first move and the opponents response,
+		// store the result in a separate transposition table entry,
+		// because the score is often dependent on making the move first
+		// rather than later (see TestingBoard, "Prefer early attacks",
+		// DEFEND_FLAG, and anywhere in the code that conditions on depth).
+		// This prevents the score from being grabbed in an identical
+		// position from a transposition of moves.
+
+		else if (b.depth <= 0 )
+			return b.getHash() ^ firstMoveHash;
+
+		return b.getHash();
 	}
-
-	// Prefer early successful attacks
-	//
-	// Note: it is impossible to determine what moves
-	// the opponent actually considers, so the AI cannot
-	// second-guess the opponent and play a suboptimal move,
-	// hoping the opponent will miss a good move.
-	//
-	// Gamma correction rewards early successful attacks
-	// and delays losing sequences.
-	// By delaying losing sequences, the opponent may misplay,
-	// but this cannot be predicted.  Generally, the AI
-	// will play the best move.
-	//
-	// However, consider the following example:
-	// RB -- RB -- --
-	// -- R5 -- R3 --
-	// -- B2 -- -- --
-	//
-	// Blue Two has moved towards Red Five.
-	// Red Five can move back, allowing Blue Two
-	// to trap it.  Red Five can move left, but
-	// the Two Squares rule will eventually push
-	// it right next to Red Three (in 8 ply), allowing Blue Two
-	// to fork Red Five and Blue Three.
-	//
-	// So Red knows that it can lose its Five.
-	// It this situation, Red should play out the sequence
-	// and hope that Blue Two misplays.
-	//
-	// This particularly affects deep chase, where
-	// the depth is very deep.  Few opponents will see
-	// this deep.  Often the AI will leave material
-	// hanging because of a potential deep threat
-	// involving unknown pieces that do not have the
-	// ranks that the AI is worried about.
-	//
-	// This is important in tournament play with substandard
-	// bots.  Stratego is a game of logic, but chance plays
-	// an important part.  By forcing the opponent to play
-	// out a losing sequence, the AI can win more games.
-	//
-	// Winning sequences are also important, because
-	// of the limited search depth.  If the AI delays a
-	// capture, it is possible that the piece can be rescued
-	// or the AI may need to reliquish its capture.
-	// For example,
-	// ----------------------
-	// | -- RF -- RB B4 RB --
-	// | -- -- -- R1 -- -- --
-	// | -- -- -- -- -- -- --
-	// | -- -- -- -- -- -- R?
-	// | -- -- xx xx -- -- xx
-	// | -- -- xx xx -- -- xx
-	// | -- B? -- -- -- -- --
-	// Red has the move.
-	// Red One knows it has Blue Four trapped.  The search
-	// tree rewards Red for the piece because all lines
-	// of play allow Red One to capture Blue Four.  So
-	// moving unknown Red has the same value as approaching
-	// Blue Four.  But if 10 ply were considered, Red
-	// would realize that Red One is needed to protect Red Flag.
-	// If the search is not this deep, then Red play some
-	// other move, allowing Blue to force the AI to relinquish
-	// its capture of Blue Four.
-	//
-	// Consider the following example:
-	// | -- -- -- -- -- -- --
-	// | BB R3 -- -- -- -- B1
-	// | B4 -- BB -- -- -- --
-	// -----------------------
-	// Red Three must move to attack Blue Four now because
-	// if it plays some other move, it cannot win Blue Four
-	// without losing its Three to Blue One in 12 ply.
-	//
-	// These examples have occurred in play.
-	//
-	// Up to Version 10.4, the AI would add a credit for
-	// positive values and debit negative values the earlier
-	// they occurred in the search tree.
-	//
-	// However, I was unable to successfully devise an
-	// algorithm that worked with the transposition table.
-	// So Version 10.4 removed this code entirely.   One hope is
-	// that the AI will play out long chase sequences even if they
-	// will end negatively, because a player is rewarded for
-	// alternating moves, but this doesn't seem to work well either,
-	// likely due to the transposition table.
-	//
-	// The transposition table makes all positions equivalent,
-	// no matter how they occur.   The only way to make these positions
-	// not equivalent is to make the hash change.
-	//
-	// This is done correctly in the bluffing code,
-	// by changing which pieces survive during an attack,
-	// so the bluffing code can condition based on depth.
-	//
-	// But if the hash doesn't change, then it is pointless to
-	// bonus or credit the move based on depth or other factors.
-	//
-	// For example, OPP X unknown AI piece is not the same
-	// as unknown AI piece X OPP.   This is a bug if the pieces
-	// retained on the board after the attack do not differ.
-	// So when the AI piece is an unknown One,
-	// the AI piece can be retained in both cases, leading to
-	// a cache transparency bug.
-	//
-	// TBD: This problem will need to be addressed, perhaps by
-	// adding or reusing a piece flag that is used by the hash.
-
-	// ... removed code ...
 
 	// DEEP SEARCH
 	//
