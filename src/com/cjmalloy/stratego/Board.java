@@ -78,7 +78,7 @@ public class Board
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected int guessedRankCorrect = 1;
-	public int blufferRisk = 4;
+	public int blufferRisk = 3;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
@@ -1050,14 +1050,6 @@ public class Board
 		// depends on protecting pieces
 
 		setDirectChaseRank(chaser, chased, i);
-
-		// If the opponent is a bluffer, then
-		// the AI does not assign any indirect chase ranks.
-		// Otherwise, a bluffer could use any piece to thwart
-		// an AI attack.
-
-		if (blufferRisk == 5)
-			return;
 
 		Rank chasedRank = chased.getApparentRank();
 		Rank chaserRank = chaser.getApparentRank();

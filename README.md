@@ -142,10 +142,22 @@ There are very few plans.
 3. Defend its flag.
 4. Determine opponent piece ranks through bluffing or baiting.
 5. Control the lanes.
+6. Directed Forays
 
-Another plan that could be implemented is entrapment, either by
-cornering an opponent piece into a dead-end area with no likely protector and without the ability to rely on the two squares rule to avoid capture, or by
-using two pieces to surround the opponent piece, especially in combination with strategic bluffing.
+A problem with most bots is they lack any sense of offense beyond
+incessantly chasing known pieces
+and blithely crashing into unknown unmoved pieces.
+This makes them pretty boring for most humans to play.
+Offense needs to be carefully directed to achieve some purpose
+because statistically, random forays lead to loss of material if the
+opponent has strategically placed his pieces for defense.
+
+Demon of Ignorance analyzes its pieces at the start of the game
+and chooses either the left or right flank to mount an attack.
+Its goal is to charge along the side of the board hoping to either
+find a corner flag structure or make it to the rear of the board
+so that it can attack pieces on the rear that are statistically weak
+and eventually make it to the flag structure.
 
 ##  Static position analysis
 Unlike chess, stratego probably requires more pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.

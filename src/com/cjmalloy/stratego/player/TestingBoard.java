@@ -290,32 +290,41 @@ public class TestingBoard extends Board
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
-			Piece p = getPiece(i);
-			if (p != null) {
+			if (getPiece(i) != null) {
 
 		// Make a copy of the piece because the graphics
 		// thread is also using board/piece information for display
 
-				TestPiece np = new TestPiece(p);
+				TestPiece np = new TestPiece(getPiece(i));
 				grid.setPiece(i, np);
 				np.setAiValue(0);
 
-				Rank rank = p.getRank();
+		// If the opponent is a bluffer, then
+		// the AI does not assign any suspected ranks.
+		// Otherwise, a bluffer could use any piece to thwart
+		// an AI attack.
+
+				if (blufferRisk == 5
+					&& !np.isKnown()
+					&& np.getColor() == Settings.bottomColor)
+					np.setRank(Rank.UNKNOWN);
+
+				Rank rank = np.getRank();
 				int r = rank.ordinal();
 
 		// only one piece of a rank is assigned plan A
 		// and preferably a piece that has moved or is known and as
 		// far forward on the board as possible
 
-				if (!hasPlan(planAPiece, p.getColor(), r))
-					planAPiece[p.getColor()][r-1]=np;
+				if (!hasPlan(planAPiece, np.getColor(), r))
+					planAPiece[np.getColor()][r-1]=np;
 
-				if (p.isKnown()
-					|| (p.hasMoved() && !planAPiece[p.getColor()][r-1].isKnown())) {
-					planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
-					planAPiece[p.getColor()][r-1]=np;
+				if (np.isKnown()
+					|| (np.hasMoved() && !planAPiece[np.getColor()][r-1].isKnown())) {
+					planBPiece[np.getColor()][r-1]=planAPiece[np.getColor()][r-1];
+					planAPiece[np.getColor()][r-1]=np;
 				} else
-					planBPiece[p.getColor()][r-1]=np;
+					planBPiece[np.getColor()][r-1]=np;
 			}
 		}
 
@@ -3001,12 +3010,13 @@ public class TestingBoard extends Board
 	private void setNeededRank(Piece[][] plan, int color, int rank)
 	{
 		if (rank != 8
-			&& isExpendable(color, rank)
-			&& (needExpendableRank == 0
-				|| rank < needExpendableRank))
-			needExpendableRank = rank;
+			&& isExpendable(color, rank)) {
 
-		else if (plan[color][rank-1] != null
+			if (needExpendableRank == 0
+				|| rank < needExpendableRank)
+				needExpendableRank = rank;
+
+		} else if (plan[color][rank-1] != null
 			&& !plan[color][rank-1].hasMoved())
 			setNeededRank(color, rank);
 	}
@@ -4756,7 +4766,7 @@ public class TestingBoard extends Board
 					int v = unknownValue(fp, fpvalue, tp);
 
 					if (!tp.hasMoved())
-						v = Math.min(v, pieceValue(1-fpcolor, unknownRank[1-fpcolor]));
+						v = Math.min(v, tpvalue);
 					vm += v - fpvalue;
 				}
 
@@ -6735,7 +6745,7 @@ public class TestingBoard extends Board
 			if (unk.getColor() == Settings.bottomColor
 				&& isForay(unk)
 				&& unk.aiValue() == 0)
-				unk.setAiValue(actualValue(unk)/2);
+				unk.setAiValue(pieceValue(Settings.topColor, Rank.SIX));
 
 		// The AI thinks that a piece is probably weak if:
 		//	- it chases an unknown
@@ -7569,10 +7579,12 @@ public class TestingBoard extends Board
 
 	boolean isForay(Piece p)
 	{
-		if (hasFewWeakRanks(Settings.bottomColor, 10))
+		if (hasFewWeakRanks(Settings.bottomColor, 5))
 			return false;
 
-		return Grid.getX(p.getIndex()) == forayLane * 4;
+		int x = Grid.getX(p.getIndex());
+		return (forayLane == 0 && x == 0
+			|| forayLane == 2 && x == 9);
 	}
 
 	// Return a result between 0 and vm, depending on the value vm.
