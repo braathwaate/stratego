@@ -102,25 +102,9 @@ public class AI implements Runnable
 	};
 
 	static private long twoSquaresHash;
-	static private long firstMoveHash;
 	static {
 		Random rnd = new Random();
-		long n = rnd.nextLong();
-
-                // It is really silly that java does not have unsigned
-                // so we lose a bit of precision.  hash has to
-                // be positive because we use it to index ttable.
-
-		if (n < 0)
-			twoSquaresHash = -n;
-		else
-			twoSquaresHash = n;
-
-		n = rnd.nextLong();
-		if (n < 0)
-			firstMoveHash = -n;
-		else
-			firstMoveHash = n;
+		twoSquaresHash = Math.abs(rnd.nextLong());
 	}
 
 
@@ -1036,7 +1020,9 @@ public class AI implements Runnable
 	// be unlimited.
 	//
 	// Another idea: allow the player to push a null move without
-	// decrementing n.  Implemented by Version 11.
+	// decrementing n.  This makes the problem much less likely
+	// to occur, because the opponent needs to have QSMAX attacks
+	// rather than QSMAX/2 attacks. Implemented by Version 11.
 
 	private int qs(int n, int alpha, int beta)
 	{
@@ -1122,20 +1108,23 @@ public class AI implements Runnable
 		// of forward pruning of inactive moves means that
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
-		//
+
+			boolean noFlee = (fprank == Rank.BOMB
+				|| fprank == Rank.FLAG);
+
 			for (int d : dir ) {
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
 
 				if (tp == null) {
-				 	if (fprank == Rank.BOMB || fprank == Rank.FLAG)
+					if (noFlee)
 						continue;
-					b.move(Move.packMove(i, t));
+					b.pushFleeMove(fp);
+					noFlee = true;
 
 				} else if (tp.getColor() != 1 - b.bturn)
 					continue;
-
 				else {
 					boolean wasKnown = tp.isKnown();
 					b.move(Move.packMove(i, t));
@@ -1227,6 +1216,7 @@ public class AI implements Runnable
 				int vm = -qs(n-1, -beta, -alpha);
 
 				b.undo();
+
 				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveResult.OK) + " " + b.getValue() + " " + negQS(vm));
 
 		// Save worthwhile attack (vm > best)
@@ -2020,17 +2010,6 @@ public class AI implements Runnable
 	{
 		if (Grid.isPossibleTwoSquaresChase(b.getLastMove(1), b.getLastMove(2)))
 			return b.getHash() ^ twoSquaresHash;
-
-		// For the player's first move and the opponents response,
-		// store the result in a separate transposition table entry,
-		// because the score is often dependent on making the move first
-		// rather than later (see TestingBoard, "Prefer early attacks",
-		// DEFEND_FLAG, and anywhere in the code that conditions on depth).
-		// This prevents the score from being grabbed in an identical
-		// position from a transposition of moves.
-
-		else if (b.depth <= 0 )
-			return b.getHash() ^ firstMoveHash;
 
 		return b.getHash();
 	}

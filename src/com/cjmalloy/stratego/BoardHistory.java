@@ -15,21 +15,19 @@
     along with Stratego.  If not, see <http://www.gnu.org/licenses/>.
 */
 
+
 package com.cjmalloy.stratego;
-import com.cjmalloy.stratego.Piece;
+import java.util.HashSet;
 
-public class TestPiece extends Piece
+// import gnu.trove.*;
+
+public class BoardHistory
 {
-        protected Piece orig;
-
-	public TestPiece(Piece p) 
-	{
-		super(p);
-		orig = p;
-	}
-
-	public Piece boardPiece()
-	{
-		return orig;
-	}
+	public long hash;
+	protected HashSet<Long>  hashset = new HashSet<Long>();
+	public void clear() { hashset.clear(); hash = 0; }
+	public void add() { hashset.add(hash); }
+	public boolean get() { return hashset.contains(hash); }
+	public void remove() { hashset.remove(hash); }
 }
+

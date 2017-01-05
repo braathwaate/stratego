@@ -20,11 +20,11 @@ package com.cjmalloy.stratego;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.lang.Long;
 import java.util.Random;
 import java.util.concurrent.locks.ReentrantLock;
 
+import com.cjmalloy.stratego.BoardHistory;
 
 //
 // The board class contains all the factual information
@@ -55,17 +55,9 @@ public class Board
 	protected Piece[] setup = new Piece[121];
 	protected static int[] dir = { -11, -1,  1, 11 };
 	protected static long[][][][][] boardHash = new long[2][8][2][15][121];
-
-	protected class BoardHistory {
-		public long hash;
-		protected HashMap<Long, UndoMove>  hashmap = new HashMap<Long, UndoMove>();
-		public void clear() { hashmap.clear(); hash = 0; }
-		public void put(UndoMove um) { hashmap.put(hash, um); }
-		public UndoMove get() { return hashmap.get(hash); }
-		public void remove() { hashmap.remove(hash); }
-	}
+	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
 	protected static BoardHistory[] boardHistory = new BoardHistory[2];
-
+	protected static Piece[][] alternateSquares = new Piece[121][2];
         protected int[][] knownRank = new int[2][15];   // discovered ranks
         protected int[][] trayRank = new int[2][15];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
@@ -77,8 +69,11 @@ public class Board
 	protected int[] flag = new int[2];  // flags
 
 	protected static final int expendableRank[] = { 6, 7, 9 };
-	protected int guessedRankCorrect = 1;
-	public int blufferRisk = 3;
+	protected static final int BLUFFER_RANK_MIN = 2;
+	protected static final int BLUFFER_RANK_MAX = 5;
+	protected static final int BLUFFER_RANK_INIT = 3;
+	public int blufferRisk = BLUFFER_RANK_INIT;
+	protected int guessedRankCorrect = BLUFFER_RANK_MAX - BLUFFER_RANK_INIT;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
@@ -105,7 +100,6 @@ public class Board
 	}
 
 	static {
-		Random rnd = new Random();
 
 	// An identical position differs depending on whose turn it is.
 	// For example,
@@ -120,22 +114,16 @@ public class Board
 	// Red now has the move.
 	//
 
+		Random rnd = new Random();
 		for ( int c = RED; c <= BLUE; c++)
 		for ( int k = 0; k < 8; k++)
 		for ( int m = 0; m < 2; m++)
 		for ( int r = 0; r < 15; r++)
-		for ( int i = 12; i <= 120; i++) {
-			long n = rnd.nextLong();
+		for ( int i = 12; i <= 120; i++)
+			boardHash[c][k][m][r][i] = Math.abs(rnd.nextLong());
 
-		// It is really silly that java does not have unsigned
-		// so we lose a bit of precision.  hash has to
-		// be positive because we use it to index ttable.
-
-			if (n < 0)
-				boardHash[c][k][m][r][i] = -n;
-			else
-				boardHash[c][k][m][r][i] = n;
-		}
+		for ( int i = 0; i < depthHash.length; i++)
+			depthHash[i] = Math.abs(rnd.nextLong());
 	}
 	
 	public Board()
@@ -350,6 +338,11 @@ public class Board
 		bturn = 0;
 		boardHistory[0].clear();
 		boardHistory[1].clear();
+
+		for (int i = 12; i <= 120; i++) {
+			alternateSquares[i][0] = null;
+			alternateSquares[i][1] = null;
+		}
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -451,14 +444,6 @@ public class Board
 	// square, its apparent rank would also change.  The only case
 	// worth distinguishing is an unknown AI Nine moving more than one
 	// square.
-/*
-	public void rehash(long v)
-	{
-		if (v < 0)
-			v = -v;
-		hash ^= v;
-	}
-*/
 
 	// A board position (and hash) reflects all that each player
 	// knows.  The AI knows its piece ranks and has information
@@ -496,7 +481,13 @@ public class Board
 		boardHistory[Settings.topColor].hash ^= hashPiece(Settings.topColor, p, i);
 		boardHistory[Settings.bottomColor].hash ^= hashPiece(Settings.bottomColor, p, i);
 	}
-	
+
+	public void hashDepth(int depth)
+	{
+		boardHistory[Settings.topColor].hash ^= depthHash[depth];
+		boardHistory[Settings.bottomColor].hash ^= depthHash[depth];
+	}	
+
 	public UndoMove getLastMove()
 	{
 		return undoList.get(undoList.size()-1);
@@ -524,7 +515,7 @@ public class Board
         }
 
 	// return true if piece is threatened
-	public boolean wasThreatened(Piece tp, int i)
+	public boolean isThreatened(Piece tp, int i)
 	{
 		for (int d : dir) {
 			int j = i + d;
@@ -743,10 +734,72 @@ public class Board
 	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int m)
 	{
-		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash, 0);
+		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash,
+boardHistory[1-bturn].hash,  0);
 		undoList.add(um);
 
-		boardHistory[bturn].put(um);
+		// save the hash to detect board repetitions
+		boardHistory[bturn].add();
+
+		// mark alternating squares to detect pointless moves
+
+		// Algorithm:
+		// Mark the from square of the prior opponent move
+		// with the opponent and player pieces when the player
+		// makes an alternating move and the player did not initiate
+		// the move sequence.  Thus future moves to these squares can be
+		// detected and debited (or possibly discarded) if they occur
+		// during tree search because they have been played before.
+		//
+		// Note that the pieces do not need to be adjacent, such as
+		// in this example:
+		// R? R? R? |
+		// R? R4 -- |
+		// xx -- -- |
+		// xx -- -- |
+		// -- -- B3 |
+		// Blue Three moves left and Red Four moves right.  Blue's from-square
+		// gets marked, dissuading it from ever moving back again
+		// (until Red Four moves again).
+		//
+		// TBD: Ideally, perhaps the AI should detect the potential for
+		// pointless moves before actually playing them, such as a human can.
+		// But I found this to be easier said than done and I removed the code
+		// and ended up with this alternate squares algorithm based on
+		// the moves having been actually played.  Problems with the
+		// earlier code:
+		//	1. isAlternatingMove() ignores intervening pieces or lakes (for speed)
+		//	2. transposition table equivalency ignores move order
+		//	3. slower
+		//	4. impossible to predict what the opponent will actually do,
+		//		especially opponent bots that move inconsistently.
+		//
+		// Thus playing a pointless move can be a win if the opponent
+		// does not respond predictably.  In the example above, perhaps Red
+		// Four does not see the impending attack and Red moves some other piece,
+		// allowing Blue Three to move forward and win Red Four.
+
+		UndoMove um2 = getLastMove(2);
+		UndoMove um3 = getLastMove(3);
+		if (um3 != null) {
+			if (um3.getPiece() != fp
+				&& Grid.isAlternatingMove(m, um2)) {
+				alternateSquares[um2.fpcopy.getIndex()][0] = um2.getPiece(); // chaser
+				alternateSquares[um2.fpcopy.getIndex()][1] = fp; //chased
+			} else {
+
+		// clear all alternateSquares when a chased piece moves
+		// without a chaser
+
+				for (int i=12; i <= 120; i++)
+					if (alternateSquares[i][1] == fp
+						&& alternateSquares[i][0] != um2.getPiece()) {
+						alternateSquares[i][0] = null;
+						alternateSquares[i][1] = null;
+					}
+			}
+		}
+
 		bturn = 1 - bturn;
 
 	}
@@ -851,7 +904,7 @@ public class Board
 		// Blue Four does not acquare a chase rank of Three,
 		// but remains a Four.
 
-		if (wasThreatened(chased, m.getFrom())
+		if (isThreatened(chased, m.getFrom())
 			&& wasTrapped(chased, m.getFrom()))
 			return;
 
@@ -3182,13 +3235,7 @@ public class Board
 		// has seen the position that the
 		// current player has just created.
 		// 
-		UndoMove entry = boardHistory[bturn].get();
-		if (entry == null)
-			return false;
-
-		// Position has been reached before
-
-		return true;
+		return boardHistory[bturn].get();
 	}
 
 	public void undoLastMove()
@@ -3379,25 +3426,37 @@ public class Board
 			return p.getRank();
 	}
 
+	protected void guess(boolean guessedRight)
+	{
+		if (guessedRight)
+			guessedRankCorrect++;
+		else
+			guessedRankCorrect--;
+		blufferRisk = BLUFFER_RANK_MAX - guessedRankCorrect;
+		blufferRisk = Math.max(blufferRisk, BLUFFER_RANK_MIN);
+		blufferRisk = Math.min(blufferRisk, BLUFFER_RANK_MAX);
+	}
+
 	protected void revealRank(Piece p)
 	{
 		if (p.getColor() == Settings.bottomColor
-			&& !p.isKnown()
-			&& p.getRank().ordinal() <= 4) {
+			&& !p.isKnown()) {
+
+			if (p.getRank() == Rank.SPY)
+				guess(p.getActualRank() == Rank.SPY);
 
 	// its hard to distinguish a Four from a Five,
 	// so if the AI thinks a piece is a Four and it turns
-	// out to be a Five, nothing is changed
+	// out to be a Five, it was an OK guess.
 
-			if (p.getRank() == Rank.FOUR
-				&& p.getActualRank() == Rank.FIVE) {}
-			else if (p.getRank().ordinal() >= p.getActualRank().ordinal())
-				guessedRankCorrect++;
-			else
-				guessedRankCorrect--;
-			blufferRisk = 5 - guessedRankCorrect;
-			blufferRisk = Math.max(blufferRisk, 2);
-			blufferRisk = Math.min(blufferRisk, 5);
+			else if (p.getRank() == Rank.FOUR)
+				guess(p.getActualRank().ordinal() <= 5);
+
+			else if (p.getRank().ordinal() < 4)
+				guess(p.getRank().ordinal() >= p.getActualRank().ordinal()
+					|| p.getActualRank() == Rank.SPY
+						&& p.getActingRankChase() == Rank.NIL);
+
 		}
 		p.revealRank();
 	}
