@@ -756,6 +756,9 @@ public class AI implements Runnable
 			if (b.getPiece(i) != fp)
 				continue;
 
+			if (!b.grid.hasMove(fp))
+				continue;
+
 			Rank fprank = fp.getRank();
 			if (fprank == Rank.NINE)
 				getScoutFarMoves(n, moveList, i);

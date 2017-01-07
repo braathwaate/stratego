@@ -674,8 +674,6 @@ public class Board
 			
 			for (int d : dir) {
 				int j = i + d;
-				if (!Grid.isValid(j))
-					continue;
 				Piece op = getPiece(j);
 
 				if (op == null

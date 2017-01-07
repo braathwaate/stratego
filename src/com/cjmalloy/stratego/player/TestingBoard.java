@@ -400,6 +400,7 @@ public class TestingBoard extends Board
 
 		}
 		attackLanes();
+		// genBestScoutMoves();
 
 		// keep a piece of a high rank in motion,
 		// preferably a 6, 7 or 9 to discover unknown pieces.
@@ -412,8 +413,6 @@ public class TestingBoard extends Board
 		// setunmovedValues depends on neededRank:
 		// chase(), setNeedExpendableRank()
 		setUnmovedValues();
-
-		// targetUnknownBlockers();
 
 		assert flag[Settings.topColor] != 0 : "AI flag unknown";
 	}
@@ -1167,7 +1166,7 @@ public class TestingBoard extends Board
 			Piece p2 = getPiece(attacklanes[lane][1]-11);
 			if (p1 != null && isPossibleBomb(p1)
 				&& p2 != null && isPossibleBomb(p2))
-				if (lane != forayLane
+				if (lane != forayLane/4
 					|| p1.isKnown() && p2.isKnown()) {
 					for (int r = 1; r <= 10; r++) {
 						if (r == 8)
@@ -1311,6 +1310,31 @@ public class TestingBoard extends Board
 
 		} // lane
 	}
+
+/*
+	void getBestScoutSquares(int plan[], int i, int d)
+	{
+		int maxi = 0;
+		int k = d;
+		for (int j=0; j < 10; j++, k+= d) {
+			if (plan[8][i+j] > plan[8][maxi])
+				maxi = i + k;
+		return maxi;
+	}
+
+	void genBestScoutSquares(int color)
+	{
+		for (int x = 0; x < 10; x++) {
+			bestAScoutX[x] = getBestScoutMove(planA[color], Grid.getIndex(x 0), 11);
+			bestBScoutX[x] = getBestScoutMove(planB[color], Grid.getIndex(x,0), 11);
+		}
+
+		for (int y = 0; y < 10; y++) {
+			bestAScoutY[y] = getBestScoutMove(planA[color], Grid.getIndex(0,y), 1);
+			bestBScoutY[y] = getBestScoutMove(planB[color], Grid.getIndex(0,y), 1);
+		}
+	}
+*/
 
 	// Low rank piece discovery is much more important
 	// than finding the structure that contains the flag.
@@ -3271,7 +3295,26 @@ public class TestingBoard extends Board
 				hashDepth(depth);
 			}
 
-			return  (vfrom - vto) * pto;
+		// The difference in chase plan values for adjacent squares
+		// should always be 1, except if the plan was modified by
+		// neededNear, which makes the squares
+		// adjacent to the target (value 2) to be value 5.
+		//
+		// 4 3 4 5	4 3 4 5
+		// 3 2 3 4	3 5 3 4
+		// 2 T 2 3	5 T 5 3
+		// 3 2 3 4	3 5 3 2
+		// chase	neededNear
+		//
+		// Yet if a blocking piece can be reached via two different
+		// paths, and the blocking piece moves allowing the chase
+		// piece to move across the two paths,
+		// the difference can be large.  A large difference
+		// could allow the path value to exceed material value,
+		// and cause the AI to sacrifice material for the shortcut.
+		// So the value is limited to the maximum plan step value.
+
+			return Math.max(Math.min(vfrom - vto, 2), -2) * pto;
 
 		} // to-priority == from-priority
 
@@ -3437,9 +3480,71 @@ public class TestingBoard extends Board
 	// to transform it into a bomb and then another opponent piece
 	// moves past it to attack some other valuable AI piece.
 
-	public void morph(Piece p)
+	protected void morph(Piece p)
 	{
 		p.setRank(Rank.BOMB);
+	}
+
+	// Consider the following example:
+	// -- -- -- --
+	// xx -- -- xx
+	// xx R2 -- xx
+	// B? B3 B? --
+	// B? B? B? B?
+
+	// Unknown Red Two has trapped Blue Three and Red wants
+	// to play R2xB3 because it believes it has the element of
+	// surprise (so statistically, R2xB3 wins at least 1/3 of
+	// the time because unknown Blue One could be in any of three
+	// lanes.
+
+	// But if unknown Blue to the right of Red Two moves up
+	// after R2xB3, then
+	// Red Two becomes trapped if it thinks that any unknown
+	// piece could be Blue One after the moment of surprise
+	// (i.e. R2xB3).
+
+	// There are perhaps various ways of solving this,
+	// but the logical approach used by the AI is to assign
+	// indirect flee rank to pieces that fail to attack.
+	// But assigning indirect flee rank on the fly
+	// immediately after a move would cause the AI to attack all pieces
+	// because it will think that their neighbors are no threat.
+
+	// Alternatively, assigning indirect flee rank after the opponent makes
+	// its move is complicated because the opponent may have
+	// moved one of the neighboring pieces that should be assigned
+	// a flee rank.  Assignment is also complicated because
+	// R2 could be protected and by delaying moves.  This is
+	// handled in Board, but is time-consuming to do every move.
+	// Finally, moveHistory/undo handles only the piece that moves, and
+	// not any other pieces.
+
+	// So I have chosen to assign acting rank flee to only pieces that
+	// directly flee during tree search.  In the above example,
+	// the unknown Blue moved piece is assigned a flee rank of Two, so
+	// that Two can fearlessly backpedal because it is in no danger
+	// of attack from a piece that fled from it.  This allows the
+	// to play R2xR3 in this situation.
+
+	protected void setDirectActingRankFlee(Piece fleep, Piece tp)
+	{
+		if (fleep.isKnown()
+			|| !grid.hasAttack(fleep))
+			return;
+
+		int from = fleep.getIndex();
+		int color = fleep.getColor();
+		for (int d : dir) {
+			int i = from + d;
+			Piece op = getPiece(i);
+			if (op == null
+				|| op == tp
+				|| op.getColor() != 1 - color
+				|| isProtected(op, fleep))
+				continue;
+			fleep.setActingRankFlee(op.getApparentRank());
+		}
 	}
 
 	public void move(int m)
@@ -3449,6 +3554,7 @@ public class TestingBoard extends Board
 
 	public void move(int m, boolean adjacent)
 	{
+
 		int from = Move.unpackFrom(m);
 		int to = Move.unpackTo(m);
 		TestPiece fp = (TestPiece)getPiece(from);
@@ -3464,6 +3570,9 @@ public class TestingBoard extends Board
 		}
 
 		clearPiece(from);
+
+		setDirectActingRankFlee(fp, tp);
+
 		int vm = 0;
 
 		// Moving an unknown scout reveals its rank.
@@ -3663,28 +3772,6 @@ public class TestingBoard extends Board
 
 			if (scoutFarMove)
 				v = Math.min(v, 1);
-
-		// The difference in chase plan values for adjacent squares
-		// should always be 1, except if the plan was modified by
-		// neededNear, which makes the squares
-		// adjacent to the target (value 2) to be value 5.
-		//
-		// 4 3 4 5	4 3 4 5
-		// 3 2 3 4	3 5 3 4
-		// 2 T 2 3	5 T 5 3
-		// 3 2 3 4	3 5 3 2
-		// chase	neededNear
-		//
-		// Yet if a blocking piece can be reached via two different
-		// paths, and the blocking piece moves allowing the chase
-		// piece to move across the two paths,
-		// the difference can be large.  A large difference
-		// could allow the path value to exceed material value,
-		// and cause the AI to sacrifice material for the shortcut.
-		// So the value is limited to the maximum plan step value.
-
-			else
-				v = Math.max(Math.min(v, DEST_PRIORITY_DEFEND_FLAG), -DEST_PRIORITY_DEFEND_FLAG);
 
 			vm += v;
 			fp.moves++;
@@ -4332,13 +4419,13 @@ public class TestingBoard extends Board
 
 				if (fpcolor == Settings.topColor) {
 
-		// If a piece has a suspected rank but has not yet moved,
-		// and an AI piece (except Eight) attacks it,
+		// If a piece is unknown but has not yet moved,
+		// and an AI piece (except Eight) attacks it and wins,
 		// assume a loss (because it could still be a bomb).
 		// This often happens when an opponent bluffs with
 		// a protector piece that hasn't moved.
 
-					if (tp.isSuspectedRank()
+					if (!tp.isKnown()
 						&& tp.moves == 0
 						&& fprank != Rank.EIGHT)
 						vm -= fpvalue;
@@ -4720,21 +4807,21 @@ public class TestingBoard extends Board
 
 				}
 
-				if (tp.isFleeing(fprank)
-					&& tp.hasMoved())
-					fpvalue = 0;
+				if (tp.hasMoved()) {
+					if (tp.isFleeing(fprank))
+						fpvalue = 0;
 
-				else {
-					if (isStrongExpendable(fp) && !tp.isWeak()
-						|| fprank.ordinal() <= 5
-							&& tp.isWeak()
-							&& tp.hasMoved()) {
+					else if (fprank.ordinal() <= 5
+						&& tp.isWeak()) {
 						fpvalue /= 2;
-						if (tp.hasMoved()
-							&& foray)
+						if (foray)
 							fpvalue /= 2;
 					}
-
+				} else {
+					if (tp.isFleeing(fprank))
+						fpvalue /= 2;
+					if (isStrongExpendable(fp) && !tp.isWeak())
+						fpvalue /= 2;
 				}
 
 		// Prior to version 9.7, if the AI attacked an unknown
@@ -7401,13 +7488,6 @@ public class TestingBoard extends Board
 			// Choose the foray lane.
 			int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
-
-		// For now, no forays in the middle lane
-		// TBD: randomly allow them
-
-			if (lane == 1)
-				continue;
-
 			int power = 0;
 			for (int y = 1; y < 4; y++)
 			for (int x = 0; x < 4; x++) {
@@ -7448,7 +7528,12 @@ public class TestingBoard extends Board
 			}
 			if (power < maxPower)
 				continue;
-			forayLane = lane;
+			if (lane == 0)
+				forayLane = 0;
+			else if (lane == 1)
+				forayLane = 5;
+			else
+				forayLane = 9;
 			maxPower = power;
 
 			} // lane
@@ -7693,9 +7778,7 @@ public class TestingBoard extends Board
 		if (hasFewWeakRanks(Settings.bottomColor, 5))
 			return false;
 
-		int x = Grid.getX(p.getIndex());
-		return (forayLane == 0 && x == 0
-			|| forayLane == 2 && x == 9);
+		return forayLane == Grid.getX(p.getIndex());
 	}
 
 	// Return a result between 0 and vm, depending on the value vm.
