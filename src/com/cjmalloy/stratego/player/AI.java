@@ -320,6 +320,9 @@ public class AI implements Runnable
 
 	void getScoutFarMoves(int n, ArrayList<Integer> moveList, int i) {
 		Piece fp = b.getPiece(i);
+		int [][] plana = b.getPlanA(fp);
+		int [][] planb = b.getPlanB(fp);
+
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece p = b.getPiece(t);
@@ -336,8 +339,8 @@ public class AI implements Runnable
 				&& p.getColor() != 1 - b.bturn)
 				continue;
 
-			int vbest = -1;
-			int tbest = -1;
+			int vbest = 99;
+			int tbest = 99;
 			while (p == null) {
 
 		// NOTE: FORWARD PRUNING
@@ -356,8 +359,12 @@ public class AI implements Runnable
 		// -- -- -- B7 --
 		// BF BB -- -- --
 
-				int v = b.planValue(fp, i, t);
-				if (v > vbest) {
+				int v = 99;
+				if (plana != null && plana[1][t] != 0)
+					v = plana[0][t];
+				else if (planb != null && planb[1][t] != 0)
+					v = planb[0][t];
+				if (v < vbest) {
 					tbest = t;
 					vbest = v;
 				}
@@ -369,7 +376,7 @@ public class AI implements Runnable
 		// then the scout move cannot be the best move
 		// because it has run out of moves to reach its target.
 
-			if (tbest > 0
+			if (tbest != 99 
 				&& n > 1)
 				addMove(moveList, i, tbest);
 
@@ -1121,7 +1128,8 @@ public class AI implements Runnable
 				Piece tp = b.getPiece(t); // defender
 
 				if (tp == null) {
-					if (noFlee)
+					if (noFlee
+						|| b.isPossibleTwoSquares(Move.packMove(i, t)))
 						continue;
 					b.pushFleeMove(fp);
 					noFlee = true;
@@ -1977,8 +1985,7 @@ public class AI implements Runnable
 	// than More Squares, the AI does not expect
 	// the opponent to abide by this rule as coded.
 
-					b.move(tryMove);
-					if (b.isRepeatedPosition()) {
+					if (b.nonRepeatableMove(tryMove)) {
 						b.undo();
 						return MoveResult.REPEATED;
 					}

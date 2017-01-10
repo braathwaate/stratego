@@ -42,6 +42,7 @@ public class Piece implements Comparable<Piece>
 	static private final int IS_LESS = 1 << 3;
 	static private final int IS_SUSPECTED = 1 << 4;
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
+	static private final int IS_SAFE = 1 << 6;
 	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
@@ -206,6 +207,19 @@ public class Piece implements Comparable<Piece>
 			flags |= IS_KNOWN;
 		else
 			flags &= ~IS_KNOWN;
+	}
+
+	public void setSafe(boolean b)
+	{
+		if (b)
+			flags |= IS_SAFE;
+		else
+			flags &= ~IS_SAFE;
+	}
+
+	public boolean isSafe()
+	{
+		return (flags & IS_SAFE) != 0;
 	}
 
 	public boolean hasMoved()

@@ -266,27 +266,17 @@ public class TestingBoard extends Board
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
-			if (getPiece(i) != null) {
+			Piece p = getPiece(i);
+			if (p != null) {
 
 		// Make a copy of the piece because the graphics
 		// thread is also using board/piece information for display
 
-				TestPiece np = new TestPiece(getPiece(i));
+				TestPiece np = new TestPiece(p);
 				grid.setPiece(i, np);
 				np.setAiValue(0);
-
-		// If the opponent is a bluffer, then
-		// the AI does not assign any suspected ranks.
-		// Otherwise, a bluffer could use any piece to thwart
-		// an AI attack.
-
-				if (blufferRisk == 5
-					&& !np.isKnown()
-					&& np.getRank() != Rank.BOMB
-					&& np.getRank() != Rank.FLAG
-					&& np.getColor() == Settings.bottomColor)
-					np.setRank(Rank.UNKNOWN);
 			}
+
 		}
 
 		genSuspectedRank();
@@ -318,6 +308,44 @@ public class TestingBoard extends Board
 				continue;
 			TestPiece p = (TestPiece)getPiece(i);
 			if (p != null) {
+
+		// If the opponent is a bluffer, then
+		// the AI does not assign any suspected ranks.
+		// Otherwise, a bluffer could use any piece to thwart
+		// an AI attack.
+
+				if (blufferRisk == 5
+					&& !p.isKnown()
+					&& p.getRank() != Rank.BOMB
+					&& p.getRank() != Rank.FLAG
+					&& p.getColor() == Settings.bottomColor)
+					p.setRank(Rank.UNKNOWN);
+
+		// Is the AI piece unknown at the start or did it just
+		// become known on the prior move (because of an attack)?
+		// If so, the AI considers the piece safer from attack
+		// than a known piece, because
+		// the opponent is less likely to have an attacker in
+		// place than if the piece was known at the outset.
+
+		// Thus a key part of the AI strategy is to chase
+		// opponent pieces with various unknown ranks to keep the
+		// opponent guessing and unable to defend all of its
+		// known pieces.  So the AI plays the odds and attacks
+		// these pieces even when the opponent piece appears to
+		// have protection.
+
+				if (p.getRank().ordinal() <= 5) {
+					if (!p.isKnown())
+						p.setSafe(true);
+					else  {
+						UndoMove lastMove = getLastMove(1);
+						if (lastMove != null
+							&& lastMove.tp == p.boardPiece()
+							&& !lastMove.tpcopy.isKnown())
+							p.setSafe(true);
+					}
+				}
 
 				Rank rank = p.getRank();
 				int r = rank.ordinal();
@@ -1224,10 +1252,10 @@ public class TestingBoard extends Board
 					continue;
 
 				if (!isInvincible(p)
-					&& isPlanAPiece(p))
+					&& getPlanA(p) != null)
 					genPlanB(fleetmp[p.getColor()], p.getColor(), p.getRank().ordinal(), DEST_PRIORITY_LANE);
 				else if (!isInvincible(p)
-					&& isPlanBPiece(p))
+					&& getPlanB(p) != null)
 					genPlanA(fleetmp[p.getColor()], p.getColor(), p.getRank().ordinal(), DEST_PRIORITY_LANE);
 				else if (aiPiece == null
 					|| p.getRank().ordinal() < aiPiece.getRank().ordinal())
@@ -1240,9 +1268,9 @@ public class TestingBoard extends Board
 
 			if (aiPiece != null
 				&& isStealthy(aiPiece, lowRank[Settings.bottomColor])) {
-				if (isPlanAPiece(aiPiece))
+				if (getPlanA(aiPiece) != null)
 					genPlanB(fleetmp[aiPiece.getColor()], aiPiece.getColor(), aiPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
-				else if (isPlanBPiece(aiPiece))
+				else if (getPlanB(aiPiece) != null)
 					genPlanA(fleetmp[aiPiece.getColor()], aiPiece.getColor(), aiPiece.getRank().ordinal(), DEST_PRIORITY_LANE);
 			}
 
@@ -1535,14 +1563,22 @@ public class TestingBoard extends Board
 		}
 	}
 
-	protected boolean isPlanAPiece(Piece p)
+	public int[][] getPlanA(Piece p)
 	{
-		return planAPiece[p.getColor()][p.getRank().ordinal()-1] == p;
+		int c = p.getColor();
+		int r = p.getRank().ordinal() -1;
+		if (planAPiece[c][r] == p)
+			return planA[c][r];
+		return null;
 	}
 
-	protected boolean isPlanBPiece(Piece p)
+	public int[][] getPlanB(Piece p)
 	{
-		return planBPiece[p.getColor()][p.getRank().ordinal()-1] == p;
+		int c = p.getColor();
+		int r = p.getRank().ordinal() -1;
+		if (planBPiece[c][r] == p)
+			return planB[c][r];
+		return null;
 	}
 
 	protected void chaseWithUnknown(Piece p, int tmp[])
@@ -2191,7 +2227,7 @@ public class TestingBoard extends Board
 		// TBD: If the active piece is able to defend, then
 		// use it.  Fix this in getDefender().
 
-			setDefender(defender, destTmp, DEST_PRIORITY_DEFEND_FLAG);
+			setDefender(defender, destTmp, color == Settings.topColor ? DEST_PRIORITY_DEFEND_FLAG : DEST_PRIORITY_DEFEND_FLAG_AREA);
 		} // dir
 	}
 
@@ -3293,6 +3329,8 @@ public class TestingBoard extends Board
 
 		// prevent transposition table equivalency.
 				hashDepth(depth);
+
+				return Math.max(Math.min(vfrom - vto, 1), -1) * pto;
 			}
 
 		// The difference in chase plan values for adjacent squares
@@ -3330,31 +3368,34 @@ public class TestingBoard extends Board
 		return 0;
 	}
 
-	public int planValue(Piece fp, int from, int to)
+	protected void addPlanValue(Piece fp, int from, int to, boolean scoutFarMove)
 	{
-		int fpcolor = fp.getColor();
-		int r = fp.getRank().ordinal() - 1;
-		boolean a = isPlanAPiece(fp);
-		boolean b = isPlanBPiece(fp);
+		int [][] a = getPlanA(fp);
+		int [][] b = getPlanB(fp);
 
 		// If a piece is both a plan A and a plan B piece
 		// (that is, it is the only piece of that rank on the board)
 		// it gets plan A or plan B
 
-		if (a && b) {
-			int v = planv(planA[fpcolor][r], from, to);
-			if (v == 0)
-				v = planv(planB[fpcolor][r], from, to);
-			return v;
-		}
+		int vm;
+		if (a != null && b != null ) {
+			vm = planv(a, from, to);
+			if (vm == 0)
+				vm = planv(b, from, to);
+		} else if (a != null)
+			vm = planv(a, from, to);
 
-		if (a)
-			return planv(planA[fpcolor][r], from, to);
+		else if (b != null)
+			vm = planv(b, from, to);
+		else
+			return;
 
-		if (b)
-			return planv(planB[fpcolor][r], from, to);
+		// Scouts go too fast, so limit the points to one
 
-		return 0;
+		if (scoutFarMove)
+			vm = Math.min(vm, 1);
+
+		value += vm;
 	}
 
 	// To be consistent, the remaining opponent piece after an attack is
@@ -3527,7 +3568,7 @@ public class TestingBoard extends Board
 	// of attack from a piece that fled from it.  This allows the
 	// to play R2xR3 in this situation.
 
-	protected void setDirectActingRankFlee(Piece fleep, Piece tp)
+	protected void setDirectActingRankFlee(TestPiece fleep, Piece tp)
 	{
 		if (fleep.isKnown()
 			|| !grid.hasAttack(fleep))
@@ -3543,6 +3584,7 @@ public class TestingBoard extends Board
 				|| op.getColor() != 1 - color
 				|| isProtected(op, fleep))
 				continue;
+
 			fleep.setActingRankFlee(op.getApparentRank());
 		}
 	}
@@ -3554,7 +3596,34 @@ public class TestingBoard extends Board
 
 	public void move(int m, boolean adjacent)
 	{
+		int from = Move.unpackFrom(m);
+		int to = Move.unpackTo(m);
+		TestPiece fp = (TestPiece)getPiece(from);
 
+		addMoveValue(m, adjacent);
+		addPlanValue(fp, from, to, !adjacent);
+	}
+
+	public boolean nonRepeatableMove(int m)
+	{
+		boolean adjacent = Grid.isAdjacent(m);
+		int from = Move.unpackFrom(m);
+		int to = Move.unpackTo(m);
+		TestPiece fp = (TestPiece)getPiece(from);
+
+		addMoveValue(m, adjacent);
+		if (isRepeatedPosition())
+			return true;
+
+		// addPlanValue() can change hash, so call isRepeated()
+		// before addPlanValue()
+
+		addPlanValue(fp, from, to, !adjacent);
+		return false;
+	}
+
+	public void addMoveValue(int m, boolean adjacent)
+	{
 		int from = Move.unpackFrom(m);
 		int to = Move.unpackTo(m);
 		TestPiece fp = (TestPiece)getPiece(from);
@@ -3766,15 +3835,9 @@ public class TestingBoard extends Board
 			if (alternateSquares[to][0] == fp.boardPiece())
 				vm -= DEST_PRIORITY_DEFEND_FLAG / 2;
 
-			int v = planValue(fp, from, to);
-
-		// Scouts go too fast, so limit the points to one
-
-			if (scoutFarMove)
-				v = Math.min(v, 1);
-
-			vm += v;
 			fp.moves++;
+			if (fp.isKnown())
+				fp.setSafe(false);
 			setPiece(fp, to);
 
 		} else { // attack
@@ -4138,7 +4201,7 @@ public class TestingBoard extends Board
 						|| (tprank == Rank.ONE
 							&& hasSpy(Settings.topColor)))
 					&& !unknownScoutFarMove
-					&& isEffectiveBluff(fp, tp, m)) {
+					&& isEffectiveBluff(fp, tp)) {
 						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 						setPiece(fp, to);
@@ -4203,7 +4266,7 @@ public class TestingBoard extends Board
 							|| (tprank == Rank.ONE
 								&& hasSpy(fpcolor)))
 						&& !unknownScoutFarMove
-						&& isEffectiveBluff(fp, tp, m)) {
+						&& isEffectiveBluff(fp, tp)) {
 						vm += Math.max(stealthValue(tp), valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 						setPiece(fp, to);
@@ -4371,7 +4434,7 @@ public class TestingBoard extends Board
 
 						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
 						vm += riskOfLoss(tp, fp);
-						vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
+						vm = vm / distanceFactor(tp, fp, scoutFarMove);
 						vm -= fpvalue;
 					}
 
@@ -4615,7 +4678,7 @@ public class TestingBoard extends Board
 								unknownScoutFarMove,
 								tp,
 								tpvalue);
-							vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
+							vm = vm / distanceFactor(tp, fp, scoutFarMove);
 						}
 
 					} else if (!fp.isFleeing(tprank)) {
@@ -4627,7 +4690,7 @@ public class TestingBoard extends Board
 							unknownScoutFarMove,
 							tp,
 							tpvalue);
-						vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
+						vm = vm / distanceFactor(tp, fp, scoutFarMove);
 						if (fp.isSuspectedRank())
 							vm -= riskOfWin(tpvalue, fp);
 
@@ -4801,7 +4864,7 @@ public class TestingBoard extends Board
 
 				if (fprank.ordinal() <= lowestUnknownNotSuspectedRank) {
 					assert !tp.hasMoved() : "AI " + isInvincible(fp) + " " + fprank + " WINS or is EVEN " + " against " + tprank + " " + lowestUnknownNotSuspectedRank + " (see winFight())";
-					vm += Math.min(-3, values[1-fpcolor][unknownRank[1-fpcolor]] - fpvalue/2);
+					vm += Math.min(-fpvalue/4, values[1-fpcolor][unknownRank[1-fpcolor]] - fpvalue/2);
 					setPiece(fp, to);	// AI piece survives
 					break;
 
@@ -5105,7 +5168,7 @@ public class TestingBoard extends Board
 
 
 					vm += tpvalue - fpvalue;
-					vm = vm / distanceFactor(tp, fp, unknownScoutFarMove);
+					vm = vm / distanceFactor(tp, fp, scoutFarMove);
 
 		// vm is usually quite positive.  But in an endgame when
 		// the opponent has no expendable pieces, it becomes
@@ -5476,33 +5539,31 @@ public class TestingBoard extends Board
 	// acquire an actingRankFlee which permanently marks it as a weaker
 	// piece.
 
-	public boolean isEffectiveBluff(Piece fp, Piece tp, int m)
+	// Bluffing doesn't work:
+	//	- if the AI piece is known
+	//	- if the opponent piece is low valued
+	//	- if the AI piece appears to be weak
+	//		(but will try anyway if its flag is at risk
+	//		or if the opponent piece is a one, because the
+	//		spy can be a weak piece)
+	// 	- if the AI piece has fled from this same piece rank before
+	//		(or neglected to attack)
+	// 	- if the AI piece has fled from some other piece rank before
+	//		(or neglected to attack)
+	// 		and the value of that piece was much greater
+	//		than the stealth value of the AI piece that
+	//		could win the target piece of the current bluff.
+	//		For example, if a Five passed by an AI piece,
+	//		the AI piece can no longer bluff against a
+	//		Four, because had the AI piece been an
+	//		actual Three, it should have taken the Five.
+	//		
+	//	- if the AI piece is the flag or flag bomb
+	//		and the opponent piece could be an eight
+
+	public boolean isEffectiveBluff(Piece fp, Piece tp)
 	{
 		assert fp.getColor() == Settings.topColor : "AI only";
-
-		// Bluffing doesn't work:
-		//	- if the AI piece is known
-		//	- if the opponent piece is low valued
-		//	- if the AI piece appears to be weak
-		//		(but will try anyway if its flag is at risk
-		//		or if the opponent piece is a one, because the
-		//		spy can be a weak piece)
-		// 	- if the AI piece has fled from this same piece rank before
-		//		(or neglected to attack)
-		// 	- if the AI piece has fled from some other piece rank before
-		//		(or neglected to attack)
-		// 		and the value of that piece was much greater
-		//		than the stealth value of the AI piece that
-		//		could win the target piece of the current bluff.
-		//		For example, if a Five passed by an AI piece,
-		//		the AI piece can no longer bluff against a
-		//		Four, because had the AI piece been an
-		//		actual Three, it should have taken the Five.
-		//		
-		//	- if the AI piece is the flag or flag bomb
-		//		and the opponent piece could be an eight
-		// 	- if the unknown AI piece is near the opponent flag,
-		//		because the opponent will call the bluff
 
 		if (fp.isKnown()
 			|| hasLowValue(tp)
@@ -5517,11 +5578,26 @@ public class TestingBoard extends Board
 				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow()) > stealthValue(Settings.topColor, tp.getRank().ordinal()-1) * 4 / 3)
 			|| ((fp.getRank() == Rank.FLAG || fp.getRank() == Rank.BOMB)
 				&& fp.aiValue() != 0
-				&& (tp.getRank() == Rank.EIGHT || tp.getMaybeEight()))
-			|| isNearOpponentFlag(Move.unpackTo(m)))
+				&& (tp.getRank() == Rank.EIGHT || tp.getMaybeEight())))
 			return false;
 
 		return true;
+	}
+
+	// 
+	// It is risky to push an unknown piece towards the
+	// opponent flag if it can be captured.
+	// Yet it is a good bet to make moves that force
+	// the opponent to approach the unknown piece,
+	// even when near the flag.
+	// Thus an effective bluff for WINS must not be near
+	// the opponent flag, but an effective bluff
+	// for LOSES and EVEN can be near the flag.
+
+	public boolean isEffectiveBluff(Piece fp, Piece tp, int m)
+	{
+		return isEffectiveBluff(fp, tp)
+			&& !isNearOpponentFlag(Move.unpackTo(m));
 	}
 
 	// Unknown moved and unmoved AI pieces bluff.
@@ -6180,7 +6256,7 @@ public class TestingBoard extends Board
 	// the idea is that the further the attacker,
 	// the more likely it has some other target in mind
 
-	protected int distanceFactor(Piece aiPiece, TestPiece oppPiece, boolean unknownScoutFarMove)
+	protected int distanceFactor(Piece aiPiece, TestPiece oppPiece, boolean scoutFarMove)
 	{
 		// If the opponent Piece is invincible, then the AI
 		// believes the outcome is inevitable.
@@ -6189,7 +6265,7 @@ public class TestingBoard extends Board
 		// ranks (including suspected rank), then the AI believes
 		// the outcome is inevitable.
 
-		if (unknownScoutFarMove
+		if (scoutFarMove
 			|| isInvincible(oppPiece)
 			|| (aiPiece.getApparentRank() != Rank.UNKNOWN
 			&& oppPiece.getApparentRank() != Rank.UNKNOWN))
@@ -6700,7 +6776,9 @@ public class TestingBoard extends Board
 				&& !tp.isKnown()
 				&& isWinning(Settings.topColor) >= VALUE_FIVE);
 
-			if (riskExpendable && !fp.hasMoved())
+			if (!fp.hasMoved()
+				&& (riskExpendable
+					|| isForay(tp)))
 				return LOSES;	// maybe not
 
 		// If an unknown opponent piece attacks an AI piece
@@ -6750,8 +6828,7 @@ public class TestingBoard extends Board
 		// with chase() because unknown moved pieces do not deter
 		// the chaser from its target.
 
-			if (tprank.ordinal() <= 5
-				&& !wasKnown(tp, getLastMove(2), getLastMove(3)))
+			if (tp.isSafe())
 				return LOSES;	// maybe not
 
 		// If the attacker does not have a suspected rank,
@@ -6839,8 +6916,7 @@ public class TestingBoard extends Board
 					|| tp.isWeak()))
 					return WINS;	// maybe not
 
-			else if (fprank.ordinal() <= 5
-				&& !wasKnown(fp, null, getLastMove(2)))
+			else if (fp.isSafe())
 				return WINS;	// maybe not
 
 			else if (fprank.ordinal() <= lowestUnknownExpendableRank) {
@@ -6877,8 +6953,18 @@ public class TestingBoard extends Board
 			if (!Grid.isValid(i))
 				continue;
 			Piece unk = getPiece(i);
-			if (unk == null
-				|| unk.isKnown())
+			if (unk == null)
+				continue;
+
+		// Opponent pieces (including known bombs)
+		// in the foray area are a juicier target
+
+			if (unk.getColor() == Settings.bottomColor
+				&& isForay(unk)
+				&& !unk.hasMoved()
+				&& unk.aiValue() == 0)
+				unk.setAiValue(pieceValue(Settings.topColor, Rank.SIX));
+			if (unk.isKnown())
 				continue;
 
 			int unkRank;
@@ -6887,12 +6973,6 @@ public class TestingBoard extends Board
 			else
 				unkRank = lowestUnknownNotSuspectedRank;
 
-		// An opponent piece in the foray area is a juicier target
-
-			if (unk.getColor() == Settings.bottomColor
-				&& isForay(unk)
-				&& unk.aiValue() == 0)
-				unk.setAiValue(pieceValue(Settings.topColor, Rank.SIX));
 
 		// The AI thinks that a piece is probably weak if:
 		//	- it chases an unknown
@@ -7240,7 +7320,7 @@ public class TestingBoard extends Board
 	// known or suspected, then mark the pieces near the Two.
 
 		if (isWinning(Settings.bottomColor) < values[Settings.topColor][3]) {
-			if (dangerousKnownRank != 99 && dangerousUnknownRank != 99)
+			if (dangerousKnownRank == 99 && dangerousUnknownRank == 99)
 				return true;
 
 	// If the AI One is known and the opponent has a dangerous known
@@ -7531,7 +7611,7 @@ public class TestingBoard extends Board
 			if (lane == 0)
 				forayLane = 0;
 			else if (lane == 1)
-				forayLane = 5;
+				forayLane = 4 + rnd.nextInt(1);
 			else
 				forayLane = 9;
 			maxPower = power;
@@ -7715,49 +7795,6 @@ public class TestingBoard extends Board
 		// acquire a flee rank, but fleeing could also mean the
 		// opponent is a strong piece fleeing to avoid discovery.
 
-	}
-
-	// Is the AI piece unknown at the start or did it just
-	// become known on the prior move (because of an attack)?
-	// If so, the AI considers the piece safer from attack
-	// than a known piece, because
-	// the opponent is less likely to have an attacker in
-	// place than if the piece was known at the outset.
-
-	// Thus a key part of the AI strategy is to chase
-	// opponent pieces with various unknown ranks to keep the
-	// opponent guessing and unable to defend all of its
-	// known pieces.  So the AI plays the odds and attacks
-	// these pieces even when the opponent piece appears to
-	// have protection.
-	boolean wasKnown(Piece tp, UndoMove um2, UndoMove um3)
-	{
-		if (!tp.isKnown())
-			return false;
-
-		// prior move was an attack that made the piece known
-
-		if (um2 != null) {
-			if (um2.getPiece() == tp
-				&& !um2.fpcopy.isKnown())
-				return false;
-
-		// if the piece makes a capture after becoming known
-		// in an attack, the rank is still considered a surprise
-
-			if (um2.tp == null)
-				return true;
-		}
-
-		// prior player move was an attack
-		// that made the player piece known
-
-		if (um3 != null
-			&& (um3.tp == tp
-				&& !um3.tpcopy.isKnown()))
-			return false;
-
-		return true;
 	}
 
 	// Aggressively attack pieces in the foray lane to try to get to the back row,

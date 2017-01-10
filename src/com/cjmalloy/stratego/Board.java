@@ -1891,14 +1891,10 @@ boardHistory[1-bturn].hash,  0);
 	// (either chasing or fleeing, it doesn't matter)
 	// to accelerate the rank maturation in addition to
 	// the move count.
-	//
-	// Version 10.3 makes the Spy immediately suspected, because
-	// often it never moves and certainly doesn't chase.
 
 	boolean maybeBluffing(Piece p)
 	{
-		if (p.moves >= SUSPECTED_RANK_AGING_DELAY
-			|| p.getRank() == Rank.SPY)
+		if (p.moves >= SUSPECTED_RANK_AGING_DELAY)
 			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
