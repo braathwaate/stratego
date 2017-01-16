@@ -510,7 +510,14 @@ public class Board
                         return true;
                 }
 
+		// fp is known or suspected
+
                 Rank fprank = fp.getApparentRank();
+		if ((fprank == Rank.BOMB
+			|| fprank == Rank.FLAG)
+			&& fp.isKnown())
+			return false;
+
                 return fp.getApparentRank().ordinal() < tp.getApparentRank().ordinal();
         }
 
@@ -2275,7 +2282,6 @@ boardHistory[1-bturn].hash,  0);
 		open_count[c] = 0;
 
 		int lastbp = 0;
-		int bestGuess = 99;
                 for ( int[] bp : bombPattern ) {
 			int[] b = new int[6];
 			for ( int i = 0; bp[i] != 0; i++)
@@ -2304,36 +2310,50 @@ boardHistory[1-bturn].hash,  0);
 				// b[k] == 0 means possible flag structure
 
 				if (b[k] == 0) {
-					if (open) {
-						bestGuess = maybe_count[c];
+					if (open)
 						open_count[c]++;
-					}
 					maybe[maybe_count[c]++]=b;
 
 		// Note: Adjacent bomb structures are considered to be
-		// only one structure, because it only takes one Eight
+		// only one structure, because it only takes one Miner
 		// to penetrate.  For example:
 		// -- BB BB --
 		// BB B7 BF BB
-		// appears as two substructures, although only one Eight
-		// is necessary.  (Yet, two Eights would be required
+		// appears as two substructures, although only one Miner
+		// is necessary.  (Yet, two Miners could be required
 		// if any of the outside bombs were actually pieces.)
 
-		// Note: The large classic bomb structure
+		// Note: The four level bomb structure
 		// -- -- -- BB
 		// -- -- BB B7
 		// -- BB B7 BB
 		// BB B7 BB BF
 		// would never be attacked by the AI, even if it has
-		// its full complement of five Eights.  That is
+		// its full complement of five Miners.  That is
 		// because there are a total of six substructures.
-		// With the adjacent structure rule, there are
-		// four substructures.
-					if (bp[0] == lastbp + 1) {
+		// Yet an experienced player knows that it really
+		// only requires two Miners to penetrate, if the
+		// structure is actually constructed as above.
+
+		// But early in the game these large structures
+		// may turn out to be pieces rather than bombs.
+		// So the adjacent structure rule must also examine
+		// the number of remaining unmoved movable pieces.
+
+		// For example, say that the three Sevens in the
+		// four level bomb structure were Blue's last three unmoved
+		// movable pieces.  So remainingUnmovedUnknownPieces
+		// is ten, six of which are bombs and one is the flag,
+		// leaving three unknown unmoved pieces.  This allows
+		// open_count to increment to three,
+		// so the four level bomb structure
+		// can be considered to be only three substructures,
+		// and the AI will attack it if it has three or more Miners.
+
+					if (bp[0] == lastbp + 1
+						&& remainingUnmovedUnknownPieces[c] - rankAtLarge(c, Rank.BOMB) - 1 < 7 - open_count[c])
 						open_count[c]++;
-						lastbp = 0;
-					} else
-						lastbp = bp[0];
+					lastbp = bp[0];
 				}
 
 			} // possible flag
@@ -2351,8 +2371,7 @@ boardHistory[1-bturn].hash,  0);
 		// Pick the structure that looks most likely and
 		// mark it as containing the flag.
 
-			if (bestGuess == 99)
-				bestGuess = getBestGuess(c, maybe, maybe_count[c]);
+			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
 
 			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
@@ -2533,12 +2552,20 @@ boardHistory[1-bturn].hash,  0);
 
 			for (nb = 1; maybe[i][nb] != 0; nb++) {
 
+				Piece p = getPiece(maybe[i][nb]);
+
+		// A structure that had a bomb removed is the
+		// best guess, unless there is still a structure
+		// on the back row.
+
+				if (p == null)
+					return i;
+
 		// If the one of the possible bombs has a chase rank
 		// (meaning that it protected some piece under attack),
 		// it is much less likely that the piece is actually
 		// a bomb, unless the player is a bluffer.
 
-				Piece p = getPiece(maybe[i][nb]);
 				if (!p.isKnown()
 					&& p.getActingRankChase() != Rank.NIL) {
 					nb = 10;
@@ -2557,55 +2584,12 @@ boardHistory[1-bturn].hash,  0);
 			}
 
 
-		// The AI also looks at possible sentries
-		// near the structures.  If the opponent is leaving
-		// a structure undefended, it likely is a ruse,
-		// regardless of its composition.
-		//
-		// A structure is guarded when a movable sentry
-		// can reach the flag structure before any possible attacker.
-		// Yet if the attacker is far away, it is difficult
-		// to tell which structure could hold the flag, because the
-		// sentry could defend any number of structures.  So unless
-		// the attacker is close, the flag structure is difficult
-		// to discern.
-		//
-		// Note that attackers are also counted.
-		// This is because once the AI is able to penetrate,
-		// perhaps with superior pieces, the sentries will
-		// be forced away.  For example,
-		// | R8 R1 --
-		// | BB B3 BB
-		// | BF BB B?
-		// |xxxxxxxxx
-		//
-		// After R1xB3, the sentry is gone.  This does not
-		// mean that the flag is elsewhere.  So the AI
-		// must continue with R8xBB and R8xBF.
-		//
-		// Sentries and attackers are counted within 1 or 2 steps
-		// of the flag:
-		// | S 
-		// | A S
-		// | B A S
-		// | F B A S
-		// ---------
-		//
-		// Once an AI attacker is in reach of multiple structures,
-		// the AI needs to focus on the one that is actively defended.
-		// What usually happens now, is that a sentry is drawn off
-		// the flag structure to thwart the attacker, so then
-		// the pattern no longer matches.  This makes it look like
-		// the flag structure is unguarded, and thus the AI attacks
-		// the structure that it can get to, which
-		// is always the ruse.
-		//
-		// TBD: So the AI also needs to look for a defender between the flag
-		// structure and an AI unknown or Eight.  If there is a defender,
-		// the flag structure is still guarded, even if it there are no
-		// sentries adjacent to the flag structure.
+		// The AI examines the opponent setup for possible sentries
+		// left near the structures.  If the opponent had guarded
+		// the structure with low ranked pieces, the AI
+		// believes that it is more likely to be the flag structure.
 
-		// Note: If there is a corner bomb structure (2 bombs) and
+		// Note: If there is a corner bomb structure and
 		// a 3 bomb structure, the 3 bomb structure normally
 		// contains the flag because often the corner bomb
 		// structure is a ruse because it is difficult to defend.
@@ -2615,10 +2599,28 @@ boardHistory[1-bturn].hash,  0);
 		// So the AI looks for a combination of small size and
 		// large number of defenders.
 
-			int guards = grid.movablePieceCount(color, maybe[start][0], 2)*2
-				+ grid.movablePieceCount(1-color, maybe[start][0], 1);
+		// Note: Until Version 11, the AI looked at
+		// piece movements around the structures.  But this
+		// often led to the flag structure alternating as
+		// pieces moved on the board.  Thus the AI has to pick
+		// a structure and not be led off by piece movements,
+		// no matter how convincing, because bluffers can
+		// be very convincing.
 
-			nb = nb * 100 / Math.max(1, guards);
+			int guards = 1;
+			for (int j = 12; j <= 120; j++)
+				if (Grid.steps(maybe[start][0], j) == 2) {
+					Piece p = getSetupPiece(j);
+					if (p != null
+						&& p.getRank() != Rank.BOMB) {
+						if (p.getRank().ordinal() <= 3)
+							guards += 2;
+						else if (p.getRank() != Rank.NINE)
+							guards++;
+					}
+				}
+
+			nb = nb * 100 /guards;
 			if (bestGuess == 99
 				|| nb < size) {
 				bestGuess = start;

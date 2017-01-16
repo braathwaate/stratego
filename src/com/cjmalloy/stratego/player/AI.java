@@ -1183,8 +1183,8 @@ public class AI implements Runnable
 		// piece such as a bomb or flag which may require
 		// a losing move to protect it.
 		//
-		// Version 10.0 has a new theory.  If the attacker does not
-		// survive and the result is negative, then the move
+		// Version 10.0 has a new theory.  If the target
+		// survives and the result is negative, then the move
 		// is pointless.  This should make no difference in qs
 		// from 9.9, but now the theory is used in makeMove()
 		// as well, which allows it to permit attacks such as:
@@ -1967,31 +1967,27 @@ public class AI implements Runnable
 			if (b.isPossibleTwoSquares(tryMove))
 				return MoveResult.POSS_TWO_SQUARES;
 
-		// Piece is being chased, so repetitive moves OK
+		// If piece is being chased, repetitive moves OK
 
-			if (b.isChased(tryMove)) {
+			if (b.isChased(tryMove))
 				b.move(tryMove);
-			} else if (b.bturn == Settings.topColor) {
-
-				if (b.isTwoSquaresChase(tryMove)) {
-
-		// Piece is chasing, so repetitive moves OK
-		// (until Two Squares Rule kicks in)
-
-					b.move(tryMove);
-				} else {
+			else {
+				if (b.bturn == Settings.topColor) {
 
 	// Because isRepeatedPosition() is more restrictive
 	// than More Squares, the AI does not expect
 	// the opponent to abide by this rule as coded.
 
-					if (b.nonRepeatableMove(tryMove)) {
+					if (b.chaseMove(tryMove)) {
 						b.undo();
 						return MoveResult.REPEATED;
 					}
-				}
-			} else
-				b.move(tryMove);
+				} else
+					b.move(tryMove);
+
+				if (Grid.isPossibleTwoSquaresChase(b.getLastMove(1), b.getLastMove(2)))
+					b.hashDepth(b.depth);
+			}
 		} else
 			b.move(tryMove);
 
@@ -2015,6 +2011,28 @@ public class AI implements Runnable
 
 		return MoveResult.OK;
 	}
+
+	// An important complication with using a transposition table
+	// in Stratego is that it is not just the position but how
+	// the position was reached that governs the result
+	// if the move sequence can lead to a Two Squares ending.
+	// For example,
+	// | -- -- R6 -- --
+	// | -- R2 -- -- B5 
+	// | -- B3 BB -- --
+	// xxxxxxxxxx
+
+	// Blue Five moves left, Red Six moves left, Blue Three moves left,
+	// Red Two moves left.
+	// In this case, Red Two still will win Blue Three.
+
+	// But this is not the same position if:
+	// Blue Three moves left, Red Six moves left, Blue Five moves left
+	// Red Two moves left.
+
+	// So to keep the two positions from being confused,
+	// the two squares chase sequence must be retrieved and stored
+	// using a different hash table entry.
 
 	private long getHash()
 	{
