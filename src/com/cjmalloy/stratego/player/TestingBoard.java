@@ -71,7 +71,7 @@ public class TestingBoard extends Board
 	//
 	//
 	// In this implementation:
-	// • Each of the lowest ranked pieces (1-4) is worth two of
+	// • Each of the lowest ranked pieces (1-5) is worth two of
 	//	the next lowest rank.  (While this may not be accurate
 	//	for competitive human play, it seems to hold true
 	//	for AI play, because the loss of any of its low ranking
@@ -84,7 +84,7 @@ public class TestingBoard extends Board
 	//	and rank N-1, the value of the opponent's rank N-1 becomes
 	//	equal to Math.min(value(N), value(N-1)), because pieces of
 	//	both rank N and N-1 have the same strength.
-	// • Bombs are worthless, except if they surround a flag.
+	// • Known bombs are worthless, except if they surround a flag.
 	//	These bombs are worth a little more than a Miner.
 	// • An unsuspected Spy has a value between a Colonel and a
 	//	Major.  It is obviously worth more than a Major, which
@@ -93,10 +93,9 @@ public class TestingBoard extends Board
 	//	However, once the Spy is suspected,
 	//	it has limited value except in certain reduced piece
 	//	endgames with Ones.
-	// • The Nine is the next lowest valued piece on the board.  However,
-	//	its stealth value is highest for ranks Six through Nine
-	//	(stealth value increases by 3 points for each of
-	//	these ranks).  High stealth value encourages the Nine
+	// • The Nine is the lowest valued piece on the board.  However,
+	//	its stealth value is higher than ranks Six and Seven.
+	//	High stealth value encourages the Nine
 	//	to maintain its stealth by moving only square at a time.
 	//	An unmoved Nine should attack a suspected One, Two or
 	//	or Three, so its combined value (value + unmoved state
@@ -123,8 +122,7 @@ public class TestingBoard extends Board
 	// almost any discovery exceeds their value.  If the AI is
 	// winning (and therefore its pieces are reduced in value)
 	// a known Seven (or Nine) should sacrifice itself
-	// to discover a Four (40 stealth)
-	// but not a Five (16 stealth).  
+	// to reveal a suspected Four but not a suspected Five.
 
 	private static final int VALUE_ONE = 3200;
 	private static final int VALUE_TWO = VALUE_ONE/2;
@@ -146,10 +144,10 @@ public class TestingBoard extends Board
 		VALUE_SEVEN,	// 7 Sergeant
 		VALUE_EIGHT,	// 8 Miner
 		VALUE_NINE,	// 9 Scout
-		0,	// valued by code
-		0,	// Bomb (valued by code)
+		0,	// Spy valued by code
+		0,	// Bomb valued by code
 		1000,	// Flag (valued by code)
-		0,	// Unknown (valued by code, minimum piece value)
+		0,	// Unknown valued by code, minimum piece value
 		0	// Nil
 	};
 	public int [][] values = new int[2][15];
@@ -2983,10 +2981,14 @@ public class TestingBoard extends Board
 		// stacking problems if this is used sparingly.
 		//
 		// This tries to address the situation where
-		// the invincible piece is known and the opponent
-		// targets the players moved pieces.  The player
-		// is targeting the opponents invincible piece, but it
-		// needs to see through moved pieces.
+		// an opponent invincible piece is known and 
+		// chases the players moved pieces, which it is
+		// certain to win.  The player must target the
+		// opponents invincible piece with an invincible
+		// piece of its own, but it needs to see through
+		// its moved pieces to get there.  It is also useful
+		// for Miners that want to get to the front of a
+		// a pack of player pieces to get at a bomb structure.
 
 				if (attackRank == Rank.NIL
 					|| !(p.hasMoved()
@@ -3182,30 +3184,32 @@ public class TestingBoard extends Board
 		if (!grid.hasAttack(color, to))
 			return Rank.NIL;
 
-		int minRank = 99;
+		Rank minRank = Rank.NIL;
 		for (int d : dir) {
 			Piece tp = getPiece(to + d);
 			if (tp == null
 				|| tp.getColor() != 1 - color)
 				continue;
 
+			Rank tprank = Rank.UNKNOWN;
+			if (tp.isKnown()) {
+
 		// If an unknown opponent piece chases a known AI piece
 		// during the search, the opponent could be a lower
 		// piece or it could be bluffing, so nothing
 		// can be determined about its rank during the search.
 
-			if (color == Settings.bottomColor
-				&& tp.isKnown())
-				return Rank.NIL;
+				if (color == Settings.bottomColor)
+					continue;
+				else
+					tprank = tp.getRank();
+			}
 
-			int tprank = tp.getApparentRank().ordinal();
-			if (tprank < minRank)
+			if (tprank.ordinal() < minRank.ordinal())
 				minRank = tprank;
-				
 		}
-		assert minRank != 99 : "getLowestAdjacentEnemyRank() called without any enemies?";
 
-		return Rank.toRank(minRank);
+		return minRank;
 	}
 
 	// An expedition by a non-invincible piece into the unknown area of the
@@ -7622,26 +7626,44 @@ public class TestingBoard extends Board
 	// For an AI bluff to be effective, the defending opponent piece
 	// must not be invincible.  If the AI has incorrectly guessed
 	// the opponent piece to be non-invincible, and it turns out to be
-	// invincible, the AI loses big, so it needs to be more conservative.
+	// invincible, the AI loses big.
 	// For example,
 	// -- R9 -- --
 	// xx -- B3 xx
 	// xx R2 -- xx
 	// -- -- B2 --
 	// All pieces are unknown except for Blue Three.  Red has the move.
-	// It moves its Red Two to the right.  Red still has its unknown One,
-	// so it is bluffing that suspected Blue Two will move away, allowing
-	// it to capture Blue Three.  But if Blue Two turns out to be Blue One,
-	// then BAM! Red loses its Two.
+	// It moves its Red Two to the right.  Red still has its unknown
+	// One, so it is bluffing that suspected Blue Two will move away,
+	// allowing it to capture Blue Three.  But if Blue Two turns out
+	// to be Blue One, then BAM! Red loses its Two.
+	//
+	// So until Version 11.1, maybeIsInvincible() returned true
+	// for this example.  But this was deemed a cop-out, because if Red
+	// had correctly guessed Blue Two, Blue Two would likely move
+	// away, because unknown Red could be Red One or some bluffing
+	// piece, allowing unknown Red Two to win Blue Three.
+	//
+	// Version 11.1 raises the ante; the AI must correctly guess
+	// the opponent ranks to play aggressive moves such as this.
+	// But how can the AI guess the opponent One when its own Two is
+	// unknown?   Good question, but this is the essence of
+	// advanced play in Stratego.
+	//
+	// Note the similarily with the following position:
+	// -------
+	// | B3 BB
+	// | -- B?
+	// | R2 --
+	// Blue Three is known, Red Two is unknown and unknown Blue One
+	// is still at large.  Should Red Two advance and attack
+	// the cornered Blue Three?  Yes, according to the AI.
+	// So if unknown Blue is a suspected Two, what is the difference
+	// between this example and the former example?
 
 	boolean maybeIsInvincible(Piece p)
 	{
-		if (isInvincible(p))
-			return true;
-		if (p.isKnown()
-			|| !p.isSuspectedRank())
-			return false;
-		return isInvincible(p.getColor(), p.getRank().ordinal()-1);
+		return isInvincible(p);
 	}
 
 

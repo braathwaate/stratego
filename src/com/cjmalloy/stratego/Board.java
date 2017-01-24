@@ -518,7 +518,21 @@ public class Board
 			&& fp.isKnown())
 			return false;
 
-                return fp.getApparentRank().ordinal() < tp.getApparentRank().ordinal();
+                int fpo = fprank.ordinal();
+		int tpo = tp.getApparentRank().ordinal();
+
+                return fpo < tpo
+
+		// A known expendable piece could be a threat
+		// to a suspected One, Two or Three if it does
+		// not want to reveal its stealth.   This code
+		// is hit when the AI wants to attack these
+		// pieces to reveal their true rank (called from
+		// isPossibleTwoSquares())
+
+			|| (!tp.isKnown()
+				&& tpo <= 3
+				&& fpo >= 6);
         }
 
 	// return true if piece is threatened
@@ -1918,7 +1932,7 @@ boardHistory[1-bturn].hash,  0);
 		return false;
 	}
 
-	protected void setSuspectedRank(Piece p, Rank rank)
+	private void setSuspectedRank(Piece p, Rank rank)
 	{
 		if (rank == Rank.NIL || rank == Rank.UNKNOWN)
 			return;
@@ -1926,8 +1940,18 @@ boardHistory[1-bturn].hash,  0);
 		if (p.getRank() == Rank.UNKNOWN || p.isSuspectedRank())
 			p.setSuspectedRank(rank);
 
-		if (!maybeBluffing(p))
+		if (!maybeBluffing(p)) {
 			suspectedRank[p.getColor()][rank.ordinal()-1]++;
+
+		// If the AI believes the suspected rank is not an Eight,
+		// then clear maybeEight so that that the suspected
+		// rank does not win a flag bomb during tree search.
+		// While risky, the AI has to make this assumption
+		// to avoid losing material by a direct attack on the suspected piece.
+
+			if (p.getRank() != Rank.EIGHT)
+				p.setMaybeEight(false);
+		}
 	}
 
 	//
@@ -2032,16 +2056,6 @@ boardHistory[1-bturn].hash,  0);
 
 			} else
 				setSuspectedRank(p, getChaseRank(rank, p.isRankLess()));
-
-		// If the AI believes the suspected rank is not an Eight,
-		// then clear maybeEight so that that the suspected
-		// rank does not win a flag bomb during tree search.
-		// While risky, the AI has to make this assumption
-		// to avoid losing material by a direct attack on the suspected piece.
-
-			if (!maybeBluffing(p)
-				&& p.getRank() != Rank.EIGHT)
-				p.setMaybeEight(false);
 
 		} // for
 
