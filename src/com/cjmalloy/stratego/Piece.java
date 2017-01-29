@@ -27,7 +27,6 @@ public class Piece implements Comparable<Piece>
 	private Rank actualRank = null;
 	private Rank rank = null;
 
-	private int value = 0;
 	private int actingRankFlee = 0;
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
@@ -71,7 +70,6 @@ public class Piece implements Comparable<Piece>
 		actingRankFlee = p.actingRankFlee;
 		actingRankChase = p.actingRankChase;
 		flags = p.flags;
-		value = p.value;
 		index = p.index;
 	}
 
@@ -81,7 +79,6 @@ public class Piece implements Comparable<Piece>
 		actingRankChase = Rank.NIL;
 		clearActingRankFlee();
 		flags = 0;
-		value = 0;
 		index = 0;
 	}
 
@@ -230,16 +227,6 @@ public class Piece implements Comparable<Piece>
 	public void setMoved()
 	{
 		moves++;
-	}
-
-	public void setAiValue(int v)
-	{
-		value = v;
-	}
-
-	public int aiValue()
-	{
-		return value;
 	}
 
 	public Rank getActingRankChase()

@@ -275,7 +275,7 @@ public class Grid
 
 	// grow it
 
-		for (int i = 0; i <= n/2; i++) {
+		for (int i = 0; i <= (n+1)/2; i++) {
 			BitGrid.grow(elow, ehigh, out);
 			elow = out.low & ~waterGrid.low;
 			ehigh = out.high & ~waterGrid.high;
@@ -317,7 +317,7 @@ public class Grid
 
 	// grow it
 
-		for (int i = 0; i <= n/2; i++) {
+		for (int i = 0; i <= (n+1)/2; i++) {
 			BitGrid.grow(elow, ehigh, out);
 			elow = out.low & ~waterGrid.low;
 			ehigh = out.high & ~waterGrid.high;

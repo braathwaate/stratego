@@ -1140,19 +1140,21 @@ boardHistory[1-bturn].hash,  0);
 		// Unknown Blue moves towards Blue Six (in Example 1) or
 		// Blue Six moves towards unknown Red in Example 2.
 
-		// If Unknown Blue is viewed as a protector, it would acquire
-		// a chase rank of 4.  But Unknown Blue might not
+		// If Unknown Blue is viewed as a protector, it would
+		// acquire a chase rank of 4.  But Unknown Blue might not
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
 
 			if (chasedRank.ordinal() >= 5	// or UNKNOWN
-				|| isInvincible(chased))
+				|| isInvincible(chased)
+				|| chaser.isFleeing(chasedRank))
 				return;
 
 		// If the chased piece is a strong but not invincible piece,
-		// then there can be more that can be determined in this case
-		// because if the chased believes that the Unknown
-		// is a low ranked piece, then the protector must even be lower.
+		// then there can be more that can be determined in this
+		// case because if the chased believes that the Unknown
+		// is a low ranked piece, then the protector
+		// must even be lower.
 		//
 		// For example,
 		// R? -- B?
@@ -1169,49 +1171,50 @@ boardHistory[1-bturn].hash,  0);
 		// that Unknown Blue is probably Blue Spy, or otherwise
 		// Blue has greatly miscalculated.
 		// 
-		// A surer way to determine whether Blue believes Unknown Red
-		// is a superior piece is if Blue neglects to attack
+		// A surer way to determine whether Blue believes Unknown
+		// Red is a superior piece is if Blue neglects to attack
 		// Unknown Red.  For example,
 		// R? B2 -- B?
 		// If Blue Two does not attack Unknown Red, and instead
-		// moves unknown Blue towards Blue Two, then Blue is signaling
-		// that it believes Unknown Red is Red One.
+		// moves unknown Blue towards Blue Two, then Blue is
+		// signaling that it believes Unknown Red is Red One.
 		//
 		// So if the last move was not the chased, then it can
-		// be assumed that the player believes the unknown chaser piece
-		// is a superior piece, and so the AI assumes that its
+		// be assumed that the player believes the unknown chaser
+		// piece is a superior piece, and so the AI assumes that its
 		// protector is even more superior.
 		//
 		// Another example,
 		// R? B3 -- B?
 		// If Blue Three does not attack Unknown Red, and instead
-		// moves unknown Blue towards Blue Two, then Blue is signaling
-		// that it thinks unknown Red is either Red One, and therefore
-		// unknown Blue is Blue Spy OR it thinks that unknown Red is
-		// Red Two, and therefore unknown Blue is Blue One.
-		// So Red does not know if unknown Blue is Blue Spy or Blue One,
-		// but both pieces are worthy targets to discover its identity.
+		// moves unknown Blue towards Blue Two, then Blue is
+		// signaling that it thinks unknown Red is either Red One,
+		// and therefore unknown Blue is Blue Spy
+		// OR it thinks that unknown Red is Red Two,
+		// and therefore unknown Blue is Blue One.
+		// So Red does not know if unknown Blue is Blue Spy
+		// or Blue One, but both pieces are worthy targets
+		// to discover its identity.
 		// 
 		// The AI makes the assumption that unknown Blue is probably
-		// Blue One in this case, although obviously it could be wrong.
+		// Blue One in this case, although obviously it could be
+		// wrong.
 		//
 		// In version 10.1, the AI always believes that whenever the
-		// opponent leaves a valuable piece vulnerable to attack by an
-		// unknown AI piece, but protected, then the protection must be
-		// strong.
+		// opponent leaves a valuable piece vulnerable to attack
+		// by an unknown AI piece, but protected,
+		// then the protection must be strong.
 
-		// If the chased is a lower or equal rank to the chaser piece,
-		// the chased needs no protection.
+		// If the chased is a lower or equal rank
+		// to the chaser piece, the chased needs no protection.
 		// Set the direct chase rank (when ranks are equal
 		// and the the chased is unknown and suspected)
 
 		} else if (chasedRank.ordinal() <= chaserRank.ordinal()
 			|| chasedRank == Rank.FLAG
 			|| chasedRank == Rank.BOMB) {
-			if (chaser.isKnown()) {
-
+			if (chaser.isKnown())
 				return;
-			}
 
 		// chaser piece is an unknown piece, but it has a rank
 		// (i.e. not UNKNOWN, because that was tested for above)
@@ -2743,6 +2746,8 @@ boardHistory[1-bturn].hash,  0);
 				Math.abs(m.getToY() - m.getFromY()) > 1) {
 				//scouts reveal themselves by moving more than one place
 				fp.setShown(true);
+				if (fp.getRank().ordinal() <= 4)
+					guess(false);
 				fp.setRank(Rank.NINE);
 				fp.makeKnown();
 			}
