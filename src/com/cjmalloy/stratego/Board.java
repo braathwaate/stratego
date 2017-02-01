@@ -66,8 +66,8 @@ public class Board
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
 	protected int[] remainingUnmovedUnknownPieces = new int[2];
+	protected int[] nUnknownWeakRankAtLarge = new int[2];
 	protected int[] flag = new int[2];  // flags
-
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected static final int BLUFFER_RANK_MIN = 2;
 	protected static final int BLUFFER_RANK_MAX = 5;
@@ -737,13 +737,13 @@ public class Board
 		// But instead unknown Blue stopped fleeing with
 		// Blue Three as protection, thinking that unknown Red
 		// is also weak, because it has been chasing an unknown.
-		// By making fleeTp, it means that R?xB? will be
+		// By setting fleeTp weak, it means that R?xB? will be
 		// WINS and so the AI will see the countermove B3xR?.
 		//
 		// But if multiple pieces are forked, only one of them
 		// can move.  And if a piece is trapped, it cannot move.
 		// So a piece really cannot be set to weak without
-		// further situational analysis.
+		// further positional analysis.
 		//		fleeTp.setWeak(true);
 			}
 		}
@@ -1796,6 +1796,20 @@ boardHistory[1-bturn].hash,  0);
 		return suspectedRankAtLarge(color, rank.ordinal());
 	}
 
+	// The number of unknown weak pieces still at large
+        // greatly determines the relative safety of a valuable rank
+        // from discovery.  Note that weak ranks include Eights.
+        // Because some weak ranks may remained buried
+        // in bomb structures or simply are not being moved,
+        // nUnknownWeakRankAtLarge is rarely zero.
+        // But this should not deter valuable ranks from attack.
+        // So the AI subtracts a percentage (1/3) of
+        // remainingUnmovedUnknownPieces in determining safety.
+        protected boolean hasFewWeakRanks(int color, int n)
+        {
+                return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3) <= n;
+        }
+
 	// The usual Stratego attack strategy is one rank lower.
 
 	Rank getChaseRank(int r)
@@ -1918,7 +1932,7 @@ boardHistory[1-bturn].hash,  0);
 
 	boolean maybeBluffing(Piece p)
 	{
-		if (p.moves >= SUSPECTED_RANK_AGING_DELAY)
+		if (p.getMoves() >= SUSPECTED_RANK_AGING_DELAY)
 			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
@@ -1931,9 +1945,23 @@ boardHistory[1-bturn].hash,  0);
 				&& !Grid.isAdjacent(oppm.getFrom(), aim.getTo()))
 				return true;
 		}
-		p.moves = SUSPECTED_RANK_AGING_DELAY;
+		p.setMoves(SUSPECTED_RANK_AGING_DELAY);
 		return false;
 	}
+
+        protected void genUnknownWeakRankAtLarge()
+        {
+                // The number of expendable ranks still at large
+                // determines the risk of discovery of low ranked pieces.
+                // If there are few expendable pieces remaining,
+                // the AI can be more aggressive with its unknown low ranked
+                // pieces.
+                for (int c = RED; c <= BLUE; c++) {
+                        nUnknownWeakRankAtLarge[c] = 0;
+                        for (int r = 5; r <= 9; r++)
+                                nUnknownWeakRankAtLarge[c] += unknownRankAtLarge(c, r);
+                }
+        }
 
 	private void setSuspectedRank(Piece p, Rank rank)
 	{
@@ -2205,6 +2233,8 @@ boardHistory[1-bturn].hash,  0);
 					break;
 			invincibleWinRank[c] = rank-1;
 		}
+
+		genUnknownWeakRankAtLarge();
 
 		possibleFlag();
 	}

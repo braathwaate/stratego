@@ -31,7 +31,7 @@ public class Piece implements Comparable<Piece>
 	private Rank actingRankChase = Rank.NIL;
 	private int index = 0;
 	
-	public int moves = 0;	// times piece has moved
+	private int moves = 0;	// times piece has moved
 
 	// a known piece can be not shown
 	// a shown piece can be unknown to the computer
@@ -223,10 +223,20 @@ public class Piece implements Comparable<Piece>
 	{
 		return moves != 0;
 	}
+
+	public int getMoves()
+	{
+		return moves;
+	}
 	
 	public void setMoved()
 	{
 		moves++;
+	}
+
+	public void setMoves(int m)
+	{
+		moves = m;
 	}
 
 	public Rank getActingRankChase()
