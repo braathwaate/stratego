@@ -1985,7 +1985,9 @@ public class AI implements Runnable
 				} else
 					b.move(tryMove);
 
-				if (Grid.isPossibleTwoSquaresChase(b.getLastMove(1), b.getLastMove(2)))
+				UndoMove um2 = b.getLastMove(2);
+				if (um2 != null
+					&& Grid.isPossibleTwoSquaresChase(tryMove, um2.getMove()))
 					b.hashDepth(b.depth);
 			}
 		} else
@@ -2036,7 +2038,11 @@ public class AI implements Runnable
 
 	private long getHash()
 	{
-		if (Grid.isPossibleTwoSquaresChase(b.getLastMove(1), b.getLastMove(2)))
+		UndoMove um1 = b.getLastMove(1);
+		UndoMove um2 = b.getLastMove(2);
+		if (um1 != null
+			&& um2 != null
+			&& Grid.isPossibleTwoSquaresChase(um1.getMove(), um2.getMove()))
 			return b.getHash() ^ twoSquaresHash;
 
 		return b.getHash();
@@ -2313,6 +2319,10 @@ public class AI implements Runnable
 			s += '.';
 		if (p.isWeak())
 			s += 'W';
+		else
+			s += '.';
+		if (p.isSafe())
+			s += 's';
 		else
 			s += '.';
 		return s;

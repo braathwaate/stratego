@@ -749,6 +749,33 @@ public class Board
 		}
 	}
 
+	// Is the AI piece unknown at the start or did it just
+	// become known on the prior move (because of an attack)?
+	// If so, the AI considers the piece safer from attack
+	// than a known piece, because
+	// the opponent is less likely to have an attacker in
+	// place than if the piece was known at the outset.
+
+	// Thus a key part of the AI strategy is to chase
+	// opponent pieces with various unknown ranks to keep the
+	// opponent guessing and unable to defend all of its
+	// known pieces.  So the AI plays the odds and attacks
+	// these pieces even when the opponent piece appears to
+	// have protection.
+
+	protected void genSafe(Piece fp)
+	{
+		if (fp.getRank().ordinal() <= 5) {
+			if (!fp.isKnown())
+				fp.setSafe(true);
+			else if (isTwoSquaresChase())
+				fp.setSafe(true);
+			else
+				fp.setSafe(false);
+		}
+	}
+
+
 	// stores the state prior to the move
 	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int m)
@@ -1061,9 +1088,19 @@ boardHistory[1-bturn].hash,  0);
 		// the Two chased a Four.  Prior to Version 10.4, the AI
 		// would guess that the Two was a Three.   So Version 10.4
 		// retains the rank from IS_LESS if the rank is plausible.
+		//
+		// Note: Recall that direct and indirect chase ranks
+		// are assigned differently: If a piece protects
+		// another piece from a Three, it gains an indirect
+		// chase rank of One.   If a piece chases a Three,
+		// it gains a chase rank of Three.  Thus if a piece
+		// has a chase rank of One, the AI will not reset it
+		// if it chases a Three.  But if it chases a Four,
+		// then the AI assumes the piece was bluffing when
+		// it gains the chase rank of One.
 
 			|| (chased.isRankLess()
-				&& arank.ordinal() < chaserRank.ordinal() - 1)) {
+				&& arank.ordinal() < chaserRank.ordinal() - 2)) {
 
 			chased.setActingRankChaseEqual(chaserRank);
 		}
@@ -2783,6 +2820,7 @@ boardHistory[1-bturn].hash,  0);
 			}
 			genChaseRank(fp.getColor());
 			genFleeRank(fp, null);	// depends on suspected rank
+			genSafe(fp);
 			return true;
 		}
 		
@@ -3175,28 +3213,32 @@ boardHistory[1-bturn].hash,  0);
 	// Red Four moves right.  Blue Spy moves left.  Red Nine
 	// can eventually capture Blue Spy by moving to the right.
 
-	public boolean isTwoSquaresChase(int m)
+	public boolean isTwoSquaresChase()
 	{
+		int m = getLastMove(1).getMove();
 		Move m2 = getLastMove(2);
 		if (m2 == null)
-			return false;
-
-		// not back to square where the chasing piece came from?
-		if (m2.getFrom() != Move.unpackTo(m))
-			return false;
-
-		// If opponent piece does not move between same two squares,
-		// then this move cannot result in a two squares victory.
-		Move m1 = getLastMove(1);
-		if (m1 == null)
 		 	return false;
+
+		if (!Grid.isPossibleTwoSquaresChase(m, m2.getMove()))
+			return false;
 
 		Move m3 = getLastMove(3);
 		if (m3 == null)
+			return false;
+
+		// not back to square where the chasing piece came from?
+		if (m3.getFrom() != Move.unpackTo(m))
+			return true;
+
+		// If opponent piece does not move between same two squares,
+		// then this move cannot result in a two squares victory.
+		Move m4 = getLastMove(4);
+		if (m4 == null)
 		 	return false;
 
-		if (m1.getTo() != m3.getFrom()
-			|| m1.getFrom() != m3.getTo())
+		if (m2.getTo() != m4.getFrom()
+			|| m2.getFrom() != m4.getTo())
 			return false;
 
 		// Will the AI eventually be blocked by Two Squares?
@@ -3231,12 +3273,12 @@ boardHistory[1-bturn].hash,  0);
 		// then AI allows to proceed,
 		// by avoiding the isRepeatedPosition() check in the AI.
 
-		UndoMove m4 = getLastMove(4);
-		if (m4 == null)
+		UndoMove m5 = getLastMove(5);
+		if (m5 == null)
 			return false;
 
-		Move m5 = getLastMove(5);
-		if (m5 == null)
+		Move m6 = getLastMove(6);
+		if (m6 == null)
 			return false;
 
 		// (1) If the proposed move and the move four plies ago
@@ -3248,9 +3290,9 @@ boardHistory[1-bturn].hash,  0);
 		// (if they are equal, it means we are at position D
 		// rather than at position C)
 		// -- then this is a repetitive move
-		if (m == m4.getMove()
-			&& boardHistory[bturn].hash == m4.hash
-			&& !m5.equals(m1))	// compare Move, not UndoMove
+		if (m == m5.getMove()
+			&& boardHistory[bturn].hash == m5.hash
+			&& !m6.equals(m2))	// compare Move, not UndoMove
 			return false;
 
 		return true;
