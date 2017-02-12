@@ -62,7 +62,7 @@ public class Board
         protected int[][] trayRank = new int[2][15];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
 	protected Rank[] chaseRank = new Rank[15];	// usual chase rank
-	protected boolean[][] invincibleRank = new boolean[2][15];// rank that can attack unknowns
+	protected boolean[][] invincibleRank = new boolean[2][15];// rank that always wins or is even
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
 	protected int[] piecesInTray = new int[2];
 	protected int[] remainingUnmovedUnknownPieces = new int[2];
@@ -3179,6 +3179,28 @@ boardHistory[1-bturn].hash,  0);
 		return Grid.isAdjacent(oppmove.getTo(),  Move.unpackFrom(m));
 	}
 
+	// Returns true if both moves are between the same row
+        // or column.
+        // For example,
+        // -- --
+        // B1 R2
+        // If Red Two moves up and then Blue One moves up, this
+        // function returns true.  This is useful in examining
+        // the potential for a Two Squares ending.
+        public boolean isPossibleTwoSquaresChase()
+        {
+		Move m1 = getLastMove(1);
+		Move m2 = getLastMove(2);
+		if (m1 == null || m2 == null)
+			return false;
+
+		return (m1.getFromX() == m2.getFromX()
+			&& m1.getToX() == m2.getToX())
+			|| (m1.getFromY() == m2.getFromY()
+			&& m1.getToY() == m2.getToY());
+        }
+
+
 	// A chasing move back to the square where the chasing piece
 	// came from in the directly preceding turn is allowed
 	// if this can force the opponent piece to hit the
@@ -3215,21 +3237,17 @@ boardHistory[1-bturn].hash,  0);
 
 	public boolean isTwoSquaresChase()
 	{
+		if (!isPossibleTwoSquaresChase())
+			return false;
+
 		int m = getLastMove(1).getMove();
 		Move m2 = getLastMove(2);
 		if (m2 == null)
 		 	return false;
 
-		if (!Grid.isPossibleTwoSquaresChase(m, m2.getMove()))
-			return false;
-
 		Move m3 = getLastMove(3);
 		if (m3 == null)
 			return false;
-
-		// not back to square where the chasing piece came from?
-		if (m3.getFrom() != Move.unpackTo(m))
-			return true;
 
 		// If opponent piece does not move between same two squares,
 		// then this move cannot result in a two squares victory.

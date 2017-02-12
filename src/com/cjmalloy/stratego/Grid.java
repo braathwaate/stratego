@@ -371,22 +371,6 @@ public class Grid
 		return isAdjacent(Move.unpackFrom(m), Move.unpackTo(m));
 	}
 
-	// returns true if both moves are between the same row
-	// or column.
-	// For example,
-	// -- --
-	// B1 R2
-	// If Red Two moves up and then Blue One moves up, this
-	// function returns true.  This is useful in examining
-	// the potential for a Two Squares ending.
-	static public boolean isPossibleTwoSquaresChase(int m1, int m2)
-	{
-		return (Move.unpackFromX(m1) == Move.unpackFromX(m2)
-			&& Move.unpackToX(m1) == Move.unpackToX(m2))
-			|| (Move.unpackFromY(m1) == Move.unpackFromY(m2)
-			&& Move.unpackToY(m1) == Move.unpackToY(m2));
-	}
-
 	static public boolean isAlternatingMove(int m1, Move m2)
 	{
 		int from1 = Move.unpackFrom(m1);

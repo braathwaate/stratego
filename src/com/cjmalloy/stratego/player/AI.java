@@ -1985,9 +1985,7 @@ public class AI implements Runnable
 				} else
 					b.move(tryMove);
 
-				UndoMove um2 = b.getLastMove(2);
-				if (um2 != null
-					&& Grid.isPossibleTwoSquaresChase(tryMove, um2.getMove()))
+				if (b.isPossibleTwoSquaresChase())
 					b.hashDepth(b.depth);
 			}
 		} else
@@ -2038,11 +2036,7 @@ public class AI implements Runnable
 
 	private long getHash()
 	{
-		UndoMove um1 = b.getLastMove(1);
-		UndoMove um2 = b.getLastMove(2);
-		if (um1 != null
-			&& um2 != null
-			&& Grid.isPossibleTwoSquaresChase(um1.getMove(), um2.getMove()))
+		if (b.isPossibleTwoSquaresChase())
 			return b.getHash() ^ twoSquaresHash;
 
 		return b.getHash();
