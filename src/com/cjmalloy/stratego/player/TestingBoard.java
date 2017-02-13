@@ -105,8 +105,10 @@ public class TestingBoard extends Board
 	// • The value of a Miner varies depending on the number
 	//	of possible opponent bombed structures remaining.
 	//	When there are less Miners than structures,
-	//	a known Miner has a value between a known Six and Seven
-	//	but an unknown Miner has twice the stealth.
+	//	a known Miner is equal to a known Six
+	//	but an unknown Miner has more stealth than a Six,
+	//	making it considerably more valuable, but not as
+	//	valuable as a Five.
 	//	Otherwise the Miner is expendable and is worth less than
 	//	a Seven.
 	// • If the AI is winning, an AI piece is worth less than
@@ -133,7 +135,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_SIX = VALUE_FIVE/2;
 	private static final int VALUE_SEVEN = 72;
 
-	private static final int VALUE_EIGHT = 80;
+	private static final int VALUE_EIGHT = VALUE_SIX;
 	private static final int VALUE_NINE = 30;
 	private static final int [] startValues = {
 		0,
@@ -835,7 +837,7 @@ public class TestingBoard extends Board
 
 		if (r >= 5 && r <= 9) {
 
-			final int stealthRatio[] = {0, 0, 0, 0, 0, 8, 5, 2, 1, 1};
+			final int stealthRatio[] = {0, 0, 0, 0, 0, 8, 5, 2, 2, 1};
 		// Adjust stealth for missing pieces
 			int i = r;
 			while (i != 9 && values[c][i] == values[c][i+1])
@@ -1007,13 +1009,13 @@ public class TestingBoard extends Board
 
 		int u = grid.movablePieceCount(Settings.topColor) -
 			grid.movablePieceCount(Settings.bottomColor);
-		u = Math.min(Math.abs(u/2), 5);
 
 		int c;
 		if (u > 0)
 			c = Settings.bottomColor;
 		else
 			c = Settings.topColor;
+		u = Math.min(Math.abs(u/2), 5);
 	
 		for (int r = 1; r < 10; r++)	
 			valueStealth[c][r-1] = valueStealth[c][r-1] * 10 / (10 - u);
@@ -1100,12 +1102,20 @@ public class TestingBoard extends Board
 	//
 	void valuePieces()
 	{
-		if (sumValues[Settings.topColor] != 0)
+		// Not sure how this can happen anymore
+		if (sumValues[Settings.topColor] == 0)
+			return;
+
+		// int vb = sumValues[Settings.bottomColor] * grid.movablePieceCount(Settings.bottomColor);
+		// int vt = sumValues[Settings.topColor] * grid.movablePieceCount(Settings.topColor);
+		int vb = sumValues[Settings.bottomColor];
+		int vt = sumValues[Settings.topColor];
+
 		for (int rank = 1; rank <= 10; rank++) {
 			int v1 = values[Settings.topColor][rank]/2;
 			long v2 = v1;
-			v2 *= sumValues[Settings.bottomColor];
-			v2 /= sumValues[Settings.topColor];
+			v2 *= vb;
+			v2 /= vt;
 			v2 = Math.min(v2, v1);
 			values[Settings.topColor][rank] = v1 + (int)v2;
 		}
@@ -2947,23 +2957,6 @@ public class TestingBoard extends Board
 		setPlan(planA[color][rank-1], desttmp, priority);
 	}
 
-	// The value of the destination trails off with distance.
-	// This encourages the piece to prefer closer destinations.
-
-	public static int log2nlz( int bits )
-	{
-	    if( bits == 0 )
-		return 0; // or throw exception
-	    return 31 - Integer.numberOfLeadingZeros( bits );
-	}
-
-	private static int trailing(int n)
-	{
-		if (n == DEST_VALUE_NIL)
-		 	return n;
-		return log2nlz(n);
-	}
-
 	private void setPlan(int[][] plan, int[] tmp, int priority)
 	{
 		if (tmp == null)
@@ -3184,13 +3177,12 @@ public class TestingBoard extends Board
 		// for only the first move.
 
 			if (pto >= DEST_PRIORITY_DEFEND_FLAG) {
-				if (depth > 1)
-					return 0;
-
+				if (depth <= 1) {
 		// prevent transposition table equivalency.
-				hashDepth(depth);
-
-				return Math.max(Math.min(vfrom - vto, 1), -1) * pto;
+					hashDepth(depth);
+					return Math.max(Math.min(vfrom - vto, 1), -1) * pto;
+				}
+				pto = DEST_PRIORITY_DEFEND_FLAG_AREA;
 			}
 
 		// The difference in chase plan values for adjacent squares
@@ -7470,7 +7462,7 @@ public class TestingBoard extends Board
 	public boolean isFlagBombAtRisk(Piece p)
 	{
 		int flagi = flag[1-p.getColor()];
-		assert flagi != 0 : "AI flag zero?";
+		assert flagi != 0 : "flag zero for color " + (1-p.getColor());
 
 		return p.getMaybeEight()
 			&& Grid.steps(p.getIndex(), flagi) <= 4;
@@ -7835,5 +7827,21 @@ public class TestingBoard extends Board
 			return -vm/20;
 		else
 			return 0;
+	}
+
+	String getDebugInfo()
+	{
+		String s = "";
+		for (int c = RED; c <= BLUE; c++) {
+			s += "values[" + c + "][] = ";
+			for (int i = 0; i < 15; i++)
+				s += values[c][i] + ",";
+			s += "\n";
+			s += "valueStealth[" + c + "][] = ";
+			for (int i = 0; i < 15; i++)
+				s += valueStealth[c][i] + ",";
+			s += "\n";
+		}
+		return s;
 	}
 }

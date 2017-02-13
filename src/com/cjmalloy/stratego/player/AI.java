@@ -252,6 +252,7 @@ public class AI implements Runnable
 			+ Settings.aiLevel * Settings.aiLevel * 10;
 
 		b = new TestingBoard(board);
+		log(b.getDebugInfo());
                 try
                 {
 		// Settings tick marks:
@@ -672,9 +673,18 @@ public class AI implements Runnable
 
 		// Never prune off a move to the last square, because
 		// it may be an unoccupied "ghost" square. See TestingBoard.
-		UndoMove um = b.getLastMove(1);
-		if (um != null)
-			unsafeGrid.setBit(um.getTo());
+		Move m = b.getLastMove(1);
+		if (m != null)
+			unsafeGrid.setBit(m.getTo());
+
+		// Make certain that the last piece that moved will
+		// not be pruned off, which happens with the best
+		// pruned move because it is outside the pruning area.
+		// This is particularly important to protect the
+		// bomb structure from an incoming attacker.
+		Move m2 = b.getLastMove(2);
+		if (m2 != null)
+			unsafeGrid.setBit(m2.getFrom());
 
 		// Scan the board for movable pieces inside the active area
 
