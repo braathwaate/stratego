@@ -6886,7 +6886,7 @@ public class TestingBoard extends Board
 					&& fprank.ordinal() <= 7) 
 					return result;	// maybe not
 
-				if (foray
+				if ((foray || fp.isSafe())
 					&& tp.isWeak()
 					&& hasLowValue(fp))
 					return result;	// maybe not
