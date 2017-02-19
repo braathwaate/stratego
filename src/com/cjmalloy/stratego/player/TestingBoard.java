@@ -434,6 +434,10 @@ public class TestingBoard extends Board
 		// chase(), setNeedExpendableRank()
 		setUnmovedValues();
 
+		// Call genUnknownRank again because setUnmovedValues()
+		// could change pieceValue()
+
+		genUnknownRank();
 		assert flag[Settings.topColor] != 0 : "AI flag unknown";
 	}
 
@@ -3926,39 +3930,44 @@ public class TestingBoard extends Board
 
 					// fp is known
 
-					else {
+					else
 						vm += tpvalue - fpvalue;
 
-		// If the defender is an unknown AI piece,
+		// Unknown AI pieces also have bluffing value
+
+		// If the defender (tp) is an unknown AI piece,
                 // then an attacker (not an invincible attacker, see above)
                 // doesn't really know that the exchange is even.
                 // The attacker sees only an unknown gain
                 // but the potential loss of its piece.
-                //
-                // Yet this result relies on an effective bluff.
-                // If the exchange occurs in the flag area, for example,
-                // the attacker may attack anyway.
-                //
-                // Furthermore, if it is not an effective bluff,
-                // then R?xB must equal BxR?, because both pieces
-                // are removed from the board, so the transposition
-                // table will return an identical result regardless
-		// of the direction of attack.
 		//
-		// (If it is an effective bluff, the bluffing
-		// piece survives, and thus the transposition table
-		// returns a correct result).
-
-					}
-
-		// Unknown AI pieces also have bluffing value
-
+		// So first check for an effective bluff to see
+		// if the attack is rational.  If the bluff is
+		// effective, the attack is unlikely, and vm is reduced
+		// to the bluffing value.
+                //
 					if (depth != 0
 						&& !maybeIsInvincible(fp)
 						&& isEffectiveBluff(tp, fp, m)) {
 						vm = Math.min(vm, valueBluff(fp, tp));
 						morph(tp);
-					}
+					} else
+
+                // RISK REDUCTION BY DISTANCE
+		// If the attack is not an effective bluff,
+		// reduce vm by the distance, because a known opponent
+		// piece attack on an unknown AI piece to gain its
+		// stealth is less likely.
+
+		// Note that R?xB should equal BxR?, because both pieces
+                // are removed from the board, so the transposition
+                // table will return an identical result regardless
+		// of the direction of attack.
+
+		// (If it is an effective bluff, morph() changes the board
+		// and thus the transposition table returns a correct result).
+
+						vm /= distanceFactor(tp, fp, scoutFarMove);
 
 		// AI is attacker
 
@@ -4096,7 +4105,11 @@ public class TestingBoard extends Board
 					&& isEffectiveBluff(fp, tp)) {
 						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
-				}
+				} else
+
+		// because of transposition table
+		// see RISK REDUCTION above
+					vm /= distanceFactor(fp, tp, scoutFarMove);
 
 				} // AI is attacker
 
@@ -4309,20 +4322,21 @@ public class TestingBoard extends Board
 						&& !isInvincibleDefender(tp)) {
 
 		// When an opponent (suspected) flag bomb attacks an AI eight,
-		// remove both pieces; otherwise, if the Eight were left on board,
-		// it could continue to obtain points in the search tree by attacking
-		// other flag bombs, which could allow it to leave material hanging.
-		// (Removing both pieces is also correct if the bomb turns out to be
-		// an opponent Eight; and if the bomb turns out to be a superior rank,
+		// remove both pieces; otherwise, if the Eight were left on
+		// the board, it could continue to obtain points
+		// in the search tree by attacking other flag bombs (WINS),
+		// which could allow it to leave material hanging.
+		// (Removing both pieces is also correct if the bomb
+		// turns out to be an opponent Eight;
+		// and if the bomb turns out to be a superior rank,
 		// at least the AI makes a half-right guess).
 		
-						if (tprank == Rank.EIGHT
-							&& fprank == Rank.BOMB) {
-							vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
-							vm -= fpvalue;
-
-							// piece is removed from board
-							break;
+						if (tprank == Rank.EIGHT) {
+							if (fpvalue > tpvalue) {
+								vm -= fpvalue;
+								break; // both pieces removed from board
+							} else
+								vm += 3;
 						}
 
 						if (!tp.isKnown()
@@ -6437,7 +6451,7 @@ public class TestingBoard extends Board
 		int vs = pieceValue(color, rank);
 		int vb = pieceValue(color, unknownRank[color]);
 
-		assert vb <= vs : "vb must be less than vs for rank " + rank;
+		assert vb <= vs : "vb for " + unknownRank[color] + " must be less than vs for rank " + rank;
 
 		return Math.min(vs, vb + (vs - vb) * p.getMoves() / (SUSPECTED_RANK_AGING_DELAY * blufferRisk));
 	}
