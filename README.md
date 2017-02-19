@@ -201,4 +201,6 @@ and revealed pieces.
 
 [Invincible. A Stratego Bot, V. de Boer](http://www.kbs.twi.tudelft.nl/Publications/MSc/2008-deBoer-Msc.html).
 
+[Master of the Flag.  Former Computer World Champion](http://www.jayoogee.com/masteroftheflag/).
+
 [Probe 2. Three Time Computer Stratego World Champion](http://www.probe.imersatz.com).

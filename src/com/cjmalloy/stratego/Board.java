@@ -2114,6 +2114,14 @@ boardHistory[1-bturn].hash,  0);
 				|| rank == p.getActingRankFleeHigh())
 				continue;
 
+                // If the opponent is a bluffer, then
+                // the AI does not assign any suspected ranks.
+                // Otherwise, a bluffer could use any piece to thwart
+                // an AI attack.
+
+			if (blufferRisk == 5)
+				continue;
+
 		// The AI needs time to confirm whether a suspected
 		// rank is bluffing.  The more the suspected rank moves
 		// without being discovered, the more the AI believes it.
