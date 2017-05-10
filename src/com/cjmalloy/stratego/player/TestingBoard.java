@@ -1165,27 +1165,17 @@ public class TestingBoard extends Board
 	// increase the value of the invincible piece.  Then there
 	// is no need to check for this special case in the EVEN code.
 
-	// If the attacker is invincible, then the attacker knows
-	// that it cannot lose the exchange, but because this
-	// exchange is even, tprank must also be the same rank,
-	// so this is a known evenly valued exchange,
-	// unless the AI piece is unknown (because of stealth).
-	//
-	// However, if the AI piece is unknown, the opponent piece
-	// is known and the AI is winning, the AI must try to
-	// neutralize the attacker's invincible pieces,
-	// because otherwise they just run amok obliterating
-	// all of the AI's moved pieces or simply amble about
-	// until time runs out. So the AI deems this
-	// as an even exchange, even if the AI piece still has stealth.
-	//
+	// TBD: If the AI is winning, it should also try for even
+	// exchanges.  Yet it could be better to avoid even exchanges
+	// and try to increase its advantage.
+
 	// If the AI is losing, it may be better for the AI to flee
 	// and hope for a tie by time expiration.  But this makes
 	// for boring games, and the AI still has confidence that
 	// it could win, in spite of that it may be losing.  And the
 	// isWinning() function isn't perfect, because it only looks
 	// at material value.
-	//
+
 	// Note that suspected invincible pieces (except the One,
 	// if the AI has the Spy) must also
 	// be neutralized, although this can lead to loss
@@ -1193,14 +1183,22 @@ public class TestingBoard extends Board
 	// loss of the AI piece, if the opponent rank is
 	// lower than suspected.
 
+	// If the player has multiple invincible ranks, only the lowest
+	// rank is set more valuable.  That is because the player only
+	// needs one; the others may be happily traded off if the player
+	// is winning to expedite the end of game.  If the player is losing,
+	// his ranks will be more valuable, and he won't want to trade
+	// them off.
+
 	void adjustInvincibleRanks()
 	{
 		for (int c = RED; c <= BLUE; c++)
 		for (int rank = 1; rank<9;rank++)
 			if (isInvincibleDefender(c, rank)
-				&& !isInvincibleDefender(1-c, rank))
+				&& !isInvincibleDefender(1-c, rank)) {
 				values[c][rank] = values[1-c][rank] + stealthValue(1-c, rank) + values[1-c][unknownRank[1-c]]/2;
-
+				break;
+			}
 	}
 
 	// Because of shallow search depth, the AI is encouraged to
@@ -1241,10 +1239,20 @@ public class TestingBoard extends Board
 					continue;
 				}
 
-			// find the lowest apparent rank in the lane
+		// If there is no known or suspected opponent rank in the lane,
+		// guard the lane with a rank equal to or lower than
+		// the lowest unknown opponent expendable rank.
+		// Thus, if an unknown opponent rank should approach,
+		// an attack will be zero or positive for the AI.
+		
+		// If there is a known or suspected opponent rank in the lane,
+		// guard the lane with a lower rank.
+		// (An equal rank could be insufficient because the AI
+		// often misguesses suspected ranks and because known
+		// ranks are often more aggressive)
 
 			int[] lowRank = new int[2];
-			lowRank[Settings.bottomColor] = Math.max(6, lowestUnknownExpendableRank);
+			lowRank[Settings.bottomColor] = lowestUnknownExpendableRank + 1;
 			lowRank[Settings.topColor] = 99;
 			Piece aiPiece = null;
 
@@ -1568,14 +1576,14 @@ public class TestingBoard extends Board
 				else
 					genNeededPlanB(tmp, 1-p.getColor(), r, priority);
 				found = true;
-			} else if (valuableRank == 0 || valuableRankValue < pieceValue(1-p.getColor(), r)) {
+			} else if (valuableRank == 0 || valuableRankValue > pieceValue(1-p.getColor(), r)) {
 				valuableRank = r;
 				valuableRankValue = pieceValue(1-p.getColor(), r);
 			}
 		}
 				
 
-		// If unknown expendables are exhausted, bluff with some other minor piece
+		// If unknown expendables are exhausted, bluff with the least valuable piece
 
 		if (!found && valuableRank != 0) {
 			if (plan == planAPiece)
@@ -1792,22 +1800,13 @@ public class TestingBoard extends Board
 				chaseWithScout(p, i, DEST_PRIORITY_CHASE);
 			}
 
-		// Chase the piece with the same rank IF both ranks are known
-		// and the attacker is winning.
-		//
-		// Unless the ai is winning by much, it must keep its low
-		// ranked pieces concealed for further advantage,
-		// so that is why it will only chase a known piece
-		// with another known piece of the same rank.
-		//
-		// But if the ai is winning by at least a rank,
-		// the ai sets valueStealth to zero, so that
-		// the exchange of an unknown piece for a known piece
-		// furthers the game.
-		//
-		if ((knownRankAtLarge(1-p.getColor(), chasedRank) != 0
-			|| stealthValue(1-p.getColor(), chasedRank) == 0)
-			&& isWinning(1-p.getColor()) >= 0) {
+		// Chase the piece with the same rank IF an EVEN exchange
+		// is positive.  An EVEN exchange is positive based
+		// on values of the pieces (see EVEN).
+
+		Piece opp = planAPiece[1-p.getColor()][chasedRank];
+		if (opp != null
+			&& pieceValue(p) > pieceValue(opp)) {
 
 			// go for an even exchange
 			int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, p.getRank());
