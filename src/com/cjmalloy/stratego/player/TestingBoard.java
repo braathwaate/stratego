@@ -2626,14 +2626,15 @@ public class TestingBoard extends Board
 
 		// When the number of possible structures is greater
 		// than the supply of Miners, the Miner retains
-		// the value set in values[] at the start of the game,
-		// which is the same as a Seven but twice the stealth.
+		// the value set in values[] and stealth value
+		// at the start of the game.
 
 		// Yet if both players have non-expendable Eights,
 		// should they exchange Miners?  If the player is
 		// losing, its only chance of winning may be to attack
-		// opponent flag, so its Miners are more valuable,
+		// the opponent flag, so its Miners are more valuable,
 		// and this is somewhat addressed by adjustPieceValues().
+
 		// But even if the player is winning, retaining
 		// a Miner superiority could be critical in winning
 		// the game, because if it has to protect its flag,
@@ -2641,15 +2642,34 @@ public class TestingBoard extends Board
 		// to win the game.   Furthermore, some of its
 		// material advantage could be inside of bombed
 		// structures!
-		//
-		// So a lack of Miner superiority increases the value
-		// of a Miner to deter an exchange of Eights when
-		// each player has non-expendable Eights
+
+		// So a Miner superiority decreases the value
+		// of a player's Miner while inferiority increases the value.
+		// This encourages or deters an exchange of Eights
+		// when each player has non-expendable Eights.
+
+		// For example, Red and Blue both have two possible
+		// bombed structures.  Red has 3 unknown Miners (and
+		// a Seven inside a bombed structure).  Blue has 1 known
+		// Miner (and a Seven inside a bombed structure).
+		// Thus both sides have Miners that are not expendable.
+
+		// A human would instantly recognize that Red has
+		// an easy win if it simply exchanges Miners which
+		// eliminates all of Blue's movable pieces.  Attacking an
+		// opponent flag structure is less desirable because
+		// if the attacker chooses wrong, it unleashes a Seven
+		// and the player would lose the game.
+
+		// But the AI as Red is reluctant to exchange an equivalently
+		// valued unknown piece for a known piece.
+		// So the equation below makes Blue's known Miner more
+		// valuable than Red's unknown Miner.
 
 			if (rankAtLarge(c, Rank.EIGHT)
 				> rankAtLarge(1-c, Rank.EIGHT))
 				values[1-c][Rank.EIGHT.ordinal()] =
-				values[1-c][Rank.EIGHT.ordinal()] * 5 / 4;
+				(values[c][Rank.EIGHT.ordinal()] + stealthValue(c, Rank.EIGHT)) * 10 / 9;
 		}
 
 		// Making the flag known eliminates the flag
@@ -3083,19 +3103,28 @@ public class TestingBoard extends Board
 				|| tp.getColor() != 1 - color)
 				continue;
 
-			Rank tprank = Rank.UNKNOWN;
-			if (tp.isKnown()) {
-
 		// If an unknown opponent piece chases a known AI piece
 		// during the search, the opponent could be a lower
 		// piece or it could be bluffing, so nothing
 		// can be determined about its rank during the search.
 
-				if (color == Settings.bottomColor)
+			Rank tprank = tp.getRank();
+			if (color == Settings.bottomColor) { // tp is topColor
+				if (tp.isKnown())
 					continue;
-				else
-					tprank = tp.getRank();
+				tprank = Rank.UNKNOWN;
 			}
+
+		// Note that tprank could be suspected rank.  Thus
+		// any AI piece can approach a suspected bomb or flag
+		// and an expendable AI piece can chase a suspected low
+		// rank without aquiring a chase rank of Unknown.
+
+		// But if a low ranked AI piece chases an (obvious)
+		// suspected rank, it does make the AI rank obvious
+		// as well.  For example, an opponent piece has been
+		// chasing a Four.   Then if the AI chases it with an unknown
+		// Two or Three, the opponent can easily guess its rank.
 
 			if (tprank.ordinal() < minRank.ordinal())
 				minRank = tprank;
@@ -3695,8 +3724,6 @@ public class TestingBoard extends Board
 		// approach the unknown Spy, because it could be the
 		// unknown One.
 
-			UndoMove m2 = getLastMove(2);
-
 			if (!fp.isKnown()) {
 
 				Rank oppRank = getLowestAdjacentEnemyRank(fpcolor, to);
@@ -3734,6 +3761,8 @@ public class TestingBoard extends Board
 				}
 			}
 
+			UndoMove m2 = getLastMove(2);
+
 			if (fpcolor == Settings.topColor) {
 
 		// On the previous move, if the AI moved an unknown piece
@@ -3767,7 +3796,7 @@ public class TestingBoard extends Board
 					&& (!isInvincible(m2fp)
 					|| (m2fprank == Rank.ONE
 						&& hasSpy(fpcolor)))
-					&& isEffectiveBluff(fp, m2fp, m))
+					&& isEffectiveBluffWins(fp, m2fp, m))
 					vm += valueBluff(m, fp, m2fp) - valueBluff(m2fp, fp);
 			}
 
@@ -3947,7 +3976,7 @@ public class TestingBoard extends Board
                 //
 					if (depth != 0
 						&& !maybeIsInvincible(fp)
-						&& isEffectiveBluff(tp, fp, m)) {
+						&& isEffectiveBluffWins(tp, fp, m)) {
 						vm = Math.min(vm, valueBluff(fp, tp));
 						morph(tp);
 					} else
@@ -4490,7 +4519,7 @@ public class TestingBoard extends Board
 						&& m2 != null
 						&& m2.tpcopy != null
 						&& m2.tpcopy.isKnown()
-						&& !isEffectiveBluff(m2.tpcopy, tp, m2.getMove())
+						&& !isEffectiveBluffWins(m2.tpcopy, tp, m2.getMove())
 						&& tp == m2.getPiece()) {
 						UndoMove m1 = getLastMove(1);
 						vm += Math.min(tpvalue, m2.value - m1.value);
@@ -4502,7 +4531,7 @@ public class TestingBoard extends Board
 		// so the value must at least be the bluffing value.
 
 					if (depth != 0
-						&& isEffectiveBluff(fp, tp, m))
+						&& isEffectiveBluffWins(fp, tp, m))
 						vm = Math.max(vm, VALUE_BLUFF);
 
 					fp.makeKnown();
@@ -4658,7 +4687,7 @@ public class TestingBoard extends Board
 
 						if (depth != 0
 							&& !maybeIsInvincible(fp)
-							&& isEffectiveBluff(tp, fp, m)) {
+							&& isEffectiveBluffWins(tp, fp, m)) {
 							vm = Math.min(vm, valueBluffWins(fp, tp));
 							morph(tp);
 							break;
@@ -5537,9 +5566,6 @@ public class TestingBoard extends Board
 
 		if (fp.isKnown()
 			|| hasLowValue(tp)
-			|| (fp.isWeak()
-				&& !isFlagBombAtRisk(tp)
-				&& tp.getRank() != Rank.ONE)
 			|| fp.isFleeing(tp.getRank())
 			|| (fp.getActingRankFleeLow() != Rank.NIL
 				&& fp.getActingRankFleeLow() != Rank.UNKNOWN
@@ -5554,19 +5580,23 @@ public class TestingBoard extends Board
 		return true;
 	}
 
-	// 
-	// It is risky to push an unknown piece towards the
-	// opponent flag if it can be captured.
-	// Yet it is a good bet to make moves that force
-	// the opponent to approach the unknown piece,
-	// even when near the flag.
-	// Thus an effective bluff for WINS must not be near
-	// the opponent flag, but an effective bluff
-	// for LOSES and EVEN can be near the flag.
+	// It is always risky to bluff by pushing an unknown piece
+	// towards an opponent piece of superior rank.
+	// It is especially risky to bluff with a piece from a weak area
+	// or approach the opponent flag.
+	// Thus an effective bluff for WINS must not be a weak piece
+	// or near the opponent flag.
 
-	public boolean isEffectiveBluff(Piece fp, Piece tp, int m)
+	// Yet it is a good bet to make moves that force
+	// the opponent to approach the unknown piece, because
+	// then the AI may be able to move away and retain its piece.
+	// Thus an effective bluff or LOSES and EVEN
+	// can with a weak piece or near the flag.
+
+	public boolean isEffectiveBluffWins(Piece fp, Piece tp, int m)
 	{
 		return isEffectiveBluff(fp, tp)
+			&& !fp.isWeak()
 			&& !isNearOpponentFlag(Move.unpackTo(m));
 	}
 
@@ -5737,7 +5767,7 @@ public class TestingBoard extends Board
 			if (tp.isSuspectedRank())
 				return v - valueBluff(tp, fp);
 
-		// In other cases the AI only receives 2/3 of the
+		// In other cases the AI receives less than the full
 		// value of the bluffing piece.  This discourages the
 		// AI from unnecessarily risking its pieces (known or
 		// unknown fleers), encouraging it to find authentic protectors
@@ -5746,20 +5776,21 @@ public class TestingBoard extends Board
 		// (see WINS), so prev1.value - prev2.value is small
 		// (just the value from valueBluff() below).
 
-		// One can argue that the bluffing value for known pieces should
-		// be much higher.  In the example below, Unknown Blue
+		// One can argue that the bluffing should be high.
+		// In the example below, Unknown Blue
 		// is about to fork two known Red Fives.  Red anticipates the
 		// possible fork, but sees that the loss is inevitable.
 		// (After Red Five moves up, Blue Four moves up, Red Five moves
 		// up, Blue can take either Five, because the Five is only
-		// protected by an unknown Four.  Because the bluffing value
-		// is low, the AI sees that it will lose the Five anyway.
-		// R? -- R4 R?
+		// protected by an unknown Four.)  If the bluffing value
+		// is low, the AI sees that it will lose a Five anyway
+		// and not move to protect them.
+		// R? -- R? R?
 		// xx R5 -- xx
 		// xx -- R5 xx
 		// -- B? -- B?
-		//
-		// Another example suggesting a higher bluffing value:
+
+		// Another example suggesting a high bluffing value:
 		// B? B? B? B?
 		// B? R4 -- B?
 		// xx B3 -- xx
@@ -5767,23 +5798,19 @@ public class TestingBoard extends Board
 		// B? B? -- --
 		// Blue Three has forked Red Four and Red Seven.
 		// Red has the move.  Will Blue Three
-		// actually take Red Four?  Possibly not, but because bluffing
-		// value is low, Red Four moves sideways allowing Blue Three to
-		// take Red Seven.
-		//
-		// Because of this uncertainly, the AI will sacrifice material
-		// to avoid the possibility of capture of a known piece
-		// of higher value, even when the piece appears to be
-		// protected.
-		//
-		// TBD: the AI assumes that the opponent piece will call the
-		// bluff, and hence may allow material to be captured
-		// without playing the moves to protect the material.
-		// That is, it will may just leave the material hanging.
-		// This should be solved by "depth value reduction", but
-		// this needs to be verified.
+		// actually take Red Four?  Possibly not, but with a low
+		// bluffing value, Red Four moves sideways allowing
+		// Blue Three to take Red Seven.
 
-			return v * 2 / 3;
+		// Yet a high bluffing value causes the AI to
+		// sacrifice material to avoid the possibility
+		// of capture of a known piece, even when the piece
+		// appears to be protected.
+
+			if (fp.isWeak())
+				return v / 3;
+			else
+				return v * 2 / 3;
 
 		} // prev2.tp != null
 
@@ -6942,13 +6969,6 @@ public class TestingBoard extends Board
 			if (unk.isKnown())
 				continue;
 
-			int unkRank;
-			if (unk.isSuspectedRank())
-				unkRank = unk.getRank().ordinal();
-			else
-				unkRank = lowestUnknownNotSuspectedRank;
-
-
 		// The AI thinks that a piece is probably weak if:
 		//	- it chases an unknown
 		// 	- it chases an expendable piece
@@ -6958,40 +6978,62 @@ public class TestingBoard extends Board
 					&& isExpendable(1-unk.getColor(), unk.getActingRankChase().ordinal())))
 				unk.setWeak(true);
 
-		// Checking fleeRankHigh usually determines the strength
-		// of the piece.  But if fleeRankHigh is unknown,
-		// and fleeRankLow is a numeric rank (i.e. the piece
-		// fled from both an unknown and some other rank),
-		// then check fleeRankLow.
+		Rank lowfleeRank = unk.getActingRankFleeLow();
+		Rank highfleeRank = unk.getActingRankFleeHigh();
 
-		// The AI considers all unknown opponent pieces
-		// to be expendable (5-9) in a completely unknown encounter.
-		// This is because the opponent is unlikely to risk the
-		// stealth of its low ranked pieces in allowing them to
-		// enter into a completely unknown exchange.
-		// Under this assumption, an AI piece of Five or lower
-		// should be a win or even.
-		//
-		// However, if the opponent piece flees from the AI unknown,
-		// it obtains a fleeRankHigh of Unknown.
-		// This may mean that the piece is strong, and the
-		// AI should allow one of its weaker pieces to discover
-		// its true identity.
+		if (highfleeRank != Rank.NIL)
+		for (int rank = 1; rank <= 10; rank++) {
 
-		for (int rank = 2; rank <= 10; rank++) {
+		// If an unknown piece approaches another unknown
+		// piece, it probably means the approacher is weak,
+		// because usually a player does not want to risk
+		// discovery or loss of a low rank in an unknown encounter.
 
-			Rank fleeRank = unk.getActingRankFleeHigh();
-			if (fleeRank == Rank.NIL)
-				break;
+		// If then the approached unknown piece flees
+		// from the approacher, it obtains a fleeRankHigh of Unknown.
+		// This could mean that the fleeing piece is strong and wants
+		// to avoid discovery (because the approacher was probably
+		// weak).  Or perhaps the fleeing piece could be a weak
+		// (7, 9) piece that does not want to enter an unknown
+		// exchange with another weak piece and in which
+		// it probably would lose.
 
-			if (fleeRank == Rank.UNKNOWN
-				&& !unk.isWeak()
-				&& isExpendable(1-unk.getColor(), rank)) {
-				unk.setActingRankFlee(Rank.toRank(rank));
+		// The AI looks at the setup position to guess which of
+		// the reasons the piece fled.  If the fleeing piece
+		// came from a strong position, then the AI guesses
+		// the the piece is strong.  Therefore, the AI deems
+		// that the piece would flee from any expendable piece,
+		// known or unknown.
+
+			if (highfleeRank == Rank.UNKNOWN) {
+				if (!unk.isWeak()
+					&& isExpendable(1-unk.getColor(), rank))
+					unk.setActingRankFlee(Rank.toRank(rank));
 				continue;
 			}
 
-		// If the unknown fled from some rank, can we always predict
+		// If a piece flees from two different ranks,
+		// will it also flee from intervening ranks?
+		// Not necessarily.  If a piece flees from a Two and Nine,
+		// it might be a Two or Three and be happy to attack
+		// a Four.
+
+		// But if a piece flees from two expendable ranks,
+		// it is likely that it will also flee from intervening
+		// expendable ranks.  For example, if a piece fled
+		// from a Six and a Nine, it will likely also flee
+		// from a Seven, because if the fleer was a Five, Six
+		// or Seven, it should have attacked.  Thus it is likely
+		// that the piece is low ranked (1-3).
+
+			if (isExpendable(1-unk.getColor(), rank)
+				&& isExpendable(1-unk.getColor(), lowfleeRank.ordinal())
+				&& rank > lowfleeRank.ordinal()
+				&& rank < highfleeRank.ordinal())
+				unk.setActingRankFlee(Rank.toRank(rank));
+		}
+
+		// If the unknown fled from some rank, can we predict
 		// if the piece will flee from an even lower rank?  Usually this
 		// is true, but not always.
 
@@ -7003,53 +7045,71 @@ public class TestingBoard extends Board
 		// from a Three.
 		//
 		// But if the unknown piece has a flee rank of Four, perhaps
-		// the unknown is the opponent One and so the player Two (and Three)
-		// are not safe.
+		// the unknown is the opponent One and so the player Two
+		// (and Three) are not safe.
 
-		// So to determine whether the
-		// piece fled because it is a low ranked piece avoiding
-		// discovery or a high ranked piece avoiding loss,
-		// check the stealth value of the lowest unknown rank
-		// against the value of the rank that fleed.  Add 50%
-		// as a margin of error.  If the stealth value is less
-		// than this value, the unknown *should* have taken the piece 
-		// instead of fleeing, so the AI decides that the unknown
-		// fled because it is a higher ranked piece, and is
-		// no threat to the AI.   However, if the stealth value
-		// is greater than this value, the unknown could be the
-		// lowest ranked piece and fled to avoid discovery, so
-		// the AI assumes that the unknown is a threat.
-		//
-		// Another example: an opponent piece has a chase rank of 5
-		// and a low flee rank of 9 and a high flee rank of unknown.
-		// The AI thinks that the piece is a Four.   It neglected to take
-		// a 9, which is understandable if the piece is indeed a Four.
-		//
-		// The AI thinks that any expendable piece less than a 9
-		// also stands a fair chance that the opponent piece will flee.
-		//
-		// Note the result is the same if the opponent piece was unknown
-		// and fled from an Unknown and a Nine.
+		// So to determine whether a lower rank is safe,
+		// check the stealth value of the lower unknown ranks
+		// against the value of the rank that fleed.  Add 20%
+		// as a margin of error.
+
+		// If the unknown were this rank
+		// and its stealth value is less than this value,
+		// the unknown *should* have taken the piece 
+		// instead of fleeing, so the AI decides that the piece
+		// is not this lower rank. Thus the piece poses
+		// no threat to an equal rank and the AI assigns it
+		// a flee rank.
+
+		// However, if the stealth value is greater than this value,
+		// the unknown could be the lowest ranked piece
+		// and fled to avoid discovery, so
+		// the AI assumes that the unknown could be a threat,
+		// and does not set any additional flee ranks.
+
+		// Examples:
+		// A piece has a low flee rank of 9
+		// and a high flee rank of unknown.  What ranks are safe
+		// to approach the piece? Just 9.  The piece is probably
+		// 1-4 (high stealth) and probably not a 5-8 (should
+		// have attacked).  If stealth(4) > value(7), then
+		// a 7 might be safe as well.     But a 5 or 6 might
+		// not be safe if the piece is a Four.
+		// TBD: This case is not handled.
+
+		// A piece has a low flee rank of 3.
+		// If stealth(1) < value(3), then a 2 should be safe.
+
+		// A piece has a low flee rank of 4.
+		// if stealth(2) < value(4), and the opponent one is
+		// known or off the board, then a 3 should be safe.
+
+		// A piece has a low flee rank of 5.
+		// if stealth(3) < value(5), and the opponent one
+		// and two are known or off the board, then a four
+		// should be safe.
 
 		// Note: topColor stealthValues are used, because these are
 		// actual stealth. bottomColor stealthValues are suspected stealth.
 
-			if (fleeRank == Rank.UNKNOWN
-				|| (!isExpendable(1-unk.getColor(), rank)
-					&& unk.getColor() == Settings.bottomColor
-					&& stealthValue(Settings.topColor, unkRank) * 5 / 4 > values[Settings.topColor][fleeRank.ordinal()]))
-				fleeRank = unk.getActingRankFleeLow();
+		if (lowfleeRank != Rank.NIL
+			&& lowfleeRank != Rank.UNKNOWN)
+		for (int rank = 1; rank < lowfleeRank.ordinal(); rank++) {
 
-			if (fleeRank == Rank.UNKNOWN
-				|| (!isExpendable(1-unk.getColor(), rank)
-					&& unk.getColor() == Settings.bottomColor
-					&& stealthValue(Settings.topColor, unkRank) * 5 / 4 > values[Settings.topColor][fleeRank.ordinal()]))
+		// unk cannot be rank because rank known or off board
+			if (unknownRankAtLarge(unk.getColor(), rank) == 0)
 				continue;
 
-			if (fleeRank.ordinal() > rank)
+		// unk could be rank because rank would have attacked
+			if (stealthValue(Settings.topColor, rank) * 5 / 4 > values[Settings.topColor][lowfleeRank.ordinal()])
+				break;
+
+		// unk should not be rank because rank did not attack
+			if (rank != 1)
 				unk.setActingRankFlee(Rank.toRank(rank));
 
 		} // rank
+
 		} // i
 	}
 
