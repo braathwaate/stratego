@@ -1050,20 +1050,18 @@ public class AI implements Runnable
 		if (n < 1)
 			return bvalue;
 
-		// If the opponent move was null and the player move
-		// is null, then the result is the same as if neither
-		// player move was null.  This can be thought of as
-		// a simple transposition cache.  It also prevents
-		// the search continuing ad infinitem.
+		// qs is the better of a null move or its attacks,
+		// in case the attacks worsen the position
 
-		int best;
-		if (b.getLastMove() == null)
-			best = bvalue;
-		else {
-			b.pushNullMove();
-			best = -qs( n, -beta, -alpha);
-			b.undo();
-		}
+		b.pushNullMove();
+		int best = -qsbest( n, -beta, -alpha, -bvalue);
+		b.undo();
+		return qsbest(n, alpha, beta, best);
+	}
+
+
+	private int qsbest(int n, int alpha, int beta, int best)
+	{
 		alpha = Math.max(alpha, best);
 
 		if (alpha >= beta)
@@ -1148,6 +1146,7 @@ public class AI implements Runnable
 					continue;
 				else {
 					boolean wasKnown = tp.isKnown();
+					int bvalue = negQS(b.getValue());
 					b.move(Move.packMove(i, t));
 					int v = -negQS(b.getValue()) - bvalue;
 

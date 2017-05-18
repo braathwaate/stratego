@@ -560,9 +560,25 @@ public class Board
 			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
-			if (p != null
-				&& p.getColor() == chaserPiece.getColor()
-				&& isThreat(p, chasedPiece))
+			if (p == null
+				|| p.getColor() != chaserPiece.getColor())
+				continue;
+
+	// If both chaserPiece and protector are known,
+	// then the protector has to be at least two ranks lower
+	// to be a protector.  For example,
+	// R3 R4 B?
+	// Red Three is not a protector.  If unknown Blue does not
+	// attack Red Four and moves some other piece, unknown Blue
+	// is not lower than Red Four.
+
+			if (p.isKnown()
+				&& chaserPiece.isKnown()
+				&& p.getRank().ordinal()
+					>= chaserPiece.getRank().ordinal()-2)
+				continue;
+
+			 if (isThreat(p, chasedPiece))
 				return true;
 		}
 		return false;
@@ -2022,17 +2038,17 @@ boardHistory[1-bturn].hash,  0);
 		}
 	}
 
-	//
 	// suspectedRank is based on ActingRankChase.
 	// If the piece has chased another piece,
 	// the ai guesses that the chaser is a lower rank
 	// If there are no lower ranks, then
 	// the chaser may be of the same rank (or perhaps higher, if
 	// bluffing)
-	//
+
 	protected void genSuspectedRank()
 	{
 		int piecesMovableOrKnown[] = new int[2];
+		int unknownRank[] = new int[2];
 		for (int c = RED; c <= BLUE; c++) {
                         piecesInTray[c] = 0;
                         piecesMovableOrKnown[c] = 0;
@@ -2042,6 +2058,20 @@ boardHistory[1-bturn].hash,  0);
                                 knownRank[c][j] = 0;
 				suspectedRank[c][j] = 0;
 			}
+
+		// If all movable pieces are moved or known
+		// and there is only one unknown rank, then
+		// the remaining unknown moved pieces must be that rank.
+
+			unknownRank[c] = 0;
+			for (int r = 1; r <= 10; r++)
+				if (unknownRankAtLarge(c, r) != 0) {
+					if (unknownRank[c] != 0) {
+						unknownRank[c] = 0;
+						break;
+					}
+					unknownRank[c] = r;
+				}
 		} // c
 
 		// add in the tray pieces to trayRank
@@ -2058,6 +2088,13 @@ boardHistory[1-bturn].hash,  0);
 			Piece p = getPiece(i);
 			if (p == null)
 				continue;
+
+			if (p.hasMoved()
+				&& !p.isKnown()
+				&& unknownRank[p.getColor()] != 0) {
+				p.setRank(Rank.toRank(unknownRank[p.getColor()]));
+				p.makeKnown();
+			}
 
 		// reset suspected ranks to unknown
 		// because these are recalculated each time
@@ -2137,19 +2174,6 @@ boardHistory[1-bturn].hash,  0);
 
 		for (int c = RED; c <= BLUE; c++) {
 
-		// If all movable pieces are moved or known
-		// and there is only one unknown rank, then
-		// the remaining unknown moved pieces must be that rank.
-		int unknownRank = 0;
-		for (int r = 1; r <= 10; r++)
-			if (unknownRankAtLarge(c, r) != 0) {
-				if (unknownRank != 0) {
-					unknownRank = 0;
-					break;
-				}
-				unknownRank = r;
-			}
-
 		// If all movable pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
@@ -2160,18 +2184,11 @@ boardHistory[1-bturn].hash,  0);
 				if (!Grid.isValid(i))
 					continue;
 				Piece p = getPiece(i);
-				if (p == null)
+				if (p == null
+					|| p.getColor() != c
+					|| p.isKnown()
+					|| p.hasMoved())
 					continue;
-				if (p.getColor() != c)
-					continue;
-				if (p.isKnown())
-					continue;
-				if (p.hasMoved()) {
-					if (unknownRank != 0) {
-						p.setRank(Rank.toRank(unknownRank));
-						p.makeKnown();
-					}
-				} else {
 
 		// The remaining unmoved pieces must be bombs (or the flag)
 		// Make the piece known to remove it from the piece lists
@@ -2210,7 +2227,6 @@ boardHistory[1-bturn].hash,  0);
 					flag[c] = p.getIndex();
 				}
 
-				} // not moved
 			} // for
 
 		} // all pieces accounted for

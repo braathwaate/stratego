@@ -202,11 +202,16 @@ public class Grid
 		return pieceBitGrid[p.getColor()].xorBitCount(neighbor[0][i]);
 	}
 
-	// used to determine if a captured piece was trapped
 	public int oppMoveCount(Piece p)
 	{
 		int i = p.getIndex();
 		return pieceBitGrid[1-p.getColor()].xorBitCount(neighbor[0][i]);
+	}
+
+	// If a piece has only one move, it is trapped
+	public boolean isTrapped(Piece p)
+	{
+		return oppMoveCount(p) == 1;
 	}
 
 	public boolean hasAttack(int turn, int i)

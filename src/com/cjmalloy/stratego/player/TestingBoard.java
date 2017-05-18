@@ -224,14 +224,6 @@ public class TestingBoard extends Board
 
 	protected boolean foray;
 	protected static int forayLane = -1;
-
-	// If a piece has already moved, then
-	// the piece cannot be a flag or a bomb,
-	// so the attacker doesn't gain as much info
-	// by discovering it.  (The ai scans for
-	// for unmoved piece patterns as a part
-	// of its flag discovery routine).
-
 	private static final int VALUE_MOVED = VALUE_NINE/3;
 
 	private static final int UNK = 0;
@@ -1872,7 +1864,7 @@ public class TestingBoard extends Board
 		} else { // unknown and unmoved
 
 			if (!p.isWeak() || isForay(p))
-				chaseWithExpendable(p, i, DEST_PRIORITY_CHASE);
+				chaseWithExpendable(p, i, DEST_PRIORITY_CHASE_ATTACK);
 
 			return;	// do not comment this out!
 		}
@@ -5538,11 +5530,9 @@ public class TestingBoard extends Board
 	// Bluffing doesn't work:
 	//	- if the AI piece is known
 	//	- if the opponent piece is low valued
-	//	- if the AI piece appears to be weak
-	//		(but will try anyway if its flag is at risk
-	//		or if the opponent piece is a one, because the
-	//		spy can be a weak piece)
-	//	- if the piece is weak and the flag is not at risk
+	//	- if the opponent piece is trapped (dead-ended)
+	//		(then it is forced to call the bluff)
+	//		(TBD: or if the piece is forced towards a dead-end)
 	// 	- if the AI piece has fled from this same piece rank before
 	//		(or neglected to attack)
 	// 	- if the AI piece has fled from some other piece rank before
@@ -5567,6 +5557,7 @@ public class TestingBoard extends Board
 		if (fp.isKnown()
 			|| hasLowValue(tp)
 			|| fp.isFleeing(tp.getRank())
+			|| grid.isTrapped(tp)
 			|| (fp.getActingRankFleeLow() != Rank.NIL
 				&& fp.getActingRankFleeLow() != Rank.UNKNOWN
 				&& tp.getRank() != Rank.ONE	// Spy flees from any other piece
@@ -7627,14 +7618,13 @@ public class TestingBoard extends Board
 	}
 
 
+	// Choose the foray lane.
 	void selectForayLane()
 	{
-		if (forayLane == -1) {
-			// Choose the foray lane.
-			int maxPower = -99;
+		int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
 			int power = 0;
-			for (int y = 1; y < 4; y++)
+			for (int y = 0; y < 10; y++)
 			for (int x = 0; x < 4; x++) {
 				int i = Grid.getIndex(x + lane*3, y);
 				Piece p = getPiece(i);
@@ -7642,7 +7632,7 @@ public class TestingBoard extends Board
 					|| p.getColor() == Settings.bottomColor)
 					continue;
 
-		// Avoid pushing pieces and leaving bombs behind
+		// Avoid pushing pieces and leaving unknown bombs behind
 		// because then the bombs become obvious 
 
 				if (!p.isKnown()
@@ -7670,14 +7660,15 @@ public class TestingBoard extends Board
 				continue;
 			if (lane == 0)
 				forayLane = 0;
-			else if (lane == 1)
+			else if (lane == 1
+				&& forayLane != 4
+				&& forayLane != 5)
 				forayLane = 4 + rnd.nextInt(1);
 			else
 				forayLane = 9;
 			maxPower = power;
 
-			} // lane
-		}
+		} // lane
 	}
 
 	void markExposedPiece(Piece oppPiece)
