@@ -55,7 +55,6 @@ public class AI implements Runnable
 	private PrintWriter log;
 	static final int PV = 1;
 	static final int DETAIL = 2;
-	private int unknownNinesAtLarge;	// if the opponent still has Nines
 	private Piece lastMovedPiece;
 
 	// Static move ordering takes precedence over dynamic
@@ -535,20 +534,24 @@ public class AI implements Runnable
 
 	boolean genSafe(int i, boolean unsafe, BitGrid unsafeGrid)
 	{
+		int dir = -11;
+		if (b.bturn == Settings.bottomColor)
+			dir = 11;
+			
 		Piece p = b.getPiece(i);
 		if (p != null) {
-			if (p.getColor() != Settings.bottomColor) {
+			if (p.getColor() != 1 - b.bturn) {
 				if (unsafe
-					&& p.getColor() == Settings.topColor
+					&& p.getColor() == b.bturn 
 					&& b.isNineTarget(p))
 					return true;
 				return false;
 			} else if (p.getRank() != Rank.UNKNOWN
 				&& p.getRank() != Rank.NINE)
-				genSafe(i - 11, false, unsafeGrid);
+				genSafe(i + dir, false, unsafeGrid);
 			else
-				genSafe(i - 11, true, unsafeGrid);
-		} else if (genSafe(i - 11, unsafe, unsafeGrid)) {
+				genSafe(i + dir, true, unsafeGrid);
+		} else if (genSafe(i + dir, unsafe, unsafeGrid)) {
 			unsafeGrid.setBit(i);
 			return true;
 		}
@@ -558,8 +561,11 @@ public class AI implements Runnable
 	void genSafe(BitGrid unsafeGrid)
 	{
 		final int[] lanes = { 111, 112, 115, 116, 119, 120 };
-		for (int lane : lanes)
+		for (int lane : lanes) {
+			if (b.bturn == Settings.bottomColor)
+				lane -= 99;
 			genSafe(lane, false, unsafeGrid);
+		}
 	}
 
 	private boolean getMovablePieces(int n, BitGrid out)
@@ -665,9 +671,13 @@ public class AI implements Runnable
 		// moving to a safe square or a non-valuable piece moves
 		// to a non-safe square (blocking move).
 
+		// In version 12.0, the BitGrid is enabled for opponent
+		// suspected low ranked pieces as well, so that the
+		// opponent piece may flee or some minor intervening
+		// piece can block the AI Nine (or unknown).
+
 		BitGrid unsafeGrid = new BitGrid();
-		if (b.bturn == Settings.topColor
-			&& unknownNinesAtLarge > 0
+		if (b.unknownRankAtLarge(1-b.bturn, Rank.NINE) != 0
 			&& ns >= 2)
 			genSafe(unsafeGrid);
 
@@ -826,8 +836,6 @@ public class AI implements Runnable
 		// move history heuristic (hh)
 		for (int j=0; j < hh.length; j++)
 			hh[j] = 0;
-
-		unknownNinesAtLarge = b.unknownRankAtLarge(Settings.bottomColor, Rank.NINE);
 
 		completedDepth = 0;
 
@@ -1913,7 +1921,15 @@ public class AI implements Runnable
 		// and that cannot be determined until a new movelist
 		// is generated.  (killer move bypasses move generation).
 
-		if (bestmove != 0)
+		// An attack on the piece that just moved is not
+		// a legal move for other nodes, so ignore it
+		// if it happens to be the best move.
+
+
+		Move um = b.getLastMove(1);
+		if (bestmove != 0
+			&& (um == null
+				|| b.getLastMove(1).getTo() != Move.unpackTo(bestmove)))
 			killerMove.setMove(bestmove);
 
 		return bestValue;

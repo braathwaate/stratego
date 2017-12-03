@@ -80,6 +80,8 @@ public class Board
 	protected int[][] lowerKnownOrSuspectedRankCount = new int[2][10];
 	protected boolean[] isBombedFlag = new boolean[2];
 	protected int unknownBombs[] = new int[2];
+        protected Random rnd = new Random();
+        protected int[] forayLane = new int[2];
 
 	// generate bomb patterns
 	static int[][] bombPattern = new int[30][6];
@@ -359,7 +361,6 @@ public class Board
 	{
 		return grid.getPiece(s.getX(),s.getY());
 	}
-
 	
 	public Piece getTrayPiece(int i)
 	{
@@ -534,22 +535,6 @@ public class Board
 				&& tpo <= 3
 				&& fpo >= 6);
         }
-
-	// return true if piece is threatened
-	public boolean isThreatened(Piece tp, int i)
-	{
-		for (int d : dir) {
-			int j = i + d;
-			if (!Grid.isValid(j))
-				continue;
-			Piece p = getPiece(j);
-			if (p != null
-				&& p.getColor() == 1 - tp.getColor()
-				&& isThreat(p, tp))
-				return true;
-		}
-		return false;
-	}
 
 	// return true if chaser piece could be protected
 	public boolean isProtected(Piece chaserPiece, Piece chasedPiece)
@@ -954,19 +939,32 @@ boardHistory[1-bturn].hash,  0);
 		if (m.getPiece() != chased)
 			return;
 
-		// Do not set chase rank on a piece if all of the squares
-		// that it could move to were guarded.
-		// For example,
-		// -- R3 --
-		// xx B4 --
-		// xx -- R4
-		// -- -- --
-		// Red Three approaches suspected Blue Four.  Blue Four
-		// retreats to a square next to known Red Four.
-		// Blue Four does not acquare a chase rank of Three,
-		// but remains a Four.
+		Rank arank = chased.getActingRankChase();
+		Rank chaserRank = chaser.getApparentRank();
 
-		if (isThreatened(chased, m.getFrom())
+		// Do not reset chase rank on a trapped piece
+		// that already has a chase rank
+		// even if it wasn't chased, because it may try
+		// to make a dash for it.
+		// (Prior to version 12, chase rank would have
+		// been set unless the piece was directly threatened)
+
+		// Example 1		Example 2
+		// R3 -- --		// R? -- --
+		// xx B4 --		// xx B4 --
+		// xx -- R4		// xx -- R?
+		// -- -- --		// -- -- --
+		// 
+		// In example 1, suspected Blue Four anticipates that Red Three
+		// may approach and retreats to a square next to known Red Four.
+		// Blue Four does not acquire a chase rank of Three,
+		// but remains a Four. Example 2 is also a nervous
+		// situation for Blue Four and it may not wait to be
+		// chased, or it may have already guessed that one of
+		// the red pieces is weaker, or perhaps its other pieces
+		// are trapped as well.
+
+		if (arank != Rank.NIL
 			&& wasTrapped(chased, m.getFrom()))
 			return;
 
@@ -993,9 +991,6 @@ boardHistory[1-bturn].hash,  0);
 		// Version 11.0 clarifies this concept by restating it:
 		// A chase rank is always assigned to the chased piece
 		// unless the protector is stronger than the chaser.
-
-		Rank arank = chased.getActingRankChase();
-		Rank chaserRank = chaser.getApparentRank();
 
 		if (chaserRank != Rank.UNKNOWN)
 		for (int d : dir) {
@@ -1611,13 +1606,11 @@ boardHistory[1-bturn].hash,  0);
 				while (attackerRank > 0 && unknownRankAtLarge(chaser.getColor(), attackerRank) == 0)
 					attackerRank--;
 
-				if (attackerRank == 0)
-					return;
-
 		// Guess that the protector rank is one less than
-		// the attacker rank
+		// the attacker rank or the Spy.
 
-				r = attackerRank - 1;
+				if (attackerRank != 0)
+					r = attackerRank - 1;
 			}
 
 		// Note: Note that prior assignment of chase rank
@@ -1963,13 +1956,6 @@ boardHistory[1-bturn].hash,  0);
 		return chaseRank[r];
 	}
 
-	protected Rank getChaseRank(Rank rank, boolean rankLess)
-	{
-		if (!rankLess)
-			return getChaseRank(rank);
-		return chaseRank[rank.ordinal()];
-	}
-
 	// Until version 10.1, bluffing determination relied on a simple count
 	// of moves before the AI believed the piece was the rank
 	// indicated by its chasing behavior.  But this causes the
@@ -2140,6 +2126,20 @@ boardHistory[1-bturn].hash,  0);
 			if (rank == Rank.NIL)
 				continue;
 
+                // If the opponent is a bluffer, then
+                // the AI does not assign any suspected ranks.
+                // Otherwise, a bluffer could use any piece to thwart
+                // an AI attack.
+
+			if (blufferRisk == 5)
+				continue;
+
+                Rank suspRank;
+		if (!p.isRankLess())
+			suspRank = getChaseRank(rank);
+                else
+			suspRank = chaseRank[rank.ordinal()];
+
 		// If the piece both chased and fled from the same rank,
 		// it means that the piece is not dangerous to the
 		// same rank, so creating a lower suspected rank
@@ -2147,16 +2147,9 @@ boardHistory[1-bturn].hash,  0);
 		// suspected rank of the same rank?  But because this is
 		// unusual behavior, the piece stays Unknown.
 
-			if (rank == p.getActingRankFleeLow()
-				|| rank == p.getActingRankFleeHigh())
-				continue;
-
-                // If the opponent is a bluffer, then
-                // the AI does not assign any suspected ranks.
-                // Otherwise, a bluffer could use any piece to thwart
-                // an AI attack.
-
-			if (blufferRisk == 5)
+			if (rank != suspRank
+                                && (rank == p.getActingRankFleeLow()
+                                    || rank == p.getActingRankFleeHigh()))
 				continue;
 
 		// The AI needs time to confirm whether a suspected
@@ -2168,7 +2161,7 @@ boardHistory[1-bturn].hash,  0);
 					setSuspectedRank(p, Rank.SPY);
 
 			} else
-				setSuspectedRank(p, getChaseRank(rank, p.isRankLess()));
+				setSuspectedRank(p, suspRank);
 
 		} // for
 
@@ -2230,9 +2223,6 @@ boardHistory[1-bturn].hash,  0);
 			} // for
 
 		} // all pieces accounted for
-		else if (c == Settings.bottomColor)
-			possibleBomb();
-
 
 		int lowerRanks = 0;
 		int lowerKnownOrSuspectedRanks = 0;
@@ -2295,6 +2285,8 @@ boardHistory[1-bturn].hash,  0);
 			invincibleWinRank[c] = rank-1;
 		}
 
+                if (unknownNotSuspectedRankAtLarge(Settings.bottomColor, Rank.BOMB) > 0)
+                    possibleBomb(Settings.bottomColor);
 		genUnknownWeakRankAtLarge();
 
 		possibleFlag();
@@ -2307,7 +2299,10 @@ boardHistory[1-bturn].hash,  0);
 	// reset the piece rank to Bomb so that the AI pieces
 	// will not want to attack it.
 
-	// The ai considers all isolated unmoved pieces to be bombs.
+	// The AI considers isolated unmoved pieces to be bombs.
+        // A piece is isolated if all of its forward and side neighbors
+        // are known or have moved.   Thus an isolated piece may
+        // still have an adjacent unknown piece directly below it.
 	//
 	// So one way to fool the AI is to make the flag
 	// isolated on the front rank (by moving all pieces that
@@ -2316,11 +2311,22 @@ boardHistory[1-bturn].hash,  0);
 	// opponents will ever realize this without reading this code.
 	//
 
-	private void possibleBomb()
+	private void possibleBomb(int c)
 	{
 		for (int i = 78; i <= 120; i++) {
 			if (!Grid.isValid(i))
 				continue;
+
+        // If the square is below the lakes,
+        // wait until the One or Two are discovered or suspected
+        // because often these low ranks hide below the lakes
+        // and do not move unless needed.
+
+                        if ((i == 80 || i == 81 || i == 84 || i == 85
+                            || i == 91 || i == 92 || i == 95 || i == 96)
+				&& lowerRankCount[c][2] - lowerKnownOrSuspectedRankCount[c][2] == 2)
+                            continue;
+
 			Piece tp = getPiece(i);
 			if (tp != null
 				&& tp.getRank() == Rank.UNKNOWN
@@ -2363,6 +2369,59 @@ boardHistory[1-bturn].hash,  0);
 		return true;
 	}
 
+	// Choose the foray lane.
+	void selectForayLane(int color)
+	{
+		int maxPower = -99;
+		for (int lane = 0; lane < 3; lane++) {
+			int power = 0;
+			for (int y = 0; y < 10; y++)
+			for (int x = 0; x < 4; x++) {
+				int i = Grid.getIndex(x + lane*3, y);
+				Piece p = getPiece(i);
+				if (p == null
+					|| p.getColor() != color)
+					continue;
+
+		// Avoid pushing pieces and leaving unknown bombs behind
+		// because then the bombs become obvious 
+
+				if (!p.isKnown()
+					&& p.getRank() == Rank.BOMB)
+					power-= y;
+
+		// The Spy does not foray and cannot be exposed
+
+				else if (p.getRank() == Rank.SPY)
+					power-= y;
+
+		// Need some powerful pieces for the foray to succeed.
+		// We are counting on having a superior rank advantage
+		// in the area because we are going
+		// to ignore any opponent attempts at bluffing.
+
+				else if (p.getRank() == Rank.FOUR)
+					power++;
+				else if (p.getRank() == Rank.THREE)
+					power+=2;
+				else if (p.getRank() == Rank.TWO)
+					power+=3;
+			}
+			if (power < maxPower)
+				continue;
+			if (lane == 0)
+				forayLane[color] = 0;
+			else if (lane == 1
+				&& forayLane[color] != 4
+				&& forayLane[color] != 5)
+				forayLane[color] = 4 + rnd.nextInt(1);
+			else
+				forayLane[color] = 9;
+			maxPower = power;
+
+		} // lane
+	}
+
 	// Scan the board setup for suspected flag pieces.
 	//
 	// This code is designed primarily to detect the opponent flag,
@@ -2377,6 +2436,8 @@ boardHistory[1-bturn].hash,  0);
 	protected void possibleFlag()
 	{
 		for (int c = RED; c <= BLUE; c++) {
+
+                forayLane[1-c] = -1;
 
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
@@ -2645,6 +2706,13 @@ boardHistory[1-bturn].hash,  0);
 	{
 		int size = 0;
 		int bestGuess = 99;
+
+        // For starters, the flag is guessed to be in the foray lane
+        // because thats where the action is headed, and we don't
+        // want to be mislead elsewhere until we know its not there.
+
+                selectForayLane(1-color);
+
 		for (int i = 0; i < maybe_count; i++) {
 
 		// patterns closest to the back row are much more plausible
@@ -2655,12 +2723,14 @@ boardHistory[1-bturn].hash,  0);
 				break;
 
 			int nb;
+                        int inForayLane = 0;
 
 		// compute the number of bombs in the structure
 
 			for (nb = 1; maybe[i][nb] != 0; nb++) {
 
-				Piece p = getPiece(maybe[i][nb]);
+                                int j = maybe[i][nb];
+				Piece p = getPiece(j);
 
 		// A structure that had a bomb removed is the
 		// best guess, unless there is still a structure
@@ -2679,18 +2749,13 @@ boardHistory[1-bturn].hash,  0);
 					nb = 10;
 					break;
 				}
+
+                                if (forayLane[1-color]/4 == Grid.getX(j)/4)
+                                    inForayLane++;
+
 			}
 			nb--;
-
-		// add more for possible extended bomb structures
-
-			int start = i;
-			while (i < maybe_count - 1
-				&& Math.abs(maybe[i][0] - maybe[i+1][0]) == 1) {
-				i++;
-				nb++;
-			}
-
+                        nb -= inForayLane;
 
 		// The AI examines the opponent setup for possible sentries
 		// left near the structures.  If the opponent had guarded
@@ -2717,7 +2782,7 @@ boardHistory[1-bturn].hash,  0);
 
 			int guards = 1;
 			for (int j = 12; j <= 120; j++)
-				if (Grid.steps(maybe[start][0], j) == 2) {
+				if (Grid.steps(maybe[i][0], j) == 2) {
 					Piece p = getSetupPiece(j);
 					if (p != null
 						&& p.getRank() != Rank.BOMB) {
@@ -2731,7 +2796,7 @@ boardHistory[1-bturn].hash,  0);
 			nb = nb * 100 /guards;
 			if (bestGuess == 99
 				|| nb < size) {
-				bestGuess = start;
+				bestGuess = i;
 				size = nb;
 			}
 
@@ -2759,9 +2824,9 @@ boardHistory[1-bturn].hash,  0);
 			assert Grid.isValid(maybe[bestGuess][j]) : maybe[bestGuess][j] + " is not valid ";
 			Piece p = getPiece(maybe[bestGuess][j]);
 			if (p == null
-				|| !(p.getRank() == Rank.BOMB
-					|| p.getRank() == Rank.FLAG
-					|| p.getRank() == Rank.UNKNOWN)
+				|| !(p.getApparentRank() == Rank.BOMB
+					|| p.getApparentRank() == Rank.FLAG
+					|| p.getApparentRank() == Rank.UNKNOWN)
 				|| p.hasMoved()) {
 				isBombedFlag[color] = false;
 				continue;
@@ -2802,7 +2867,8 @@ boardHistory[1-bturn].hash,  0);
 			} else {
 
 		// color is AI
-				if (p.getRank() == Rank.BOMB
+				if ((p.getRank() == Rank.BOMB
+                                        || p.getRank() == Rank.FLAG)
 					&& maybe_count == 1) {
 					p.makeKnown();
 					grid.clearMovablePiece(p);

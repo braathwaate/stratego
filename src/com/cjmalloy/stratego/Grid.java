@@ -196,22 +196,9 @@ public class Grid
 		return pieceBitGrid[p.getColor()].xorMask(neighbor[0][i]);
 	}
 
-	public int moveCount(Piece p)
+	public int moveCount(int color, int i)
 	{
-		int i = p.getIndex();
-		return pieceBitGrid[p.getColor()].xorBitCount(neighbor[0][i]);
-	}
-
-	public int oppMoveCount(Piece p)
-	{
-		int i = p.getIndex();
-		return pieceBitGrid[1-p.getColor()].xorBitCount(neighbor[0][i]);
-	}
-
-	// If a piece has only one move, it is trapped
-	public boolean isTrapped(Piece p)
-	{
-		return oppMoveCount(p) == 1;
+		return pieceBitGrid[color].xorBitCount(neighbor[0][i]);
 	}
 
 	public boolean hasAttack(int turn, int i)
