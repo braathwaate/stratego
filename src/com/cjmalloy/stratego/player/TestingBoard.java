@@ -648,7 +648,7 @@ public class TestingBoard extends Board
 		if (isWinning(c) < 0)
 			return;
 
-		int count = 0;
+		int count = 0;  // number of unknown moved expendable ranks
 		for (int i=12;i<=120;i++) {
 			Piece p = getPiece(i);
 			if (p == null || p.getColor() != c)
@@ -656,18 +656,37 @@ public class TestingBoard extends Board
 			if (!isExpendable(p)
 				|| p.isKnown())
 				continue;
-			if (p.hasMoved()
-				&& p.getRank().ordinal() <= needExpendableRank)
-				return;
+			if (p.hasMoved()) {
+				if (p.getRank().ordinal() <= needExpendableRank)
+                                    return;
+                                count++;
+                        }
 		}
 
-		// if there are not any strong unknown expendable in motion
-		// set the neededRank.  The search tree will
+		for (int r = 2; r <= 9; r++) {
+
+                // The AI tries to keep its expendable pieces
+                // unmoved except when needed, because it makes it
+                // harder for the opponent to guess the flag and bombs
+                // and a moved piece is fair game to attack.
+                // A rank equal or lower than needExpendableRank
+                // has been requested.   But if those ranks are buried
+                // (perhaps behind bombs), then the request can never
+                // be serviced.   So the AI always tries to have
+                // at least one unknown moved expendable rank in play,
+                // even if it isn't the desired rank, because these
+                // pieces are useful for bluffing.
+
+                        if (r > needExpendableRank
+                            && count != 0)
+                            return;
+
+		// Set the neededRank.  The search tree will
 		// move the rank that can make the most progress.
 
-		for (int r = 2; r <= needExpendableRank; r++)
 			if (isExpendable(c,r))
 				setNeededRank(c,r);
+                }
 	}
 
 	// Perhaps the key and most complex decision in Stratego is whether
@@ -1977,7 +1996,16 @@ public class TestingBoard extends Board
 					|| chasedRank == 1 && hasSpy(1-p.getColor())))
 				continue;
 
-			int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
+                // Prior to Version 12, the AI waited for a unguarded open
+                // path to send the piece, and now it looks for any
+                // unguarded path, so that the AI invincible piece will move
+                // towards its goal, even if blocked by its own pieces.
+                // This seems to get the AIs invincible pieces quicker
+                // to the rescue or attack, although it can result in
+                // stacking problems when the AI has multiple invincible
+                // pieces.
+
+			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.toRank(j));
 
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
 				|| stealthValue(1-p.getColor(), j) <= values[p.getColor()][unknownRank[p.getColor()]]) {

@@ -560,7 +560,7 @@ public class Board
 			if (p.isKnown()
 				&& chaserPiece.isKnown()
 				&& p.getRank().ordinal()
-					>= chaserPiece.getRank().ordinal()-2)
+					> chaserPiece.getRank().ordinal()-2)
 				continue;
 
 			 if (isThreat(p, chasedPiece))
