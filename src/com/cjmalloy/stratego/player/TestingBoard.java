@@ -373,7 +373,7 @@ public class TestingBoard extends Board
                 // to remove it.
 
 				if (unmovedValue[i] >= aiBombValue(p))
-					attackFlagStructure(p.getColor(), i);
+					attackFlagStructure(p);
 				continue;
 			}
 		
@@ -1550,11 +1550,14 @@ public class TestingBoard extends Board
         // be any unknown piece, including a Miner.  The Unknown is
         // sent along the open path and the Miner along the guarded path.
 
-	protected void attackFlagStructure(int bombColor, int j)
+	protected void attackFlagStructure(Piece bomb)
 	{
+            int bombColor = bomb.getColor();
+            int j = bomb.getIndex();
             int destTmp[] = genDestTmp(GUARDED_OPEN, bombColor, j);
 
-        // Find a guard near the flag and chase it off with the Unknown
+        // Find the weakest guard near the flag
+        // and chase it off with an Unknown.
         // If there is no guard, then just send the one Miner on a mad dash
         // towards the flag.
 
@@ -1563,14 +1566,18 @@ public class TestingBoard extends Board
                 if (Grid.steps(i, j) > 3)
                     continue;
                 Piece p = getPiece(i);
-                if (p == null || p.getColor() != bombColor)
+                if (p == null
+                    || p.getColor() != bombColor
+                    || !p.hasMoved())
                     continue;
                 if (tp == null
-                    || p.getRank().ordinal() < tp.getRank().ordinal())
+                    || p.getRank().ordinal() > tp.getRank().ordinal())
                     tp = p;
             }
 
             if (tp != null) {
+                if (isInvincibleDefender(tp))
+                    tp = bomb;
                 chaseWithUnknown(planAPiece, tp, destTmp, DEST_PRIORITY_ATTACK_FLAG);
                 chaseWithUnknown(planBPiece, tp, destTmp, DEST_PRIORITY_ATTACK_FLAG);
             }
@@ -1591,10 +1598,14 @@ public class TestingBoard extends Board
 
 	protected void chaseWithUnknown(Piece[][] plan, Piece p, int tmp[], int priority)
 	{
+		assert !isInvincibleDefender(p) : "Do not chase an invincible rank " + p.getRank() + " with unknowns!";
+
 		boolean found = false;
 		int valuableRank = 0;
 		int valuableRankValue = 0;
 		for ( int r = 1; r <= 10; r++) {
+                        if (unknownRankAtLarge(1-p.getColor(), r) == 0)
+                            continue;
 			Piece a = plan[1-p.getColor()][r-1];
 			if (a != null) {
 				if (a.isKnown())
@@ -1655,8 +1666,6 @@ public class TestingBoard extends Board
 
 	protected void chaseWithUnknown(Piece p, int tmp[])
 	{
-		assert !isInvincibleDefender(p) : "Do not chase an invincible rank " + p.getRank() + " with unknowns!";
-
 		// Chase the opponent Two and Three
 		// at high priority if the opponent has not yet divulged
 		// the location of its Spy or One.  This may also
@@ -2205,7 +2214,7 @@ public class TestingBoard extends Board
 			int bi = flagi + d;
 			Piece bp = getPiece(bi);
 			if (bp != null && bp.getRank() == Rank.BOMB)
-				attackFlagStructure(color, bi);
+				attackFlagStructure(bp);
 		}
 
 		// destTmp[] is created with GUARDED_OPEN.
@@ -4916,10 +4925,47 @@ public class TestingBoard extends Board
 						if (foray)
 							fpvalue /= 2;
 					}
-				}
 
-				int v = unknownValue(fp, tp);
-				vm += v - fpvalue;
+                                        vm += unknownValue(fp, tp) - fpvalue;
+				} else
+
+		// Prior to version 9.7, if the AI attacked an unknown
+		// unmoved piece, the tpvalue was reduced
+		// by the number of pieces remaining, because it was thought
+		// that the likelyhood that the piece is a bomb increases
+		// as the pieces become fewer.  This fixed the bug
+		// where lowestUnknownExpendableRank is the Spy (the
+		// last unknown piece on the board), so the value of
+		// a moved Unknown would be the Spy.  This caused the AI
+		// to slam into unknown pieces thinking that they were
+		// the spy, but were just bombs.
+		//
+		// However, this violated the rule that UNK must return
+		// a more favorable value than LOSES.  Thus if an AI
+		// piece was forced between a sure loss and slamming into
+		// an unknown piece, it chose the sure loss.
+		//
+		// Furthermore, it is not true that the risk of attacking
+		// an unknown unmoved piece increases as the number of pieces
+		// are removed from the board, because as the game progresses,
+		// the AI identifies the suspected rank of bomb pieces, so
+		// the risk actually remains constant.
+		//
+		// So the aforementioned bug must be fixed in a different
+		// manner.
+		//
+		// But what value should the AI receive for attacking
+                // an unmoved piece?
+		// At minimum, the AI should expect to get only the minimum
+		// piece stealth value and lose its piece.
+
+		// The problem is a guessing game.
+		// Perhaps the unknown piece is not a bomb.
+		// Perhaps the AI has correctly guessed all the bomb locations,
+		// so the remaining unmoved pieces are fair game?
+
+                                        vm += Math.min(2*valueStealth[1-fpcolor][Rank.BOMB.ordinal()-1], stealthValue(1-fpcolor, unknownRank[1-fpcolor])) + riskOfWin(fp, tp) + unmovedValue[tp.getIndex()] - fpvalue;
+
 
 		// What should happen to the ai piece
 		// after an attack on an unknown piece?
@@ -5413,9 +5459,6 @@ public class TestingBoard extends Board
 			fprank = 9;
 		tpvalue += values[fp.getColor()][fprank] / 6;
 		tpvalue += riskOfWin(fp, tp);
-
-		if (!tp.hasMoved())
-			tpvalue += unmovedValue[tp.getIndex()];
 
 		return tpvalue;
 	}
@@ -7536,67 +7579,11 @@ public class TestingBoard extends Board
 
                 int fpvalue = pieceValue(fp);
 		int v = fpvalue/ 5;
-		if (tp.hasMoved())
+		if (tp.hasMoved()
+                    && !(tp.getActingRankChase() == Rank.UNKNOWN
+                        && fp.getRank().ordinal() >= 7))
 			v += fpvalue/ 5;
 		else {  // tp is unmoved
-
-		// Prior to version 9.7, if the AI attacked an unknown
-		// unmoved piece, the tpvalue was reduced
-		// by the number of pieces remaining, because it was thought
-		// that the likelyhood that the piece is a bomb increases
-		// as the pieces become fewer.  This fixed the bug
-		// where lowestUnknownExpendableRank is the Spy (the
-		// last unknown piece on the board), so the value of
-		// a moved Unknown would be the Spy.  This caused the AI
-		// to slam into unknown pieces thinking that they were
-		// the spy, but were just bombs.
-		//
-		// However, this violated the rule that UNK must return
-		// a more favorable value than LOSES.  Thus if an AI
-		// piece was forced between a sure loss and slamming into
-		// an unknown piece, it chose the sure loss.
-		//
-		// Furthermore, it is not true that the risk of attacking
-		// an unknown unmoved piece increases as the number of pieces
-		// are removed from the board, because as the game progresses,
-		// the AI identifies the suspected rank of bomb pieces, so
-		// the risk actually remains constant.
-		//
-		// So the aforementioned bug must be fixed in a different
-		// manner.  And instead, vm is debited a token amount so
-		// that if the AI is forced into a choice between attacking
-		// a moved unknown or an unmoved unknown, it will chose
-		// the moved unknown.
-		//
-		// (Note: the token amount must be less than the difference
-		// between adjacent opponent stealth values.
-		// For example, R4xB?(3) is LOSES, but gains the stealth value
-		// of a Three.  R4x(?unmoved) is UNK, but gains the
-		// stealth value of a Two.  This is a difference of only
-		// a few points.
-		//
-		// In Version 11, if an AI piece
-		// is forced between a choice between attacking a moved
-		// or unmoved piece, the lines of code above:
-		//	if (isFleeing(fp, tp)
-		//		&& tp.hasMoved())
-		//		fpvalue = 0;
-		// means attacking the moved piece is always preferred
-		// (recall that all adjacent pieces that fail to attack are fleeing).
-
-		// But what value should the AI receive for attacking
-                // an unmoved piece?
-		// Realistically, the AI should expect to get only the minimum
-		// unknown piece value and possibly lose its piece if the
-                // unmoved piece turns out to be a bomb.
-
-		// The problem is a guessing game.  Perhaps the chaser is
-                // bluffing?
-		// Perhaps the unknown piece is not a bomb and the chased piece
-		// can get away?   Perhaps the AI is so sure of the chaser rank
-		// that it may as well try its luck by attacking unmoved pieces.
-		// Perhaps the AI has correctly guessed all the bomb locations,
-		// so the remaining unmoved pieces are fair game?
 
                     if (tp.getRank() != Rank.BOMB)
 			v += fpvalue/ 10;
