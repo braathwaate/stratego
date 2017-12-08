@@ -2313,6 +2313,34 @@ boardHistory[1-bturn].hash,  0);
 
 	private void possibleBomb(int c)
 	{
+
+            // Front row pieces in lanes that do not move
+            // may be bombs, or at least unlikely to move,
+            // so should be attacked with 7-9 to confirm.
+
+            final int lanes[] = { 78, 79, 82, 83, 86, 87 };
+            Piece tp1 = null;
+            Piece tp2 = null;
+            int frontMoved = 0;
+            for (int lane : lanes) {
+                Piece tp = getPiece(lane);
+                if (tp == null
+                    || tp.getRank() != Rank.UNKNOWN
+                    || tp.hasMoved())
+                    frontMoved++;
+                else {
+                    tp2 = tp1;
+                    tp1 = tp;
+                }
+            }
+
+            if (frontMoved == 4) {
+                    tp1.setSuspectedRank(Rank.BOMB);
+                    tp2.setSuspectedRank(Rank.BOMB);
+            } else if (frontMoved == 5)
+                    tp1.setSuspectedRank(Rank.BOMB);
+            
+
 		for (int i = 78; i <= 120; i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -2334,7 +2362,7 @@ boardHistory[1-bturn].hash,  0);
 				int found = 0;
 				for ( int d : dir ) {
 					int j = i + d;
-					if (!Grid.isValid(j) || d == 11)
+					if (!Grid.isValid(j))
 						continue;
 					Piece p = getPiece(j);
 
@@ -2369,11 +2397,27 @@ boardHistory[1-bturn].hash,  0);
 		return true;
 	}
 
+        protected boolean isBombedLane(int lane)
+        {
+            int i = Grid.getIndex(lane*4, 6);
+            Piece p1 = getPiece(i);
+            Piece p2 = getPiece(i+1);
+            return (p1 != null
+                && p2 != null
+                && p1.getRank() == Rank.BOMB
+                && p2.getRank() == Rank.BOMB);
+        }
+
 	// Choose the foray lane.
 	void selectForayLane(int color)
 	{
+                if (hasFewWeakRanks(1-color, 5))
+                        return;
+
 		int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
+                        if (isBombedLane(lane))
+                            continue;
 			int power = 0;
 			for (int y = 0; y < 10; y++)
 			for (int x = 0; x < 4; x++) {
@@ -2437,7 +2481,7 @@ boardHistory[1-bturn].hash,  0);
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
-                forayLane[1-c] = -1;
+                forayLane[1-c] = -99;
 
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
@@ -2535,14 +2579,14 @@ boardHistory[1-bturn].hash,  0);
 
 			for (int i = 0; i < maybe_count[c]; i++)
 				if (usualFlagLocation(c, maybe[i][0]))
-					genDestBombedFlag(maybe, maybe_count[c], open_count[c], i);
+					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
 
 		// Pick the structure that looks most likely and
 		// mark it as containing the flag.
 
 			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
 
-			genDestBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
+			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
 				flag[c] = maybe[bestGuess][0];
 				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
@@ -2736,7 +2780,8 @@ boardHistory[1-bturn].hash,  0);
 		// best guess, unless there is still a structure
 		// on the back row.
 
-				if (p == null)
+				if (p == null
+                                    || p.hasMoved())
 					return i;
 
 		// If the one of the possible bombs has a chase rank
@@ -2785,6 +2830,7 @@ boardHistory[1-bturn].hash,  0);
 				if (Grid.steps(maybe[i][0], j) == 2) {
 					Piece p = getSetupPiece(j);
 					if (p != null
+                                                && p.getColor() == color
 						&& p.getRank() != Rank.BOMB) {
 						if (p.getRank().ordinal() <= 3)
 							guards += 2;
@@ -2805,7 +2851,7 @@ boardHistory[1-bturn].hash,  0);
 	}
 
 
-	private void genDestBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
+	private void markBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
 	{
 		int flagi = maybe[bestGuess][0];
 		Piece flagp = getPiece(flagi);
