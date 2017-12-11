@@ -4191,11 +4191,8 @@ public class TestingBoard extends Board
 		// Unknown AI pieces also have bluffing value
 
 				if (depth != 0
-					&& (!isInvincible(tp)
-						|| (tprank == Rank.ONE
-							&& hasSpy(Settings.topColor)))
 					&& !unknownScoutFarMove
-					&& isEffectiveBluff(fp, tp)) {
+					&& isEffectiveBluffLoses(fp, tp)) {
 						vm = Math.max(vm,  valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 				} else
@@ -4237,11 +4234,8 @@ public class TestingBoard extends Board
 		// of an unknown protector piece is irrelevant.
 		//
 					if (depth != 0
-						&& (!isInvincible(tp)
-							|| (tprank == Rank.ONE
-								&& hasSpy(fpcolor)))
 						&& !unknownScoutFarMove
-						&& isEffectiveBluff(fp, tp)) {
+						&& isEffectiveBluffLoses(fp, tp)) {
 						vm += Math.max(stealthValue(tp), valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 						break;
@@ -4251,35 +4245,7 @@ public class TestingBoard extends Board
 		// the opponent expects that whatever the AI piece rank,
 		// it is lost.
 
-		// Bombs could have a zero value, so when
-		// the AI considers Bx?, it must return a realistic
-		// negative value like a movable AI piece.  Fx? must also
-		// return a realistic value rather than its flag value,
-		// because Fx? is not a move the AI can make.  This is
-		// important in the case where tp is invincible,
-		// because all attacks on the invincible piece are futile
-		// and therefore is not deterred in passing an unknown AI
-		// piece, even if the opponent has stealth.
-		//
-		// Note that setPiece(fp, from) is called as well
-		// as setPiece(tp, to) so both pieces remain.
-		// If the Bomb or Flag disappeared like
-		// other pieces, then the opponent could not attack it
-		// and gain its value.
-
-					if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
-
-		// TBD: If the AI doesn't have any unknown ranks,
-		// then the bombs and flag really should be known,
-		// and cleared from movable pieces,
-		// but this happened, and caused an assert failure
-		// in pieceValue();
-						if (unknownRank[fpcolor] != Rank.UNKNOWN.ordinal())
-							vm -= pieceValue(fpcolor, unknownRank[fpcolor]);
-						setPiece(fp, from);
-						setPiece(tp, to);
-						break;
-					}
+					assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : fprank + " attacks " + tp.getRank() + " only with an effective bluff (" + isEffectiveBluff(fp, tp) + "," + fp.isKnown() + "," + isInvincible(tp) + "," + fp.isFleeing(tp.getRank()) + "," + (!fp.hasMoved() && isFlagBombAtRisk(tp)) + "," +  hasLowValue(tp) + "," + (grid.moveCount(tp.getColor(), tp.getIndex()) == 1) + ")";
 
 					vm += stealthValue(tp);
 		
@@ -5597,6 +5563,14 @@ public class TestingBoard extends Board
 
 		return true;
 	}
+
+	public boolean isEffectiveBluffLoses(Piece fp, Piece tp)
+	{
+            return (!isInvincible(tp)
+                || (tp.getRank() == Rank.ONE
+                    && hasSpy(fp.getColor()))
+                && isEffectiveBluff(fp, tp));
+        }
 
 	// It is always risky to bluff by pushing an unknown piece
 	// towards an opponent piece of superior rank.

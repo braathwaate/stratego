@@ -932,8 +932,9 @@ boardHistory[1-bturn].hash,  0);
 
 	void setDirectChaseRank(Piece chaser, Piece chased, int i)
 	{
-		if (chased.isKnown())
-			return;
+		if (chased.isKnown()
+                    || chased.isFleeing(chaser.getRank()))        // ha ha
+		    return;
 
 		Move m = getLastMove();
 		if (m.getPiece() != chased)

@@ -432,18 +432,6 @@ public class AI implements Runnable
 		} // d
 	}
 
-	public void getAttackMoves(ArrayList<Integer> moveList, int i)
-	{
-		for (int d : dir ) {
-			int t = i + d ;
-			Piece tp = b.getPiece(t);
-
-			if (tp != null
-				&& tp.getColor() == 1 - b.bturn)
-				addMove(moveList, i, t);
-		} // d
-	}
-
 	// n > 0: prune off inactive moves
 	// n = 0; no pruning
 	// n < 0: prune off active moves
@@ -479,8 +467,19 @@ public class AI implements Runnable
                 // thus limiting their scope of travel to immediate
                 // attack.
 
-			if (b.grid.hasAttack(b.bturn, i))
-				getAttackMoves(moveList[ACTIVE], i);
+			if (b.grid.hasAttack(b.bturn, i)) {
+                            for (int d : dir ) {
+                                    int t = i + d ;
+                                    Piece tp = b.getPiece(t);
+
+                                    if (tp != null
+                                            && tp.getColor() == 1 - b.bturn
+                                            && !(b.bturn == Settings.topColor && !b.isEffectiveBluffLoses(fp, tp))) {
+                                            addMove(moveList[ACTIVE], i, t);
+                                            log("addBombMove" + tp.getRank() + " " + b.pieceValue(tp));
+                                    }
+                            } // d
+                        }
 			return false;
 		}
 
@@ -532,7 +531,7 @@ public class AI implements Runnable
 		return false;
 	}
 
-	boolean genSafe(int i, boolean unsafe, BitGrid unsafeGrid)
+	boolean genSafe(int i, boolean unsafe, BitGrid unprunedGrid)
 	{
 		int dir = -11;
 		if (b.bturn == Settings.bottomColor)
@@ -548,28 +547,53 @@ public class AI implements Runnable
 				return false;
 			} else if (p.getRank() != Rank.UNKNOWN
 				&& p.getRank() != Rank.NINE)
-				genSafe(i + dir, false, unsafeGrid);
+				genSafe(i + dir, false, unprunedGrid);
 			else
-				genSafe(i + dir, true, unsafeGrid);
-		} else if (genSafe(i + dir, unsafe, unsafeGrid)) {
-			unsafeGrid.setBit(i);
+				genSafe(i + dir, true, unprunedGrid);
+		} else if (genSafe(i + dir, unsafe, unprunedGrid)) {
+			unprunedGrid.setBit(i);
 			return true;
 		}
 		return false;
 	}
 
-	void genSafe(BitGrid unsafeGrid)
+	void genSafe(BitGrid unprunedGrid)
 	{
 		final int[] lanes = { 111, 112, 115, 116, 119, 120 };
 		for (int lane : lanes) {
 			if (b.bturn == Settings.bottomColor)
 				lane -= 99;
-			genSafe(lane, false, unsafeGrid);
+			genSafe(lane, false, unprunedGrid);
 		}
 	}
 
+        void addLastMovedPiece(BitGrid unpruned, BitGrid pruned)
+        {
+            // Make certain that the last piece that moved will
+            // not be pruned off, which happens with the best
+            // pruned move because it is outside the pruning area.
+            // This is particularly important to protect the
+            // bomb structure from an incoming attacker.
+
+            Move m2 = b.getLastMove(2);
+            if (m2 != null) {
+                Piece p = b.getPiece(m2.getTo());
+                if (p == m2.getPiece()
+                    && p.getRank() != Rank.BOMB
+                    && p.getRank() != Rank.FLAG) {
+                    unpruned.setBit(m2.getTo());
+                    pruned.clearBit(m2.getTo());
+                }
+            }
+        }
+
 	private boolean getMovablePieces(int n, BitGrid out)
 	{
+		if (n == 0) {
+			b.grid.getMovablePieces(b.bturn, out);
+                        return false;
+                }
+
 		// FORWARD PRUNING
 		// deep chase search
 		// Only examine moves where player and opponent
@@ -676,38 +700,28 @@ public class AI implements Runnable
 		// opponent piece may flee or some minor intervening
 		// piece can block the AI Nine (or unknown).
 
-		BitGrid unsafeGrid = new BitGrid();
+		BitGrid unprunedGrid = new BitGrid();
 		if (b.unknownRankAtLarge(1-b.bturn, Rank.NINE) != 0
 			&& ns >= 2)
-			genSafe(unsafeGrid);
+			genSafe(unprunedGrid);
 
 		// Never prune off a move to the last square, because
 		// it may be an unoccupied "ghost" square. See TestingBoard.
 		Move m = b.getLastMove(1);
 		if (m != null)
-			unsafeGrid.setBit(m.getTo());
-
-		// Make certain that the last piece that moved will
-		// not be pruned off, which happens with the best
-		// pruned move because it is outside the pruning area.
-		// This is particularly important to protect the
-		// bomb structure from an incoming attacker.
-		Move m2 = b.getLastMove(2);
-		if (m2 != null)
-			unsafeGrid.setBit(m2.getFrom());
+			unprunedGrid.setBit(m.getTo());
 
 		// Scan the board for movable pieces inside the active area
-
-		if (n == 0)
-			b.grid.getMovablePieces(b.bturn, out);
-		else if (n > 0) {
-			b.grid.getMovablePieces(b.bturn, ns, unsafeGrid, out);
-			BitGrid bgp = new BitGrid();
-			b.grid.getPrunedMovablePieces(b.bturn, ns, unsafeGrid, bgp);
-			if (bgp.get(0) != 0 || bgp.get(1) != 0)
+		if (n > 0) {
+                        BitGrid pruned = new BitGrid();
+			b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, out, pruned);
+                        addLastMovedPiece(out, pruned);
+			if (pruned.get(0) != 0 || pruned.get(1) != 0)
 				return true;
 		} else {
-			b.grid.getPrunedMovablePieces(b.bturn, ns, unsafeGrid, out);
+                        BitGrid unpruned = new BitGrid();
+			b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, unpruned, out);
+                        addLastMovedPiece(unpruned, out);
 		}
 		return false;
 	}
@@ -1135,9 +1149,9 @@ public class AI implements Runnable
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
 
-			boolean noFlee = (fprank == Rank.BOMB
+			boolean isBombOrFlag = (fprank == Rank.BOMB
 				|| fprank == Rank.FLAG);
-
+                        boolean noFlee = isBombOrFlag;
 			for (int d : dir ) {
 				int t = i + d;	
 
@@ -1150,7 +1164,10 @@ public class AI implements Runnable
 					b.pushFleeMove(fp);
 					noFlee = true;
 
-				} else if (tp.getColor() != 1 - b.bturn)
+				} else if (tp.getColor() != 1 - b.bturn
+                                    || (isBombOrFlag
+                                            && b.bturn == Settings.topColor
+                                            && !b.isEffectiveBluffLoses(fp,tp)))
 					continue;
 				else {
 					boolean wasKnown = tp.isKnown();
@@ -1526,27 +1543,20 @@ public class AI implements Runnable
 		return max;
 	}
 
-	boolean isValidMove(int move)
-	{
-		int from = Move.unpackFrom(move);
-		int to = Move.unpackTo(move);
-		Piece fp = b.getPiece(from);
-		Piece tp = b.getPiece(to);
-		if (fp == null
-			|| fp.getColor() != b.bturn
-			|| (tp != null && tp.getColor() == b.bturn)
-			|| (fp.isKnown()
-				&& (fp.getRank() == Rank.BOMB
-					|| fp.getRank() == Rank.FLAG)))
-			return false;
-		return true;
-	}
-
-	boolean isValidDest(int to)
+	boolean isValidMove(int from, int to)
 	{
 		Piece tp = b.getPiece(to);
-		if (tp != null && tp.getColor() == b.bturn)
+		if (tp != null) {
+                    if (tp.getColor() == b.bturn)
 			return false;
+                    Piece fp = b.getPiece(from);
+                    Rank rank = fp.getRank();
+		    if ((rank == Rank.BOMB
+                         || rank == Rank.FLAG)
+                            && (b.bturn == Settings.topColor
+                               && !b.isEffectiveBluffLoses(fp, tp)))
+                        return false;
+                }
 		return true;
 	}
 
@@ -1556,7 +1566,8 @@ public class AI implements Runnable
 		int to = Move.unpackTo(move);
 
 		if (Grid.isAdjacent(from, to))
-			return isValidDest(to) && bg.testBit(from);
+			return bg.testBit(from)
+                            && isValidMove(from, to);
 
 		// Test for a valid scout move
 		// (Note: Scout moves need not be inside the bg pruning area).
