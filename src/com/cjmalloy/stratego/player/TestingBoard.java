@@ -213,6 +213,8 @@ public class TestingBoard extends Board
 	protected int[] unknownRank = new int[2];
 	public int depth = -1;
 	protected int needExpendableRank;
+        protected ArrayList<Piece> ghostPieceStack = new ArrayList<Piece>();
+        protected Piece ghostPiece = null;
 
 // Silly Java warning:
 // Java won't let you declare a typed list array like
@@ -1583,7 +1585,8 @@ public class TestingBoard extends Board
             }
 
             int destTmp2[] = genDestTmpGuardedOpen(bombColor, j, Rank.EIGHT);
-            genPlanB(destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG);
+            genNeededPlanA(false, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG);
+            genPlanB(false, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG);
 	}
 
 	protected void chaseWithExpendable(Piece p, int i, int priority)
@@ -1698,6 +1701,8 @@ public class TestingBoard extends Board
 		}
 
 		if (p.isKnown() || p.isSuspectedRank()) {
+assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p.isKnown() + " " + p.isSuspectedRank();
+
 		// no point in chasing a Nine because
 		// it can easily get away
 			if (p.getRank() == Rank.NINE)
@@ -3849,7 +3854,7 @@ public class TestingBoard extends Board
 		//
 		// Version 10.4 extended this concept to other EVEN exchanges.
 
-			if (m2 != null
+			if (m2 != UndoMove.NullMove
 				&& m2.getTo() == to
 				&& depth != 0
 				&& !unknownScoutFarMove) {
@@ -3867,6 +3872,7 @@ public class TestingBoard extends Board
 
 			} // fp is AI
 
+/*
 		// If an AI piece disappeared from the board on the last move
 		// by attacking an unknown (or suspected) opponent piece,
 		// it is possible that the AI piece could have actually won
@@ -3880,18 +3886,33 @@ public class TestingBoard extends Board
 				&& (!fp.isKnown()
 					|| m2.getPiece().getRank().ordinal() > fprank.ordinal()))
 					vm += pieceValue(m2.getPiece())/2;
+*/
 
 		// Take the wind out of the sails of alternating moves
 
 			if (alternateSquares[to][0] == fp.boardPiece())
 				vm -= DEST_PRIORITY_DEFEND_FLAG / 2;
 
+                // A known piece is not safe
+                // unless it was just attacked on the last move
+                // For example,
+                // -- R3 --
+                // xx -- -- xx
+                // xx B6 -- xx
+                // B? B4 -- B?
+                // B? B? B? B?
+                // Unknown Red Three should approach Blue Four.
+                // B6xR3 does not change the safe Two Squares result.
+
 			fp.setMoved();
-			if (fp.isKnown())
+			if (fp.isKnown()
+                            && !(m2 != null && m2.getTo() == fp.getIndex()))
 				fp.setSafe(false);
 			setPiece(fp, to);
 
 		} else { // attack
+
+                    assert fp.getColor() != tp.getColor() : "invalid move";
 
 		// Remove target piece and update hash.
 		// (Target will be restored later, if necessary,
@@ -4186,6 +4207,14 @@ public class TestingBoard extends Board
 		//
 		// As of Version 10.4, this issue is handled by the "ghost"
 		// square code when tp is null.
+                //
+                // As of Version 12, this issue is handled by the ghostPiece
+                // code, leaving the AI piece on the board for 1 ply.
+                                if (fp.getColor() == 1- bturn) {
+                                    fp.makeKnown();
+                                    setPiece(fp, to);
+                                    ghostPiece=getPiece(to);
+                                }
 
 				} // tp is not known
 		// Unknown AI pieces also have bluffing value
@@ -4235,7 +4264,8 @@ public class TestingBoard extends Board
 		//
 					if (depth != 0
 						&& !unknownScoutFarMove
-						&& isEffectiveBluffLoses(fp, tp)) {
+                                                && ((fprank == Rank.BOMB || fprank == Rank.FLAG)
+						    || isEffectiveBluffLoses(fp, tp))) {
 						vm += Math.max(stealthValue(tp), valueBluff(m, fp, tp) - valueBluff(tp, fp));
 						morph(fp);
 						break;
@@ -4244,9 +4274,6 @@ public class TestingBoard extends Board
 		// The opponent knows that the AI is bluffing, so
 		// the opponent expects that whatever the AI piece rank,
 		// it is lost.
-
-					assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : fprank + " attacks " + tp.getRank() + " only with an effective bluff (" + isEffectiveBluff(fp, tp) + "," + fp.isKnown() + "," + isInvincible(tp) + "," + fp.isFleeing(tp.getRank()) + "," + (!fp.hasMoved() && isFlagBombAtRisk(tp)) + "," +  hasLowValue(tp) + "," + (grid.moveCount(tp.getColor(), tp.getIndex()) == 1) + ")";
-
 					vm += stealthValue(tp);
 		
 					if (tp.isSuspectedRank()) {
@@ -4532,7 +4559,7 @@ public class TestingBoard extends Board
 					if (depth != 0
 						&& !fp.isKnown()
 						&& fp.getActingRankChase() != tprank
-						&& m2 != null
+						&& m2 != UndoMove.NullMove
 						&& m2.tpcopy != null
 						&& m2.tpcopy.isKnown()
 						&& !isEffectiveBluffWins(m2.tpcopy, tp, m2.getMove())
@@ -4995,16 +5022,28 @@ public class TestingBoard extends Board
 		// Note: This impacts the forward pruning code,
 		// because with the disappearance of the AI piece,
 		// the countermove may not be generated if it is
-		// outside the pruning area.  This is solved by
+		// outside the pruning area.  This was solved by
 		// adding the "to" square to the unsafeGrid in AI.
 
-		// AI piece is removed.
+                // After realizing that qs also needs to check
+                // for the ghost square, Version 12 instead
+                // leaves the ghost piece on the ghost square for
+                // 1 ply, allowing it to be attacked on the very next
+                // move, but then disappearing before ply 2, so that
+                // the tree search cannot move the ghost piece.
 
 				if (fprank.ordinal() > lowestUnknownExpendableRank) {
 					makeWinner(tp, fprank, true);
-					if (tp.getRank() != fprank)	// could be even
+					if (tp.getRank() != fprank) {	// could be even
 						setPiece(tp, to);
+                                        }
 				}
+                                else if (fp.getColor() == 1- bturn) {
+                                fp.makeKnown();
+                                setPiece(fp, to);
+                                ghostPiece = getPiece(to);
+                                }
+
 
 				} else {
 
@@ -5431,6 +5470,12 @@ public class TestingBoard extends Board
 
         protected void moveHistory(Piece fp, Piece tp, int m)
         {
+                if (ghostPiece != null
+                    && ghostPiece != tp)
+                    clearPiece(ghostPiece.getIndex());
+                ghostPieceStack.add(ghostPiece);
+                ghostPiece = null;
+
                 undoList.add(new UndoMove(fp, tp, m, boardHistory[bturn].hash, boardHistory[1-bturn].hash, value));
 		bturn = 1 - bturn;
 		depth++;
@@ -5441,10 +5486,11 @@ public class TestingBoard extends Board
 		depth--;
 		bturn = 1 - bturn;
 
-		UndoMove um = getLastMove();
-		if (um != null) {
+		UndoMove um = undoList.remove(undoList.size()-1);
+                Piece tp = null;
+		if (um != UndoMove.NullMove) {
+                        Piece fp = um.getPiece();
 			value = um.value;
-			Piece fp = um.getPiece();
 
 			// remove piece at target
 			grid.clearPiece(um.getTo());
@@ -5454,26 +5500,43 @@ public class TestingBoard extends Board
 			grid.setPiece(um.getFrom(), fp);
 
 			// place target piece
-			if (um.tp != null) {
+                        tp = um.tp;
+			if (tp != null) {
 				um.tp.copy(um.tpcopy);
-				grid.setPiece(um.getTo(), um.tp);
+				grid.setPiece(um.getTo(), tp);
 			}
+
 			boardHistory[bturn].hash = um.hash;
 			boardHistory[1-bturn].hash = um.hash2;
 		}
 
-		undoList.remove(undoList.size()-1);
+                // place ghost piece
+                ghostPiece = ghostPieceStack.remove(ghostPieceStack.size()-1);
+                if (ghostPiece != null
+                    && ghostPiece != tp)
+                    setPiece(ghostPiece, ghostPiece.getIndex());
 	}
 
 	public void pushNullMove()
 	{
-		undoList.add(null);
+                if (ghostPiece != null)
+                    clearPiece(ghostPiece.getIndex());
+                ghostPieceStack.add(ghostPiece);
+                ghostPiece = null;
+
+
+                undoList.add(UndoMove.NullMove);
 		bturn = 1 - bturn;
 		depth++;
 	}
 
 	public void pushFleeMove(Piece fp)
 	{
+                if (ghostPiece != null)
+                    clearPiece(ghostPiece.getIndex());
+                ghostPieceStack.add(ghostPiece);
+                ghostPiece = null;
+
 		int i = fp.getIndex();
                 undoList.add(new UndoMove(fp, null, Move.packMove(i, i), boardHistory[bturn].hash, boardHistory[1-bturn].hash, value));
 		grid.clearPiece(i);
@@ -5542,6 +5605,8 @@ public class TestingBoard extends Board
 	//	  	on the board (a bluff cannot remove the piece,
 	//		or the AI will think the game has ended when
 	//		the opponent has to move and call the bluff)
+        //              (note: clearPiece(tp) was called earlier, so
+        //              movablePieceCount is tested for 0).
 
 	public boolean isEffectiveBluff(Piece fp, Piece tp)
 	{
@@ -5558,18 +5623,24 @@ public class TestingBoard extends Board
 				&& pieceValue(Settings.bottomColor, fp.getActingRankFleeLow()) > stealthValue(Settings.topColor, tp.getRank().ordinal()-1) * 4 / 3)
 			|| (!fp.hasMoved()
 				&& isFlagBombAtRisk(tp))
-			|| grid.movablePieceCount(Settings.bottomColor) == 1)
+			|| grid.movablePieceCount(Settings.bottomColor) == 0)
 			return false;
 
 		return true;
 	}
 
+	public boolean isEffectiveBombBluff(Piece fp, Piece tp)
+	{
+            return !isInvincibleDefender(tp)
+		&& !(fp.isKnown()
+			|| hasLowValue(tp)
+			|| fp.isFleeing(tp.getRank()));
+        }
+
 	public boolean isEffectiveBluffLoses(Piece fp, Piece tp)
 	{
-            return (!isInvincible(tp)
-                || (tp.getRank() == Rank.ONE
-                    && hasSpy(fp.getColor()))
-                && isEffectiveBluff(fp, tp));
+            return !isInvincibleDefender(tp)
+                && isEffectiveBluff(fp, tp);
         }
 
 	// It is always risky to bluff by pushing an unknown piece
@@ -5709,7 +5780,7 @@ public class TestingBoard extends Board
 		// move, because the current move is already on the
 		// stack when isEffectiveBluff() is called)
 		UndoMove prev2 = getLastMove(2);
-		if (prev2 != null
+		if (prev2 != UndoMove.NullMove
 			&& prev2.tp != null
 			&& prev2.getPiece() == tp) {
 
@@ -6005,7 +6076,6 @@ public class TestingBoard extends Board
 		if (c == Settings.bottomColor
 			|| invincibleWinRank[1-c] >= invincibleWinRank[c]) {
 			pflag.makeKnown();
-			grid.clearMovablePiece(pflag);
 		}
 	}
 
@@ -6824,7 +6894,7 @@ public class TestingBoard extends Board
 					return LOSES;
 
 				UndoMove m2 = getLastMove(2);
-				if (m2 != null && m2.tp != null)
+				if (m2 != UndoMove.NullMove && m2.tp != null)
 					return LOSES;	// maybe not
 			}
 
@@ -7733,7 +7803,7 @@ public class TestingBoard extends Board
 		// so this rule is used only during the opening.
 
 		Move m1 = getLastMove(mc);
-		if (m1 == null)
+		if (m1 == UndoMove.NullMove)
 			return;
 
 		int c = m1.getPiece().getColor();
@@ -7767,7 +7837,7 @@ public class TestingBoard extends Board
 		// beginning a chase.
 
 			Move m2 = getLastMove(mc+1);
-			if (m2 == null)
+			if (m2 == UndoMove.NullMove)
 				return;
 
 			if (Grid.isAdjacent(m1.getFrom(), m2.getTo())
@@ -7864,7 +7934,7 @@ public class TestingBoard extends Board
 			&& hasFewWeakRanks(Settings.topColor, 4)
 			&& blufferRisk != 5) {
 			UndoMove um = getLastMove(1);
-			if (um != null
+			if (um != UndoMove.NullMove
 				&& Grid.getY(um.getTo()) < 5
 				&& !um.getPiece().isKnown())
 				um.getPiece().setActingRankFlee(Rank.ONE);
@@ -7931,6 +8001,33 @@ public class TestingBoard extends Board
 				s += valueStealth[c][i] + ",";
 			s += "\n";
 		}
-		return s;
+
+            for (int y = 0; y < 10; y++) {
+                for (int x = 0; x < 10; x++) {
+                    Piece p = getPiece(x, y);
+                    if (p == null) {
+                        s += "-- ";
+                        continue;   
+                    }
+                    if (p.getColor() == 0) {
+                        if (p.isKnown())
+                            s += "R";
+                        else
+                            s += "r";
+                    } else if (p.getColor() == 1) {
+                        if (p.isKnown())
+                            s += "B";
+                        else
+                            s += "b";
+                    } else
+                        s += "x";
+
+                    Rank rank = p.getRank();
+                    s += rank.value;
+                    s += " ";
+                }
+                s += "\n";
+            }
+            return s;
 	}
 }

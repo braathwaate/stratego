@@ -122,7 +122,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 				// perhaps the move finished the game
 				if (status != Status.PLAYING)
 					return;
-				view.update();
+				update();
 				requestCompMove();
 			} else
 				ai.logFlush("ILLEGAL MOVE");
@@ -158,7 +158,7 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	{
 		if (!setupPlacePiece(p, s))
 			return;
-		view.update();
+		update();
 	}
 
 	@Override
@@ -171,6 +171,8 @@ public class AIEngine extends Engine implements CompControls, UserControls
 	@Override
 	protected void update()
 	{
+                board.lock.lock();
 		view.update();
+                board.lock.unlock();
 	}
 }

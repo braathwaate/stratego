@@ -18,6 +18,7 @@
 package com.cjmalloy.stratego;
 
 import java.util.ArrayList;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.lang.Long;
@@ -82,6 +83,7 @@ public class Board
 	protected int unknownBombs[] = new int[2];
         protected Random rnd = new Random();
         protected int[] forayLane = new int[2];
+        public ReentrantLock lock = new ReentrantLock();  // graphics lock
 
 	// generate bomb patterns
 	static int[][] bombPattern = new int[30][6];
@@ -491,15 +493,15 @@ public class Board
 
 	public UndoMove getLastMove()
 	{
-		return undoList.get(undoList.size()-1);
+            return undoList.get(undoList.size()-1);
 	}
 
 	public UndoMove getLastMove(int i)
 	{
-		int size = undoList.size();
-		if (size < i)
-			return null;
-		return undoList.get(size-i);
+            int size = undoList.size();
+            if (size < i)
+                    return UndoMove.NullMove;
+            return undoList.get(size-i);
 	}
 
         boolean isThreat(Piece fp, Piece tp)
@@ -828,7 +830,7 @@ boardHistory[1-bturn].hash,  0);
 
 		UndoMove um2 = getLastMove(2);
 		UndoMove um3 = getLastMove(3);
-		if (um3 != null) {
+		if ( um3 != UndoMove.NullMove) {
 			if (um3.getPiece() != fp
 				&& Grid.isAlternatingMove(m, um2)) {
 				alternateSquares[um2.fpcopy.getIndex()][0] = um2.getPiece(); // chaser
@@ -1337,7 +1339,7 @@ boardHistory[1-bturn].hash,  0);
 		// the AI believes that the chased piece
 		// is trapped without any protection.
 
-				if (um3 != null
+				if (um3 != UndoMove.NullMove
 					&& open_square == um3.getFrom())
 					continue;
 
@@ -1690,6 +1692,7 @@ boardHistory[1-bturn].hash,  0);
 
 	protected void genChaseRank(int turn)
 	{
+                lock.lock();
 		// Indirect chase rank now depends on unassigned
 		// suspected ranks because of bluffing.
 		genSuspectedRank();
@@ -1816,6 +1819,7 @@ boardHistory[1-bturn].hash,  0);
 				isProtectedChase(chased, chaser, j);
 			} // d
 		} // i
+                lock.unlock();
 	}
 
 	// ********* start suspected ranks
@@ -1978,7 +1982,7 @@ boardHistory[1-bturn].hash,  0);
 		for (int i = 1; i <= 5; i+=2) {
 			Move oppm = getLastMove(i);
 			Move aim = getLastMove(i+1);
-			if (aim == null
+			if (aim == UndoMove.NullMove
 				|| oppm.getPiece() != p)
 				return true;
 			if (!Grid.isAdjacent(oppm.getTo(), aim.getTo())
@@ -2001,6 +2005,25 @@ boardHistory[1-bturn].hash,  0);
                         for (int r = 5; r <= 9; r++)
                                 nUnknownWeakRankAtLarge[c] += unknownRankAtLarge(c, r);
                 }
+        }
+
+        // Morph a piece into a suspected bomb if the number
+        // of non-movable pieces do not exceed the remaining unknown
+        // bombs and flag.
+
+        // (Note: If AI allowed all the requested pieces to be bombs,
+        // then AI move generation could mistakenly allow the game to end
+        // if it calculated that there were no more movable pieces).
+
+        private boolean suspectedBomb(Piece p)
+        {
+            assert p.getColor() == Settings.bottomColor;
+            if (grid.pieceCount(p.getColor()) - grid.movablePieceCount(p.getColor()) >= rankAtLarge(p.getColor(), Rank.BOMB) + 1)
+                return false;
+
+            p.setSuspectedRank(Rank.BOMB);
+            grid.setMovable(p);
+            return true;
         }
 
 	private void setSuspectedRank(Piece p, Rank rank)
@@ -2046,19 +2069,6 @@ boardHistory[1-bturn].hash,  0);
 				suspectedRank[c][j] = 0;
 			}
 
-		// If all movable pieces are moved or known
-		// and there is only one unknown rank, then
-		// the remaining unknown moved pieces must be that rank.
-
-			unknownRank[c] = 0;
-			for (int r = 1; r <= 10; r++)
-				if (unknownRankAtLarge(c, r) != 0) {
-					if (unknownRank[c] != 0) {
-						unknownRank[c] = 0;
-						break;
-					}
-					unknownRank[c] = r;
-				}
 		} // c
 
 		// add in the tray pieces to trayRank
@@ -2076,13 +2086,6 @@ boardHistory[1-bturn].hash,  0);
 			if (p == null)
 				continue;
 
-			if (p.hasMoved()
-				&& !p.isKnown()
-				&& unknownRank[p.getColor()] != 0) {
-				p.setRank(Rank.toRank(unknownRank[p.getColor()]));
-				p.makeKnown();
-			}
-
 		// reset suspected ranks to unknown
 		// because these are recalculated each time
 
@@ -2090,6 +2093,7 @@ boardHistory[1-bturn].hash,  0);
 				&& p.isSuspectedRank()) {
 				p.setKnown(false);
 				p.setRank(Rank.UNKNOWN);
+                                grid.setMovable(p);
 			}
 
 			if (p.isKnown())
@@ -2102,6 +2106,22 @@ boardHistory[1-bturn].hash,  0);
 				&& p.getColor() == Settings.topColor)
 				flag[p.getColor()] = i;
 		}
+
+		// If all movable pieces are moved or known
+		// and there is only one unknown rank, then
+		// the remaining unknown moved pieces must be that rank.
+
+		for (int c = RED; c <= BLUE; c++) {
+			unknownRank[c] = 0;
+			for (int r = 1; r <= 10; r++)
+				if (unknownRankAtLarge(c, r) != 0) {
+					if (unknownRank[c] != 0) {
+						unknownRank[c] = 0;
+						break;
+					}
+					unknownRank[c] = r;
+				}
+                }
 
 		for (int r = 1; r < 15; r++)
 			chaseRank[r] = getChaseRank(r);
@@ -2117,6 +2137,14 @@ boardHistory[1-bturn].hash,  0);
 				|| p.getColor() != Settings.bottomColor
 				|| p.isKnown())
 				continue;
+
+			if (p.hasMoved()
+				&& !p.isKnown()
+				&& unknownRank[p.getColor()] != 0) {
+				p.setRank(Rank.toRank(unknownRank[p.getColor()]));
+				p.makeKnown();
+                                continue;
+			}
 
 			if (unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) == 0)
 				p.setMaybeEight(false);
@@ -2194,12 +2222,9 @@ boardHistory[1-bturn].hash,  0);
 		// This happens in possibleFlag().
 		//
 		// Note: makeKnown() clears suspected rank, so it is
-		// set again as needed.  But the Bomb rank needs to be set
-		// before makeKnown() because makeKnown will then clear
-		// the movable piece grid.
+		// set again as needed.
 
 				p.makeKnown();
-				grid.clearMovablePiece(p);
 				Rank rank = p.getRank();
 
 				if (c == Settings.topColor)
@@ -2214,11 +2239,12 @@ boardHistory[1-bturn].hash,  0);
 		// Piece X Bomb and Bomb X Piece is a LOSS,
 		// Eight X Bomb is a WIN.
 		//
-					p.setSuspectedRank(Rank.BOMB);
+					suspectedBomb(p);
 				} else {
 
 					p.setRank(Rank.FLAG);
 					flag[c] = p.getIndex();
+                                        grid.setMovable(p);
 				}
 
 			} // for
@@ -2336,11 +2362,11 @@ boardHistory[1-bturn].hash,  0);
             }
 
             if (frontMoved == 4) {
-                    tp1.setSuspectedRank(Rank.BOMB);
-                    tp2.setSuspectedRank(Rank.BOMB);
-            } else if (frontMoved == 5)
-                    tp1.setSuspectedRank(Rank.BOMB);
-            
+                    suspectedBomb(tp1);
+                    suspectedBomb(tp2);
+            } else if (frontMoved == 5) {
+                    suspectedBomb(tp1);
+            }
 
 		for (int i = 78; i <= 120; i++) {
 			if (!Grid.isValid(i))
@@ -2376,7 +2402,7 @@ boardHistory[1-bturn].hash,  0);
 	// transform the piece into a suspected bomb.
 
 				if (found == 0)
-					tp.setSuspectedRank(Rank.BOMB);
+                                    suspectedBomb(tp);
 			}
 		}
 	}
@@ -2591,6 +2617,7 @@ boardHistory[1-bturn].hash,  0);
 			if (c == Settings.bottomColor) {
 				flag[c] = maybe[bestGuess][0];
 				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
+				grid.setMovable(getPiece(flag[c]));
 			}
 
 		} else if (c == Settings.bottomColor) {
@@ -2740,6 +2767,7 @@ boardHistory[1-bturn].hash,  0);
 			if (flagp != null) {
 				flag[c] = flagp.getIndex();
 				flagp.setSuspectedRank(Rank.FLAG);
+				grid.setMovable(flagp);
 			}
 
 		} // maybe == 0 (opponent flag only)
@@ -2760,12 +2788,9 @@ boardHistory[1-bturn].hash,  0);
 
 		for (int i = 0; i < maybe_count; i++) {
 
-		// patterns closest to the back row are much more plausible
-
-			if (bestGuess != 99
-				&& Grid.yside(color, Grid.getY(maybe[i][0]))
-					> Grid.yside(color, Grid.getY(maybe[bestGuess][0])))
-				break;
+		// Although the flag is most likely on the back row,
+                // the AI attacks the front row patterns first,
+                // which may be necessary to get at the back row pattern.
 
 			int nb;
                         int inForayLane = 0;
@@ -2777,13 +2802,15 @@ boardHistory[1-bturn].hash,  0);
                                 int j = maybe[i][nb];
 				Piece p = getPiece(j);
 
-		// A structure that had a bomb removed is the
-		// best guess, unless there is still a structure
-		// on the back row.
+		// A back row flag structure that had a bomb removed
+                // is the best guess.
 
 				if (p == null
-                                    || p.hasMoved())
-					return i;
+                                    || p.hasMoved()) {
+                                    if (Grid.yside(color, Grid.getY(maybe[i][0])) == 0)
+                                        return i;
+                                    continue;
+                                }
 
 		// If the one of the possible bombs has a chase rank
 		// (meaning that it protected some piece under attack),
@@ -2893,23 +2920,20 @@ boardHistory[1-bturn].hash,  0);
 
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
-		// bomb pattern are known bombs.  This eliminates them
-		// from the piece move lists, which means that
+		// bomb pattern are known bombs.  This means
 		// they offer no protective value to pieces that
-		// bluff against lower ranked pieces.  This code
-		// works for both AI and opponent bomb patterns.
+		// bluff against lower ranked pieces. 
 
 					if (maybe_count == 1) {
-						p.makeKnown();
-						grid.clearMovablePiece(p);
-						p.setSuspectedRank(Rank.BOMB);
+						if (suspectedBomb(p))
+                                                    p.makeKnown();      // also clears isSuspected
 
 		// If the piece already has a suspected rank, keep it,
 		// otherwise make it a suspected bomb
 
-					} else if (p.getRank() == Rank.UNKNOWN)
-						p.setSuspectedRank(Rank.BOMB);
-
+					} else if (p.getRank() == Rank.UNKNOWN) {
+						suspectedBomb(p);
+                                        }
 				}
 			} else {
 
@@ -2918,7 +2942,6 @@ boardHistory[1-bturn].hash,  0);
                                         || p.getRank() == Rank.FLAG)
 					&& maybe_count == 1) {
 					p.makeKnown();
-					grid.clearMovablePiece(p);
 				}
 
 		// If the AI setup is a ruse where the flag is outside
@@ -3020,10 +3043,10 @@ boardHistory[1-bturn].hash,  0);
 		if (Settings.twoSquares
 			|| getPiece(Move.unpackFrom(m)).getColor() == Settings.topColor) {
 			UndoMove prev = undoList.get(size-2);
-			if (prev == null)
+			if (prev == UndoMove.NullMove)
 				return false;
 			UndoMove prevprev = undoList.get(size-6);
-			if (prevprev == null)
+			if (prevprev == UndoMove.NullMove)
 				return false;
 			return prevprev.equals(prev)
 				&& Move.unpackFrom(m) == prev.getTo()
@@ -3125,7 +3148,7 @@ boardHistory[1-bturn].hash,  0);
 	public boolean isPossibleTwoSquares(int m)
 	{
 		UndoMove m2 = getLastMove(2);
-		if (m2 == null)
+		if (m2 == UndoMove.NullMove)
 			return false;
 
 		int from = Move.unpackFrom(m);
@@ -3212,7 +3235,7 @@ boardHistory[1-bturn].hash,  0);
 
 
 		UndoMove oppmove1 = getLastMove(1);
-		if (oppmove1 == null)
+		if (oppmove1 == UndoMove.NullMove)
 			return false;
 
 		// fleeing is OK, even if back to the same square
@@ -3282,7 +3305,7 @@ boardHistory[1-bturn].hash,  0);
 			return false;
 
 		UndoMove oppmove3 = getLastMove(3);
-		if (oppmove3 == null)
+		if (oppmove3 == UndoMove.NullMove)
 			return false;
 
 		// player began two moves before opponent?
@@ -3292,7 +3315,7 @@ boardHistory[1-bturn].hash,  0);
 			return true;
 
 		UndoMove m4 = getLastMove(4);
-		if (m4 == null)
+		if (m4 == UndoMove.NullMove)
 			return false;
 
 		if (!(m4.getFrom() == m2.getTo()
@@ -3300,7 +3323,7 @@ boardHistory[1-bturn].hash,  0);
 			return false;
 
 		UndoMove oppmove5 = getLastMove(5);
-		if (oppmove5 == null)
+		if (oppmove5 == UndoMove.NullMove)
 			return false;
 
 		return !(oppmove5.getFrom() == oppmove3.getTo()
@@ -3311,7 +3334,7 @@ boardHistory[1-bturn].hash,  0);
 	public boolean isChased(int m)
 	{
 		UndoMove oppmove = getLastMove(1);
-		if (oppmove == null)
+		if (oppmove == UndoMove.NullMove)
 			return false;
 		return Grid.isAdjacent(oppmove.getTo(),  Move.unpackFrom(m));
 	}
@@ -3328,7 +3351,8 @@ boardHistory[1-bturn].hash,  0);
         {
 		Move m1 = getLastMove(1);
 		Move m2 = getLastMove(2);
-		if (m1 == null || m2 == null)
+		if (m1 == UndoMove.NullMove
+                    || m2 == UndoMove.NullMove)
 			return false;
 
 		return (m1.getFromX() == m2.getFromX()
@@ -3379,17 +3403,17 @@ boardHistory[1-bturn].hash,  0);
 
 		int m = getLastMove(1).getMove();
 		Move m2 = getLastMove(2);
-		if (m2 == null)
+		if (m2 == UndoMove.NullMove)
 		 	return false;
 
 		Move m3 = getLastMove(3);
-		if (m3 == null)
+		if (m3 == UndoMove.NullMove)
 			return false;
 
 		// If opponent piece does not move between same two squares,
 		// then this move cannot result in a two squares victory.
 		Move m4 = getLastMove(4);
-		if (m4 == null)
+		if (m4 == UndoMove.NullMove)
 		 	return false;
 
 		if (m2.getTo() != m4.getFrom()
@@ -3429,11 +3453,11 @@ boardHistory[1-bturn].hash,  0);
 		// by avoiding the isRepeatedPosition() check in the AI.
 
 		UndoMove m5 = getLastMove(5);
-		if (m5 == null)
+		if (m5 == UndoMove.NullMove)
 			return false;
 
 		Move m6 = getLastMove(6);
-		if (m6 == null)
+		if (m6 == UndoMove.NullMove)
 			return false;
 
 		// (1) If the proposed move and the move four plies ago

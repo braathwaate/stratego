@@ -69,7 +69,8 @@ public class AI implements Runnable
 	static final int NULL = 0;
 	static final int ACTIVE = 1;
 	static final int INACTIVE = 2;
-	static final int FAR = 3;
+	static final int IMMOBILE = 3;
+	static final int FAR = 4;
 
 	private static int[] dir = { -11, -1,  1, 11 };
 	private int[] hh = new int[2<<14];	// move history heuristic
@@ -440,48 +441,7 @@ public class AI implements Runnable
 	{
 		Piece fp = b.getPiece(i);
 		Rank fprank = fp.getRank();
-
-		if (fprank == Rank.BOMB || fprank == Rank.FLAG) {
-
-		// Known bombs or flags are not movable pieces (see Grid.java)
-
-			assert !fp.isKnown() : "Known " + logPiece(fp) + " " + logFlags(fp) + " at " + fp.getIndex() + " ?";
-
-		// We need to generate moves for suspected
-		// bombs because the bomb might actually be
-		// some other piece, but once the bomb becomes
-		// known, it ceases to move.
-
-		// Yet an unknown bomb or suspected bomb is so unlikely to have
-		// any impact (except for attack on first move),
-		// even if the bomb is within the active area.
-		// that it is worthwhile to omit move
-		// generation for it except for attack on first move.
-		// This can increase the ply during the endgame,
-		// when unknown bombs dominate the remaining pieces.
-		//
-		// In addition, return false, to prevent the option
-		// of a null move.
-		//
-                // Note that AI bombs are treated identically,
-                // thus limiting their scope of travel to immediate
-                // attack.
-
-			if (b.grid.hasAttack(b.bturn, i)) {
-                            for (int d : dir ) {
-                                    int t = i + d ;
-                                    Piece tp = b.getPiece(t);
-
-                                    if (tp != null
-                                            && tp.getColor() == 1 - b.bturn
-                                            && !(b.bturn == Settings.topColor && !b.isEffectiveBluffLoses(fp, tp))) {
-                                            addMove(moveList[ACTIVE], i, t);
-                                            log("addBombMove" + tp.getRank() + " " + b.pieceValue(tp));
-                                    }
-                            } // d
-                        }
-			return false;
-		}
+                assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : "getMoves only for movable pieces, not " + fp.isKnown() + " " + fprank + " at " + i;
 
 		// FORWARD PRUNING:
                 // Unmoved unknown AI pieces really aren't very
@@ -576,7 +536,7 @@ public class AI implements Runnable
             // bomb structure from an incoming attacker.
 
             Move m2 = b.getLastMove(2);
-            if (m2 != null) {
+            if (m2 != UndoMove.NullMove) {
                 Piece p = b.getPiece(m2.getTo());
                 if (p == m2.getPiece()
                     && p.getRank() != Rank.BOMB
@@ -587,10 +547,10 @@ public class AI implements Runnable
             }
         }
 
-	private boolean getMovablePieces(int n, BitGrid out)
+	private boolean getMovablePieces(int n, BitGrid unpruned, BitGrid pruned)
 	{
 		if (n == 0) {
-			b.grid.getMovablePieces(b.bturn, out);
+			b.grid.getMovablePieces(b.bturn, unpruned);
                         return false;
                 }
 
@@ -704,26 +664,88 @@ public class AI implements Runnable
 		if (b.unknownRankAtLarge(1-b.bturn, Rank.NINE) != 0
 			&& ns >= 2)
 			genSafe(unprunedGrid);
-
+/*
 		// Never prune off a move to the last square, because
 		// it may be an unoccupied "ghost" square. See TestingBoard.
 		Move m = b.getLastMove(1);
-		if (m != null)
+		if (m != UndoMove.NullMove)
 			unprunedGrid.setBit(m.getTo());
+*/
 
 		// Scan the board for movable pieces inside the active area
-		if (n > 0) {
-                        BitGrid pruned = new BitGrid();
-			b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, out, pruned);
-                        addLastMovedPiece(out, pruned);
-			if (pruned.get(0) != 0 || pruned.get(1) != 0)
-				return true;
-		} else {
-                        BitGrid unpruned = new BitGrid();
-			b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, unpruned, out);
-                        addLastMovedPiece(unpruned, out);
-		}
-		return false;
+                b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, unpruned, pruned);
+                addLastMovedPiece(unpruned, pruned);
+                return (pruned.get(0) != 0 || pruned.get(1) != 0);
+	}
+
+	public void getBombFlagMoves(ArrayList<Integer> moveList, int i)
+	{
+		Piece fp = b.getPiece(i);
+		Rank fprank = fp.getRank();
+
+		assert (fprank == Rank.BOMB || fprank == Rank.FLAG);
+                assert (b.grid.hasAttack(b.bturn, i));
+
+                if (fp.isKnown())
+                    return;
+
+		// We need to generate moves for suspected
+		// bombs because the bomb might actually be
+		// some other piece, but once the bomb becomes
+		// known, it ceases to move.
+
+		// Yet an unknown bomb or suspected bomb is so unlikely to have
+		// any impact (except for attack on first move),
+		// even if the bomb is within the active area.
+		// that it is worthwhile to omit move
+		// generation for it except for attack on first move.
+		// This can increase the ply during the endgame,
+		// when unknown bombs dominate the remaining pieces.
+		//
+		// In addition, return false, to prevent the option
+		// of a null move.
+		//
+                // Note that AI bombs are treated identically,
+                // thus limiting their scope of travel to immediate
+                // attack.
+
+                for (int d : dir ) {
+                        int t = i + d ;
+                        Piece tp = b.getPiece(t);
+
+                        if (tp != null
+                                && tp.getColor() == 1 - b.bturn
+                                && b.isEffectiveBombBluff(fp, tp)) {
+                                addMove(moveList, i, t);
+                        }
+                } // d
+        }
+
+	private void getBombFlagMoves(ArrayList<Integer> moveList)
+	{
+		BitGrid bg = new BitGrid();
+
+		// Find the neighboring bombs and flags
+                // of opponent pieces (1 - b.turn)
+		// (In other words, find the player's bombs and flags
+		// that are under direct attack).
+
+		b.grid.getNeighboringBombsAndFlag(1-b.bturn, bg);
+		for (int bi = 0; bi < 2; bi++) {
+			int k;
+			if (bi == 0)
+				k = 2;
+			else
+				k = 66;
+			long data = bg.get(bi);
+			while (data != 0) {
+				int ntz = Long.numberOfTrailingZeros(data);
+				int i = k + ntz;
+				data ^= (1l << ntz);
+
+				getBombFlagMoves(moveList, i);
+			} // data
+		} // bi
 	}
 
 	private boolean getMoves(BitGrid bg, ArrayList<Integer>[] moveList, int n)
@@ -751,9 +773,10 @@ public class AI implements Runnable
 
 	private boolean getMoves(ArrayList<Integer>[] moveList, int n)
 	{
-		BitGrid bg = new BitGrid();
-		boolean isPruned = getMovablePieces(n, bg);
-		return getMoves(bg, moveList, n) || isPruned;
+		BitGrid unpruned = new BitGrid();
+		BitGrid pruned = new BitGrid();
+		boolean isPruned = getMovablePieces(n, unpruned, pruned);
+		return getMoves(unpruned, moveList, n) || isPruned;
 	}
 
 	private void getScoutMoves(ArrayList<Integer> moveList, int n, int turn)
@@ -839,7 +862,7 @@ public class AI implements Runnable
 		// chase variables
 		int lastMoveTo = 0;
 		Move lastMove = b.getLastMove(1);
-		if (lastMove != null) {
+		if (lastMove != UndoMove.NullMove) {
 			lastMoveTo = lastMove.getTo();
 			Piece p = b.getPiece(lastMoveTo);
 		// make sure last moved piece is still on the board
@@ -1092,10 +1115,10 @@ public class AI implements Runnable
 		BitGrid bg = new BitGrid();
 
 		// Find the neighbors of opponent pieces (1 - b.turn)
-		// (In other words, find the player's movable pieces
+		// (In other words, find the player's pieces
 		// that are under direct attack).
 
-		b.grid.getMovableNeighbors(1-b.bturn, bg);
+		b.grid.getNeighbors(1-b.bturn, bg);
 
 		// Note: Version 10.3 checks this AFTER null move, because
 		// player might not have any movable pieces but opponent
@@ -1151,6 +1174,10 @@ public class AI implements Runnable
 
 			boolean isBombOrFlag = (fprank == Rank.BOMB
 				|| fprank == Rank.FLAG);
+                        if (isBombOrFlag
+                            && fp.isKnown())
+                            continue;
+
                         boolean noFlee = isBombOrFlag;
 			for (int d : dir ) {
 				int t = i + d;	
@@ -1166,8 +1193,7 @@ public class AI implements Runnable
 
 				} else if (tp.getColor() != 1 - b.bturn
                                     || (isBombOrFlag
-                                            && b.bturn == Settings.topColor
-                                            && !b.isEffectiveBluffLoses(fp,tp)))
+                                            && !b.isEffectiveBombBluff(fp,tp)))
 					continue;
 				else {
 					boolean wasKnown = tp.isKnown();
@@ -1303,7 +1329,7 @@ public class AI implements Runnable
 		// player move was null.  This can be thought of as
 		// a simple transposition cache.
 
-		if (um1 == null && um2 == null)
+		if (um1 == UndoMove.NullMove && um2 == UndoMove.NullMove)
 			return true;
 
 		if (um1 != null
@@ -1553,8 +1579,7 @@ public class AI implements Runnable
                     Rank rank = fp.getRank();
 		    if ((rank == Rank.BOMB
                          || rank == Rank.FLAG)
-                            && (b.bturn == Settings.topColor
-                               && !b.isEffectiveBluffLoses(fp, tp)))
+                               && !b.isEffectiveBombBluff(fp, tp))
                         return false;
                 }
 		return true;
@@ -1676,12 +1701,13 @@ public class AI implements Runnable
 		int km = killerMove.getMove();
 		assert km != 0 : "Killer move cannot be null move";
 
-		BitGrid bg = new BitGrid();
-		boolean isPruned = getMovablePieces(n, bg);
+		BitGrid unpruned = new BitGrid();
+		BitGrid pruned = new BitGrid();
+		boolean isPruned = getMovablePieces(n, unpruned, pruned);
 
 		if (km != -1
 			&& km != ttMove
-			&& isValidMove(bg, km)) {
+			&& isValidMove(unpruned, km)) {
 			logMove(n, km, b.getValue(), MoveType.KM);
 			MoveResult mt = makeMove(n, km);
 			if (mt == MoveResult.OK) {
@@ -1762,14 +1788,11 @@ public class AI implements Runnable
 		// in parallel (multithreading).
 
 
-			BitGrid bgpruned = new BitGrid();
-			getMovablePieces(-n, bgpruned);
-
 			ArrayList<Integer>[] moveList = (ArrayList<Integer>[])new ArrayList[FAR+1];
 			for (int i = 0; i <= FAR; i++)
 				moveList[i] = new ArrayList<Integer>();
 
-			getMoves(bgpruned, moveList, -n);
+			getMoves(pruned, moveList, -n);
 			int bestPrunedMoveValue = -22222;
 			int bestPrunedMove = -1;
 			for (int mo = 0; mo <= INACTIVE; mo++)
@@ -1858,10 +1881,13 @@ public class AI implements Runnable
 		// Add null move if not processed already
 
 			} else if (mo == ACTIVE) {
-				if (getMoves(bg, moveList, n)
+				if (getMoves(unpruned, moveList, n)
 					&& b.depth != -1
 					&& !isPruned)
 					addMove(moveList[INACTIVE], 0);
+
+			} else if (mo == IMMOBILE)
+				getBombFlagMoves(moveList[mo]);
 
 		// Scout far moves are expensive to generate and
 		// because of the loss of stealth are often
@@ -1870,11 +1896,11 @@ public class AI implements Runnable
 		// They are generated separately because they are
 		// not forward pruned based on enemy distance like other moves.
 
-			} else if (mo == FAR)
+			else if (mo == FAR)
 				getScoutMoves(moveList[mo], n, b.bturn);
 
 		// Sort the move list.
-		// Because alpha-beta can prunes off most of the list,
+		// Because alpha-beta prunes off most of the list,
 		// most game playing programs use a selection sort.
 
 			ArrayList<Integer> ml = moveList[mo];
@@ -1939,7 +1965,7 @@ public class AI implements Runnable
 
 		Move um = b.getLastMove(1);
 		if (bestmove != 0
-			&& (um == null
+			&& (um == UndoMove.NullMove
 				|| b.getLastMove(1).getTo() != Move.unpackTo(bestmove)))
 			killerMove.setMove(bestmove);
 

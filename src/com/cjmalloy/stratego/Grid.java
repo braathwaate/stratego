@@ -143,10 +143,18 @@ public class Grid
 	{
 		grid[i] = p;
 		pieceBitGrid[p.getColor()].setBit(i);
-		if (!((p.getRank() == Rank.BOMB
-			|| p.getRank() == Rank.FLAG)
-			&& p.isKnown()))
-			movablePieceBitGrid[p.getColor()].setBit(i);
+                setMovable(p);
+	}
+
+	public void setMovable(Piece p) 
+	{
+                int i = p.getIndex();
+                Rank rank = p.getRank();
+		if (rank == Rank.BOMB
+                    || rank == Rank.FLAG)
+                    movablePieceBitGrid[p.getColor()].clearBit(i);
+                else
+                    movablePieceBitGrid[p.getColor()].setBit(i);
 	}
 
 	static private void setWater(int i) 
@@ -166,13 +174,6 @@ public class Grid
 		grid[i] = null;
 		pieceBitGrid[0].clearBit(i);
 		pieceBitGrid[1].clearBit(i);
-		movablePieceBitGrid[0].clearBit(i);
-		movablePieceBitGrid[1].clearBit(i);
-	}
-
-	public void clearMovablePiece(Piece p) 
-	{
-		int i = p.getIndex();
 		movablePieceBitGrid[0].clearBit(i);
 		movablePieceBitGrid[1].clearBit(i);
 	}
@@ -231,6 +232,22 @@ public class Grid
 	public int movablePieceCount(int color, int i, int n)
 	{
 		return movablePieceBitGrid[color].andBitCount(neighbor[n][i]);
+	}
+
+	public void getNeighboringBombsAndFlag(int turn, BitGrid out)
+	{
+		long low = pieceBitGrid[turn].get(0);
+		long high = pieceBitGrid[turn].get(1);
+		long bf_low = pieceBitGrid[1-turn].get(0)
+		    & ~movablePieceBitGrid[1-turn].get(0) ;
+		long bf_high = pieceBitGrid[1-turn].get(1)
+		    & ~movablePieceBitGrid[1-turn].get(1) ;
+		BitGrid.getNeighbors(low, high, bf_low, bf_high, out);
+	}
+
+	public void getNeighbors(int turn, BitGrid out)
+	{
+                pieceBitGrid[turn].getNeighbors(pieceBitGrid[1-turn], out);
 	}
 
 	public void getMovableNeighbors(int turn, BitGrid out)
@@ -323,6 +340,12 @@ public class Grid
 	{
 		return Long.bitCount(movablePieceBitGrid[turn].get(0))
 			+ Long.bitCount(movablePieceBitGrid[turn].get(1));
+	}
+
+	public int pieceCount(int turn)
+	{
+		return Long.bitCount(pieceBitGrid[turn].get(0))
+			+ Long.bitCount(pieceBitGrid[turn].get(1));
 	}
 
 	// isAdjacent is the same as steps() == 1 but perhaps faster

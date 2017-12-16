@@ -39,5 +39,9 @@ public class UndoMove extends Move
 		hash2 = h2;
 		value = v;
 	}
+
+        public UndoMove() {super (null, 0); }
+
+    public static final UndoMove NullMove = new UndoMove();
 }
 

@@ -20,7 +20,7 @@ package com.cjmalloy.stratego;
 
 public enum Rank
 {
-	WATER("W"),
+	WATER("x"),
 	ONE("1"),
 	TWO("2"),
 	THREE("3"),
