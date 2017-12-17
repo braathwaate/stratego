@@ -2601,13 +2601,6 @@ boardHistory[1-bturn].hash,  0);
 
 		if (maybe_count[c] >= 1) {
 
-		// Mark surrounding pieces in all usual flag
-		// structures as suspected bombs.
-
-			for (int i = 0; i < maybe_count[c]; i++)
-				if (usualFlagLocation(c, maybe[i][0]))
-					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
-
 		// Pick the structure that looks most likely and
 		// mark it as containing the flag.
 
@@ -2619,6 +2612,13 @@ boardHistory[1-bturn].hash,  0);
 				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
 				grid.setMovable(getPiece(flag[c]));
 			}
+
+		// Mark surrounding pieces in all usual flag
+		// structures as suspected bombs.
+
+			for (int i = 0; i < maybe_count[c]; i++)
+				if (usualFlagLocation(c, maybe[i][0]))
+					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
 
 		} else if (c == Settings.bottomColor) {
 
@@ -2894,7 +2894,7 @@ boardHistory[1-bturn].hash,  0);
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
-		for (int j = 0; maybe[bestGuess][j] != 0; j++) {
+		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
 			assert Grid.isValid(maybe[bestGuess][j]) : maybe[bestGuess][j] + " is not valid ";
 			Piece p = getPiece(maybe[bestGuess][j]);
 			if (p == null
@@ -2926,7 +2926,7 @@ boardHistory[1-bturn].hash,  0);
 
 					if (maybe_count == 1) {
 						if (suspectedBomb(p))
-                                                    p.makeKnown();      // also clears isSuspected
+                                                    p.setKnown(true);
 
 		// If the piece already has a suspected rank, keep it,
 		// otherwise make it a suspected bomb
@@ -3718,8 +3718,11 @@ boardHistory[1-bturn].hash,  0);
 			else if (p.getRank() == Rank.FOUR)
 				guess(p.getActualRank().ordinal() <= 5);
 
+        // The AI thinks an opponent piece is one rank lower than the AI piece
+        // that it chased, but it could also be the same rank
+
 			else if (p.getRank().ordinal() < 4)
-				guess(p.getRank().ordinal() >= p.getActualRank().ordinal()
+				guess(p.getRank().ordinal() >= p.getActualRank().ordinal() + 1
 					|| p.getActualRank() == Rank.SPY
 						&& p.getActingRankChase() == Rank.NIL);
 

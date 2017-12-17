@@ -223,7 +223,7 @@ public class TestingBoard extends Board
 @SuppressWarnings("unchecked")
 	public ArrayList<Piece>[] scouts = (ArrayList<Piece>[])new ArrayList[2];
 
-	protected boolean foray;
+	protected boolean randomForay;
 	private static final int VALUE_MOVED = VALUE_NINE/3;
 
 	private static final int UNK = 0;
@@ -2961,23 +2961,24 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 			boolean blocked = false;
 			if (p != null
-				&& !(j == to && p.getColor() == color)) {
+				&& !(j == to && p.getColor() == color)
+                                && !(attackRank == Rank.EIGHT
+                                    && p.getColor() == color
+                                    && p.getRank() == Rank.BOMB)) {
 
 		// If GUARDED_CAUTIOUS is set, then the maze can continue
 		// through non-adjacent moved pieces of the same color.
 		// The hope is that these moved pieces will eventually move,
 		// clearing the way.  This should not cause
 		// stacking problems if this is used sparingly.
-		//
+
 		// This tries to address the situation where
 		// an opponent invincible piece is known and 
 		// chases the players moved pieces, which it is
 		// certain to win.  The player must target the
 		// opponents invincible piece with an invincible
 		// piece of its own, but it needs to see through
-		// its moved pieces to get there.  It is also useful
-		// for Miners that want to get to the front of a
-		// a pack of player pieces to get at a bomb structure.
+		// its moved pieces to get there.
 
 				if (guarded != GUARDED_CAUTIOUS
 					|| !p.hasMoved())
@@ -3242,7 +3243,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// by lying in wait.  For example, a known AI Four
 		// may approach an unknown piece on a foray which
 		// could be a Three).
-		foray = isWinning(Settings.bottomColor) >= VALUE_THREE;
+		randomForay = isWinning(Settings.topColor) >= VALUE_THREE;
 	}
 
 	public boolean hasPlan(Piece plan[][], int color, int r)
@@ -3545,48 +3546,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		setPiece(p, p.getIndex());
 	}
 
-	// Consider the following example:
-	// -- -- -- --
-	// xx -- -- xx
-	// xx R2 -- xx
-	// B? B3 B? --
-	// B? B? B? B?
-
-	// Unknown Red Two has trapped Blue Three and Red wants
-	// to play R2xB3 because it believes it has the element of
-	// surprise (so statistically, R2xB3 wins at least 2/3 of
-	// the time because unknown Blue One could be in any of three
-	// lanes.
-
-	// But if unknown Blue to the right of Red Two moves up
-	// after R2xB3, then
-	// Red Two becomes trapped if it thinks that any unknown
-	// piece could be Blue One after the moment of surprise
-	// (i.e. R2xB3).
-
-	// There are perhaps various ways of solving this,
-	// but the logical approach used by the AI is to assign
-	// indirect flee rank to pieces that fail to attack.
-	// But assigning indirect flee rank on the fly
-	// immediately after a move would cause the AI to attack all pieces
-	// because it will think that their neighbors are no threat.
-
-	// Alternatively, assigning indirect flee rank after the opponent
-	// makes its move is complicated because the opponent may have
-	// moved one of the neighboring pieces that should be assigned
-	// a flee rank.  Assignment is also complicated because
-	// R2 could be protected and by delaying moves.  This is
-	// handled in Board, but is time-consuming to do every move.
-	// Finally, moveHistory/undo handles only the piece that moves, and
-	// not any other pieces.
-
-	// So I have chosen to assign acting rank flee to only pieces that
-	// directly flee during tree search.  In the above example,
-	// the unknown Blue moved piece is assigned a flee rank of Two, so
-	// that Two can fearlessly backpedal because it is in no danger
-	// of attack from a piece that fled from it.  This allows the
-	// to play R2xR3 in this situation.
-
+/*
 	protected void setDirectActingRankFlee(Piece fleep, Piece tp)
 	{
 		if (fleep.isKnown()
@@ -3607,6 +3567,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			fleep.setActingRankFlee(op.getApparentRank());
 		}
 	}
+*/
 
 	public void move(int m)
 	{
@@ -3668,7 +3629,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		clearPiece(from);
 
-		setDirectActingRankFlee(fp, tp);
+		// setDirectActingRankFlee(fp, tp);
 
 		int vm = 0;
 
@@ -3893,8 +3854,73 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			if (alternateSquares[to][0] == fp.boardPiece())
 				vm -= DEST_PRIORITY_DEFEND_FLAG / 2;
 
-                // A known piece is not safe
-                // unless it was just attacked on the last move
+            // Consider the following example:
+            // -- -- -- --
+            // xx -- -- xx
+            // xx R2 -- xx
+            // B? B3 B? --
+            // B? B? B? B?
+
+            // Unknown Red Two has trapped Blue Three and Red wants
+            // to play R2xB3 because it believes it has the element of
+            // surprise (so statistically, R2xB3 wins at least 2/3 of
+            // the time because unknown Blue One could be in any of three
+            // lanes.
+
+            // But if unknown Blue to the right of Red Two moves up
+            // after R2xB3, then
+            // Red Two becomes trapped if it thinks that any unknown
+            // piece could be Blue One after the moment of surprise
+            // (i.e. R2xB3).
+
+            // There are perhaps various ways of solving this,
+            // but the logical approach used by the AI is to assign
+            // indirect flee rank to pieces that fail to attack.
+            // But assigning indirect flee rank on the fly
+            // immediately after a move would cause the AI to attack all pieces
+            // because it will think that their neighbors are no threat.
+
+            // Alternatively, assigning indirect flee rank after the opponent
+            // makes its move is complicated because the opponent may have
+            // moved one of the neighboring pieces that should be assigned
+            // a flee rank.  Assignment is also complicated because
+            // R2 could be protected and by delaying moves.  This is
+            // handled in Board, but is time-consuming to do every move.
+            // Finally, moveHistory/undo handles only the piece that moves, and
+            // not any other pieces.
+
+            // Prior to Version 12, acting rank flee was assigned to
+            // pieces that directly flee during tree search.
+            // In the above example,
+            // the unknown Blue moved piece is assigned a flee rank of Two, so
+            // that Two can fearlessly backpedal because it is in no danger
+            // of attack from a piece that fled from it.  This allows the
+            // to play R2xR3 in this situation.
+
+            // Yet that code suffered from this bug:
+            // -- R4 RB
+            // R4 b3 xx
+            // -- -- xx
+            // Unknown Blue Three has forked two known Fours.  But
+            // the AI thinks that it is safe, because it would gain
+            // a temporary flee rank of Four, regardless of which
+            // Four it attacked.  So setDirectActingRankFlee() needs
+            // to be called after move processing, not before.
+
+            // However, Version 12 experiments with simply extending
+            // the time a piece is safe from attack during tree
+            // processing.  Safeness terminates only when the safe
+            // piece actually moves to an open square (depth = 0).
+            // The thought is that will not change the on board
+            // behavior of the piece.  Qs speed is an issue and
+            // this strategy is much faster.
+
+			fp.setMoved();
+			if (fp.isKnown()
+                            && depth == 0
+
+                // A known piece is still safe
+                // if it was just attacked on the last move
                 // For example,
                 // -- R3 --
                 // xx -- -- xx
@@ -3904,9 +3930,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 // Unknown Red Three should approach Blue Four.
                 // B6xR3 does not change the safe Two Squares result.
 
-			fp.setMoved();
-			if (fp.isKnown()
-                            && !(m2 != null && m2.getTo() == fp.getIndex()))
+                            && !(m2 != UndoMove.NullMove && m2.getTo() == fp.getIndex()))
 				fp.setSafe(false);
 			setPiece(fp, to);
 
@@ -4915,7 +4939,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 					else if (fprank.ordinal() <= 5
 						&& tp.isWeak()) {
 						fpvalue /= 2;
-						if (foray)
+						if (randomForay
+                                                    || isForay(tp) && !fp.isKnown())
 							fpvalue /= 2;
 					}
 
@@ -5169,7 +5194,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				else if (isStrongExpendable(tp) && !fp.isWeak()
 					|| tprank.ordinal() <= 5  && fp.isWeak()) {
 					tpvalue /= 2;
-					if (foray)
+					if (randomForay
+                                                || isForay(fp) && !tp.isKnown())
 						tpvalue /= 2;
 					vm += tpvalue - fpvalue;
 				}
@@ -6941,7 +6967,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				if ((fp.getActingRankChase() != Rank.NIL
 					&& tprank.ordinal() <= 7)
 					|| riskExpendable
-					|| (foray
+					|| (randomForay
 						&& fp.isWeak()
 						&& hasLowValue(tp)))
 						return result;	// maybe not
@@ -6997,7 +7023,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 					&& fprank.ordinal() <= 7) 
 					return result;	// maybe not
 
-				if ((foray || fp.isSafe())
+				if ((randomForay || fp.isSafe())
 					&& tp.isWeak()
 					&& hasLowValue(fp))
 					return result;	// maybe not
