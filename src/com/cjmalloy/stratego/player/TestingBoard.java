@@ -3637,6 +3637,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		if (unknownScoutFarMove) {
 			fp.setRank(Rank.NINE);
+                        fp.setMaybeEight(false);
 		}
 
 		Rank fprank = fp.getRank();
@@ -5181,24 +5182,27 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// actual AI piece value and the
 		// latter uses the apparent piece value.
 
-		// TBD
-		// if !fp.hasMoved()
-		// adjust fpvalue based on the
-		// probability that fp is a bomb
-		// and cannot move
-
 				fpvalue = unknownValue(tp, fp);
 
 				if (fp.isFleeing(tprank))
-					vm -= fpvalue;
+                                    vm -= fpvalue;
 				else if (isStrongExpendable(tp) && !fp.isWeak()
-					|| tprank.ordinal() <= 5  && fp.isWeak()) {
-					tpvalue /= 2;
-					if (randomForay
-                                                || isForay(fp) && !tp.isKnown())
-						tpvalue /= 2;
-					vm += tpvalue - fpvalue;
-				}
+                                    || tprank.ordinal() <= 5  && fp.isWeak()
+
+		// If tp fled from some unknown AI piece before,
+                // will it neglect to attack this unknown AI piece?
+		// We don't know for sure, because the opponent may
+                // be guessing the ranks of the AI unknowns.
+		// But the AI thinks it is a better bet
+                // than approaching an opponent piece for the first time.
+
+                                    || !tp.isKnown() && fp.isFleeing(Rank.UNKNOWN)) {
+                                    tpvalue /= 2;
+                                    if (randomForay
+                                            || isForay(fp) && !tp.isKnown())
+                                            tpvalue /= 2;
+                                    vm += tpvalue - fpvalue;
+                            }
 
 		// Outcome is the negation as if ai were the attacker.
 		// Note: prior to version 9.8, the number of
@@ -6088,7 +6092,21 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				return stealthValue(p.getColor(), 3);
 
 			return stealthValue(p.getColor(), 4);
-		}
+
+                // A human opponent (or advanced bot such as the AI)
+                // will notice that the AI shelters its unknown
+                // superior ranks from scout attacks and neglecting
+                // to approach unknowns.   Thus for effective bluffing,
+                // inferior pieces need to behave similarly.
+                // AI pieces that have not chased unknowns or
+                // allowed themselves to be exposed to scout attacks
+                // have high stealth.
+
+		} else if (p.getColor() == Settings.topColor
+                    && (p.getActingRankChase() == Rank.NIL
+                        || p.getActingRankChase().ordinal() <= 5)
+                    && !p.isWeak())
+                    return Math.max(stealthValue(Settings.topColor, 4), stealthValue(Settings.topColor, rank));
 
 		return stealthValue(p.getColor(), rank);
 	}
@@ -7259,23 +7277,36 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		values[color][9] = 9 * values[color][Rank.EIGHT.ordinal()] / 10;
 	}
 
+        // Prior to Version 11, the AI attempted to forward
+        // prune off Scout moves based on how juicy the target looked.
+        // Yet it is difficult to make absolute predictions about
+        // which unknown pieces are Scout targets, because
+        // the AI is willing to sacrifice its Scout
+        // if a following move combination wins the opponent
+        // piece which is now known.  For example,
+        // -- R9 --
+        // -- -- --
+        // -- -- R3
+        // B? B? B?
+        // Blue is losing and refuses to move any of its unknown
+        // unmoved pieces.  R9xB? is perhaps a poor move in the
+        // short term, but if it allows R3 to take the now known
+        // blue piece, it could be a good move.
+
+        // Yet, this is a necessary check to prune moves generated
+        // by AI genSafe().  Examining all of the
+        // AI Scout moves and opponent fleeing and blocking moves
+        // would be very time consuming.
+        // So the code was restored in Version 12.
+
+        // TBD: Yes, this needs some more work to handle
+        // attacks such as the example.  Perhaps increase
+        // the stealth value of pieces near invincible pieces?
 	boolean isNineTarget(Piece p)
 	{
 		Rank rank = p.getRank();
 		if (rank == Rank.FLAG
-			|| rank == Rank.SPY)
-			return true;
-
-		if (p.getColor() == Settings.topColor) {
-
-		// nines have high stealth value but are not targets
-
-			if (p.isKnown()
-				|| rank == Rank.NINE
-				|| stealthValue(p) < values[1-p.getColor()][9])
-				return false;
-
-		} else {
+			|| rank == Rank.SPY
 
 		// Known opponent pieces are obviously not targets
 		// except in some cases the AI may want to target
@@ -7285,41 +7316,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// Red should play R9xB9.  Yes, this case is unusual
 		// but it does happen.
 
-			if (rank == Rank.NINE)
-				return true;
+                        || rank == Rank.NINE
+                            && p.getColor() == Settings.bottomColor)
+                        return true;
 
-		// Prior to Version 11, the AI attempted to forward
-		// prune off Scout moves based on how juicy the target looked.
-		// Yet it is difficult to make absolute predictions about
-		// which unknown pieces are Scout targets, because
-		// the AI is willing to sacrifice its Scout
-		// if a following move combination wins the opponent
-		// piece which is now known.  For example,
-		// -- R9 --
-		// -- -- --
-		// -- -- R3
-		// B? B? B?
-		// Blue is losing and refuses to move any of its unknown
-		// unmoved pieces.  R9xB? is perhaps a poor move in the
-		// short term, but if it allows R3 to take the now known
-		// blue piece, it could be a good move.
-		//
-
-		// Yet, this is a necessary check to prune moves generated
-		// by AI genSafe().  Examining all of the
-		// AI Scout moves and opponent fleeing and blocking moves
-		// would be very time consuming.
-		// So the code was restored in Version 12.
-
-		// TBD: Yes, this needs some more work to handle
-		// attacks such as the example.  Perhaps increase
-		// the stealth value of pieces near invincible pieces?
-
-			if (stealthValue(p) < values[1-p.getColor()][9])
-				return false;
-		}
-
-		return true;
+                return stealthValue(p) >=  values[1-p.getColor()][9];
 	}
 
 	// If all bombs have been accounted for,
