@@ -157,7 +157,7 @@ public class TestingBoard extends Board
 	public int [][] values = new int[2][15];
 
 	private static final int DEST_PRIORITY_DEFEND_FLAG = VALUE_NINE;
-	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 5;
+	private static final int DEST_PRIORITY_DEFEND_FLAG_AREA = 7;
 
 	// Note: DEST_PRIORITY_LANE must have unique priority
 	// because it is a special case in planv.  It is limited to
@@ -174,19 +174,26 @@ public class TestingBoard extends Board
 	// on the board.  But usually if the lanes are not blocked, the
 	// chase piece can find a way to its target.
 
-	private static final int DEST_PRIORITY_LANE = 4;
+	private static final int DEST_PRIORITY_LANE = 6;
 
 	// Note: DEST_PRIORITY_ATTACK_FLAG should be higher than
 	// DEST_PRIORITY_CHASE, because an Eight could be
 	// an expendable piece and can chase other opponent pieces,
 	// but it is better for the eight to attack the flag structure.
 
-	private static final int DEST_PRIORITY_ATTACK_FLAG = 2;
+	private static final int DEST_PRIORITY_ATTACK_FLAG = 3;
 
-	private static final int DEST_PRIORITY_CHASE_ATTACK = 3;
-	private static final int DEST_PRIORITY_CHASE_DEFEND = 2;
-	private static final int DEST_PRIORITY_CHASE = 1;
-	private static final int DEST_PRIORITY_LOW = 1;
+        // If there is a way of attacking a flag with a scout,
+        // this is very high priority, because it can reach the flag
+        // quickly
+	private static final int DEST_PRIORITY_ATTACK_FLAG_WITH_SCOUT = 5;
+
+	private static final int DEST_PRIORITY_CHASE_ATTACK = 4;
+	private static final int DEST_PRIORITY_CHASE_DEFEND = 3;
+
+        // Flag bias is 1, so chase priority must be 2 or higher,
+        // so that it will chase a piece one step away.
+	private static final int DEST_PRIORITY_CHASE = 2;
 
 	private static final int DEST_VALUE_NIL = 9999;
 	private static final int GUARDED_OPEN = 0;
@@ -254,6 +261,12 @@ public class TestingBoard extends Board
 	public TestingBoard(Board t)
 	{
 		super(t);
+                genSuspectedRank();
+
+		// mark weak pieces before copying below
+		// markWeakPieces depends on hasFewWeakRanks
+		// which depends on genSuspectedRank
+		markWeakPieces();
 
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
@@ -267,15 +280,7 @@ public class TestingBoard extends Board
 				TestPiece np = new TestPiece(p);
 				grid.setPiece(i, np);
 			}
-
 		}
-
-		genSuspectedRank();
-
-		// mark weak pieces before copying below
-		// markWeakPieces depends on hasFewWeakRanks
-		// which depends on genSuspectedRank
-		markWeakPieces();
 
 		value = 0;
 		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
@@ -1001,21 +1006,28 @@ public class TestingBoard extends Board
 		// expendable pieces just get in the way.
 		// The player has the luxury of attack
 		// for the sake of random discovery.
-		// So increase the stealth value of the opponent pieces
-		// to encourage discovery.
+                // Version 11 proportionally modified the stealth value
+                // of all pieces to encourage discovery.
+                // But this skewed superior piece exchanges.
+                // (e.g. an unknown One might not attack a Three,
+                // because it had more stealth due to a lacking piece count).
+                // So Version 12 adds a fixed bonus to the stealth values.
 
-		int u = grid.movablePieceCount(Settings.topColor) -
-			grid.movablePieceCount(Settings.bottomColor);
+		int u = grid.pieceCount(Settings.topColor)
+                        - rankAtLarge(Settings.topColor, Rank.BOMB)
+			- (grid.pieceCount(Settings.bottomColor)
+                            - rankAtLarge(Settings.bottomColor, Rank.BOMB));
 
 		int c;
 		if (u > 0)
 			c = Settings.bottomColor;
 		else
 			c = Settings.topColor;
-		u = Math.min(Math.abs(u/2), 5);
+		u = Math.min(Math.abs(u), 10);
 	
 		for (int r = 1; r < 10; r++)	
-			valueStealth[c][r-1] = valueStealth[c][r-1] * 10 / (10 - u);
+			valueStealth[c][r-1] = valueStealth[c][r-1] + u * VALUE_NINE / 20;
+
 		// Handle special cases
 
 		// Prior to version 10.4, the AI always set
@@ -1318,7 +1330,7 @@ public class TestingBoard extends Board
                 // could happen in the lanes.
 
                                 if (y < 3
-                                        && getLowestRankedOpponent(p.getColor(),j,p).getRank() != rank
+                                        && isChased(j)
                                         && lowerRankCount[Settings.bottomColor][rank.ordinal()-1] > 1) {
 						genPlanA(fleetmp[Settings.topColor], Settings.topColor, rank.ordinal(), DEST_PRIORITY_LANE);
 						genPlanB(fleetmp[Settings.topColor], Settings.topColor, rank.ordinal(), DEST_PRIORITY_LANE);
@@ -1395,6 +1407,23 @@ public class TestingBoard extends Board
 		} // lane
 	}
 
+
+        // Is the piece buried by unmoved pieces?
+        boolean isBuried(Piece p)
+        {
+            int i = p.getIndex();
+            for (int d : dir) {
+                int n = i + d;
+                if (!Grid.isValid(n))
+                        continue;
+                Piece np = getPiece(n);
+                if (np == null
+                    || np.hasMoved())
+                    return false;
+            }
+            return true;
+        }
+
 	// Low rank piece discovery is much more important
 	// than finding the structure that contains the flag.
 	// The structure will become evident
@@ -1452,8 +1481,23 @@ public class TestingBoard extends Board
 		// piece and it is needed, break up structure.
 
 			if (isNeededRank(p)
-				&& !isExpendable(p))
+				&& !isExpendable(p)) {
 				unmovedValue[i]=0;
+
+                // If the piece is buried by other unmoved pieces,
+                // try to unbury it by moving one of the blocking pieces.
+                // This is necessary for bad setups, of which the AI
+                // has many.   The AI often loses because it does not
+                // have an unburied defender to protect the flag.
+
+                                if (isBuried(p))
+                                    for (int d : dir) {
+                                        int n = i + d;
+                                        if (!Grid.isValid(n))
+                                                continue;
+                                        unmovedValue[n] = 0;
+                                    }
+                        }
 
 			else if (!isNeededRank(p)) {
 
@@ -1468,7 +1512,7 @@ public class TestingBoard extends Board
 
 				int rank = p.getRank().ordinal();
 				int color = p.getColor();
-				unmovedValue[i] += VALUE_MOVED +values[color][rank]/100;
+				unmovedValue[i] += VALUE_MOVED +values[color][rank]/(VALUE_MOVED * 10);
 			}
 
 
@@ -2881,7 +2925,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// This is a necessary tradeoff to keep most pieces unmoved
 		// and reduce the size of the search tree.
 
-		chaseWithScout(flagp, i, DEST_PRIORITY_ATTACK_FLAG);
+		chaseWithScout(flagp, i, DEST_PRIORITY_ATTACK_FLAG_WITH_SCOUT);
 	}
 
 	// Generate a matrix of consecutive values with the highest
@@ -3256,6 +3300,16 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		return sumValues[color] - sumValues[1-color];
 	}
 
+        // The AI thinks an aggressive piece is probably weak if:
+        //	- it chases an unknown
+        // 	- it chases an expendable piece
+        public boolean isWeakAggressive(Piece p)
+        {
+            return (p.getActingRankChase() == Rank.UNKNOWN
+                || (p.getActingRankChase() != Rank.NIL
+                        && isExpendable(1-p.getColor(), p.getActingRankChase().ordinal())));
+        }
+
 	public boolean hasLowValue(Piece p)
 	{
 		return pieceValue(p) <= pieceValue(p.getColor(),4);
@@ -3619,7 +3673,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		TestPiece tp = (TestPiece)getPiece(to);
 		boolean scoutFarMove = !adjacent;
 		boolean unknownScoutFarMove = scoutFarMove && !fp.isKnown();
-		boolean wasChased = isChased(m);
+		boolean wasChased = isChased(from);
 		moveHistory(fp, tp, m);
 
 		if (depth == 0) {
@@ -3672,25 +3726,30 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			}
 
 		// Give a slight bias to all pieces to move towards
-		// an open opponent flag and unknown pieces to move
+		// an open opponent flag and
 		// towards a bombed opponent flag, if the player still
-		// has any unknown Miners.   This replaces
+		// has any Miners.   This replaces
 		// the code that used a plan A/B chase to move
 		// pieces in the lanes down the lanes, because that
 		// code overloaded chases, often stranding low rank
 		// pieces in the lanes while the opponent pieces
 		// ran amok.
-		//
+
 		// Note that if the opponent chooses to defend its
 		// flag area, this will attract more player pieces
 		// towards the flag in the chase() code.
-	
-			if (flag[1-fpcolor] != 0
-				&& ((!isBombedFlag[1-fpcolor]
-					&& !isInvincible(fp))
-					|| (!fp.isKnown()
-						&& unknownRankAtLarge(fpcolor, Rank.EIGHT) != 0))
-				&& fp.getMoves() - fp.boardPiece().getMoves() == 0) {
+
+                // Note that plan A/B chase offers more points, so
+                // pieces should follow plans first.   But having a default
+                // direction helps prevent pieces from wandering
+                // aimlessly around the board.
+
+                // TBD: This causes stacking and needs to be dealt with
+
+			assert flag[1-fpcolor] != 0;
+                        if ((!isBombedFlag[1-fpcolor]
+                                || rankAtLarge(fpcolor, Rank.EIGHT) != 0)
+                            && fp.getMoves() - fp.boardPiece().getMoves() == 0) {
 				if (Grid.steps(to, flag[1-fpcolor])
 					- Grid.steps(from, flag[1-fpcolor]) < 0)
 					vm++;
@@ -6084,7 +6143,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// piece has more stealth than a middle rank piece.
 
 		if (rank == Rank.UNKNOWN) {
-			if (p.getActingRankChase() != Rank.NIL
+			if (isWeakAggressive(p)
 				|| p.isWeak())
 				return stealthValue(p.getColor(), 5);
 			if (p.getActingRankFleeLow() == Rank.UNKNOWN
@@ -6103,8 +6162,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 // have high stealth.
 
 		} else if (p.getColor() == Settings.topColor
-                    && (p.getActingRankChase() == Rank.NIL
-                        || p.getActingRankChase().ordinal() <= 5)
+                    && !isWeakAggressive(p)
                     && !p.isWeak())
                     return Math.max(stealthValue(Settings.topColor, 4), stealthValue(Settings.topColor, rank));
 
@@ -6189,8 +6247,19 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	private int aiBombValue(Piece p)
 	{
-		int color = p.getColor();
-		return Math.max(pieceValue(1-color, 8), isWinning(color)/3) + grid.defenderCount(p)*3;
+            int color = p.getColor();
+            int value = Math.max(pieceValue(1-color, 8), isWinning(color)/3) + grid.defenderCount(color, p.getIndex())*3;
+
+        // If the AI flag is known, the AI is willing to sacrifice more
+        // to defend an intact flag structure.
+        // This is significant when the opponent still has an unknown
+        // rank less than the defender.
+
+            if (color == Settings.topColor
+                && getPiece(flag[color]).isKnown())
+                return Math.max(value, isWinning(color)*3/2);
+       
+            return value; 
 	}
 
 	// FLAG VALUE.
@@ -6982,7 +7051,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			else if (tprank.ordinal() <= lowestUnknownExpendableRank + 1) {
 
 				int result = (tprank.ordinal() <= lowestUnknownExpendableRank ? LOSES : EVEN);
-				if ((fp.getActingRankChase() != Rank.NIL
+				if ((isWeakAggressive(fp)
 					&& tprank.ordinal() <= 7)
 					|| riskExpendable
 					|| (randomForay
@@ -7030,14 +7099,14 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 			else if (fprank.ordinal() <= lowestUnknownExpendableRank + 1) {
 
-			// if the AI piece is lower than the lowest opponent expendable
-			// rank remaining, and the AI thinks that the opponent piece
-			// is expendable, then this is a WIN for the AI
+                // if the AI piece is lower than the lowest opponent expendable
+                // rank remaining, and the AI thinks that the opponent piece
+                // is expendable, then this is a WIN for the AI
 
 				int result = (fprank.ordinal() <= lowestUnknownExpendableRank ? WINS : EVEN);
 				
 
-				if (tp.getActingRankChase() != Rank.NIL
+				if (isWeakAggressive(tp)
 					&& fprank.ordinal() <= 7) 
 					return result;	// maybe not
 
@@ -7098,13 +7167,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			if (unk.isKnown())
 				continue;
 
-		// The AI thinks that a piece is probably weak if:
-		//	- it chases an unknown
-		// 	- it chases an expendable piece
-
-			if (unk.getActingRankChase() == Rank.UNKNOWN
-				|| (unk.getActingRankChase() != Rank.NIL
-					&& isExpendable(1-unk.getColor(), unk.getActingRankChase().ordinal())))
+                        if (isWeakAggressive(unk))
 				unk.setWeak(true);
 
 		Rank lowfleeRank = unk.getActingRankFleeLow();
@@ -7996,7 +8059,19 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	boolean isForay(Piece p)
 	{
-		return forayLane[Settings.topColor] == Grid.getX(p.getIndex());
+            int i = p.getIndex();
+            int x = Grid.getX(i);
+            if (forayLane[Settings.topColor] == x)
+                return true;
+
+        // If AI pieces stack, attack!
+
+            if ((forayLane[Settings.topColor] == x - 1
+                || forayLane[Settings.topColor] == x + 1)
+                    && grid.defenderCount(Settings.topColor, i) != 0)
+                return true;
+
+            return false;
 	}
 
 	// Return a result between 0 and vm, depending on the value vm.

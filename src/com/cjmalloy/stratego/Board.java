@@ -1428,8 +1428,8 @@ boardHistory[1-bturn].hash,  0);
 		// believes that the protector may actually be stronger.
 
 			if (open == 0
-				&& (chaserRank == Rank.UNKNOWN
-					|| unknownProtector.getApparentRank() != chaserRank))
+                            && (chaserRank == Rank.UNKNOWN
+                                || unknownProtector.getApparentRank() != chaserRank))
 				return;
 
 		// If a chased piece was forked, the player had to choose
@@ -2409,19 +2409,21 @@ boardHistory[1-bturn].hash,  0);
 
 	//
 	// Usual flag locations are on the back row, and usually
-	// in the corner or beneath the lakes
+	// in the corners or beneath the lakes.  However,
+        // compound bomb structures may require the AI to attack
+        // side structures to get at the back row.
 	// F -- F F -- -- F F -- F
 	protected boolean usualFlagLocation(int color, int i)
 	{
+		int x = Grid.getX(i);
+                if (x == 0 || x == 9)
+                    return true;
 		if (Grid.getY(i) != Grid.yside(color, 0))
 			return false;
-		int x = Grid.getX(i);
-		if (x == 1
-			|| x == 4
-			|| x == 5
-			|| x == 8)
-			return false;
-		return true;
+		return (x == 2
+                    || x == 3
+                    || x == 6
+                    || x == 7);
 	}
 
         protected boolean isBombedLane(int lane)
@@ -2605,7 +2607,6 @@ boardHistory[1-bturn].hash,  0);
 		// mark it as containing the flag.
 
 			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
-
 			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
 				flag[c] = maybe[bestGuess][0];
@@ -2619,6 +2620,13 @@ boardHistory[1-bturn].hash,  0);
 			for (int i = 0; i < maybe_count[c]; i++)
 				if (usualFlagLocation(c, maybe[i][0]))
 					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
+                // Call markBombedFlag yet again on bestGuess
+                // to set isBombedFlag
+                // (it was called first because suspected bomb allocation
+                // is limited, and we want to give priority to the
+                // best guess flag structure.)
+
+			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 
 		} else if (c == Settings.bottomColor) {
 
@@ -2777,7 +2785,7 @@ boardHistory[1-bturn].hash,  0);
 
 	int getBestGuess(int color, int[][] maybe, int maybe_count)
 	{
-		int size = 0;
+		int bestProb = 0;
 		int bestGuess = 99;
 
         // For starters, the flag is guessed to be in the foray lane
@@ -2792,12 +2800,13 @@ boardHistory[1-bturn].hash,  0);
                 // the AI attacks the front row patterns first,
                 // which may be necessary to get at the back row pattern.
 
-			int nb;
-                        int inForayLane = 0;
+                        int prob = 1;
+                        if (usualFlagLocation(color, maybe[i][0]))
+                            prob++;
 
 		// compute the number of bombs in the structure
 
-			for (nb = 1; maybe[i][nb] != 0; nb++) {
+			for (int nb = 1; maybe[i][nb] != 0; nb++) {
 
                                 int j = maybe[i][nb];
 				Piece p = getPiece(j);
@@ -2819,16 +2828,13 @@ boardHistory[1-bturn].hash,  0);
 
 				if (!p.isKnown()
 					&& p.getActingRankChase() != Rank.NIL) {
-					nb = 10;
+					prob--;
 					break;
 				}
 
-                                if (forayLane[1-color]/4 == Grid.getX(j)/4)
-                                    inForayLane++;
-
+                                if (forayLane[1-color] == Grid.getX(j))
+                                    prob++;
 			}
-			nb--;
-                        nb -= inForayLane;
 
 		// The AI examines the opponent setup for possible sentries
 		// left near the structures.  If the opponent had guarded
@@ -2867,11 +2873,11 @@ boardHistory[1-bturn].hash,  0);
 					}
 				}
 
-			nb = nb * 100 /guards;
+			prob = prob * guards;
 			if (bestGuess == 99
-				|| nb < size) {
+				|| prob > bestProb) {
 				bestGuess = i;
-				size = nb;
+				bestProb = prob;
 			}
 
 		} // i
@@ -3331,12 +3337,12 @@ boardHistory[1-bturn].hash,  0);
 
 	}
 
-	public boolean isChased(int m)
+	public boolean isChased(int i)
 	{
 		UndoMove oppmove = getLastMove(1);
 		if (oppmove == UndoMove.NullMove)
 			return false;
-		return Grid.isAdjacent(oppmove.getTo(),  Move.unpackFrom(m));
+		return Grid.isAdjacent(oppmove.getTo(), i);
 	}
 
 	// Returns true if both moves are between the same row
@@ -3711,18 +3717,21 @@ boardHistory[1-bturn].hash,  0);
 			if (p.getRank() == Rank.SPY)
 				guess(p.getActualRank() == Rank.SPY);
 
-	// its hard to distinguish a Four from a Five,
-	// so if the AI thinks a piece is a Four and it turns
-	// out to be a Five, it was an OK guess.
+        // Its hard to distinguish equal or lower ranks.
+        // If the opponent uses equal or much lower unknown ranks to attack,
+        // it is not bluffing, but rather suboptimal play.
 
-			else if (p.getRank() == Rank.FOUR)
-				guess(p.getActualRank().ordinal() <= 5);
+        // A Five may chase a AI Five, and the AI will suspect it is a Four,
+        // but it could be a Five or any lower rank.
+        // A Four may chase a AI Four, and the AI will suspect it is a Three,
+        // but it could be a Four or any lower rank.
+        // A Three may chase an AI Three, and the AI will suspect it is a Two,
+        // but it could be a Three or any lower rank.
 
-        // The AI thinks an opponent piece is one rank lower than the AI piece
-        // that it chased, but it could also be the same rank
+        // On the other hand, a Three is bluffing as a One by chasing a Two.
 
-			else if (p.getRank().ordinal() < 4)
-				guess(p.getRank().ordinal() >= p.getActualRank().ordinal() + 1
+			else if (p.getRank().ordinal() <= 4)
+				guess(p.getActualRank().ordinal() <= p.getRank().ordinal() + 1
 					|| p.getActualRank() == Rank.SPY
 						&& p.getActingRankChase() == Rank.NIL);
 

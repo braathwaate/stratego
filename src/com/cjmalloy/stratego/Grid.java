@@ -223,10 +223,9 @@ public class Grid
 		return pieceBitGrid[1-p.getColor()].andBitCount(neighbor[0][i]);
 	}
 
-	public int defenderCount(Piece p)
+	public int defenderCount(int color, int i)
 	{
-		int i = p.getIndex();
-		return pieceBitGrid[p.getColor()].andBitCount(neighbor[0][i]);
+		return pieceBitGrid[color].andBitCount(neighbor[0][i]);
 	}
 
 	public int movablePieceCount(int color, int i, int n)
