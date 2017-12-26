@@ -2607,7 +2607,6 @@ boardHistory[1-bturn].hash,  0);
 		// mark it as containing the flag.
 
 			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
-			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			if (c == Settings.bottomColor) {
 				flag[c] = maybe[bestGuess][0];
 				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
@@ -2617,6 +2616,7 @@ boardHistory[1-bturn].hash,  0);
 		// Mark surrounding pieces in all usual flag
 		// structures as suspected bombs.
 
+			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			for (int i = 0; i < maybe_count[c]; i++)
 				if (usualFlagLocation(c, maybe[i][0]))
 					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
@@ -2944,8 +2944,19 @@ boardHistory[1-bturn].hash,  0);
 			} else {
 
 		// color is AI
-				if ((p.getRank() == Rank.BOMB
-                                        || p.getRank() == Rank.FLAG)
+                // Note that the remaining structure may not have
+                // the flag in the expected position or even in
+                // the structure at all, yet the opponent will still
+                // assume it does.  For example,
+                // |---------
+                // | b6 bb bf
+                // | -- b8 --
+                // contains the flag, but in an unexpected position,
+                // so the flag is relatively safe from attack, at least from
+                // non-Miners.  Yet it any bombs are in the expected
+                // position, they are assumed known.
+
+				if (p.getRank() == Rank.BOMB
 					&& maybe_count == 1) {
 					p.makeKnown();
 				}
@@ -3691,12 +3702,17 @@ boardHistory[1-bturn].hash,  0);
 
 	protected Rank getSetupRank(int i)
 	{
-		Piece p = setup[i];
-		if (!p.isKnown())
-			return Rank.UNKNOWN;
-		else
-			return p.getRank();
+		return setup[i].getApparentRank();
 	}
+
+        protected int getSetupIndex(Piece p)
+        {
+            for (int i = 12; i <=120; i++)
+                if (setup[i] == p)
+                    return i;
+            assert false : "piece not found in setup";
+            return 0;
+        }
 
 	protected void guess(boolean guessedRight)
 	{
@@ -3711,11 +3727,11 @@ boardHistory[1-bturn].hash,  0);
 
 	protected void revealRank(Piece p)
 	{
-		if (p.getColor() == Settings.bottomColor
-			&& !p.isKnown()) {
+            if (p.getColor() == Settings.bottomColor
+                    && !p.isKnown()) {
 
-			if (p.getRank() == Rank.SPY)
-				guess(p.getActualRank() == Rank.SPY);
+                    if (p.getRank() == Rank.SPY)
+                            guess(p.getActualRank() == Rank.SPY);
 
         // Its hard to distinguish equal or lower ranks.
         // If the opponent uses equal or much lower unknown ranks to attack,
@@ -3730,12 +3746,26 @@ boardHistory[1-bturn].hash,  0);
 
         // On the other hand, a Three is bluffing as a One by chasing a Two.
 
-			else if (p.getRank().ordinal() <= 4)
-				guess(p.getActualRank().ordinal() <= p.getRank().ordinal() + 1
-					|| p.getActualRank() == Rank.SPY
-						&& p.getActingRankChase() == Rank.NIL);
+                    else if (p.getRank().ordinal() <= 4)
+                            guess(p.getActualRank().ordinal() <= p.getRank().ordinal() + 1
+                                    || p.getActualRank() == Rank.SPY
+                                            && p.getActingRankChase() == Rank.NIL);
 
-		}
-		p.revealRank();
-	}
+            }
+            p.revealRank();
+
+        // Simplistic, the Spy is thought to be adjacent to the Two
+        // TBD: its not so simple
+
+            if (p.getRank() == Rank.TWO) {
+                int i = getSetupIndex(p);
+                for (int d : dir) {
+                    int j = i + d;
+                    Piece np = getSetupPiece(j);
+                    if (np != null)
+                        np.setLikelySpy(true);
+                }
+            }
+        }
+
 }

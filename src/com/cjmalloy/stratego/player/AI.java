@@ -837,6 +837,14 @@ public class AI implements Runnable
 		}
 	}
 
+        // If the opponent's last move provided any new info
+        boolean lastMoveInfo()
+        {
+            UndoMove lastMove = b.getLastMove(1);
+            return (lastMove != UndoMove.NullMove
+                && lastMove.tp != null);
+        }
+
 // Silly Java warning:
 // Java won't let you declare a typed list array like
 // public ArrayList<Piece>[] scouts = new ArrayList<Piece>()[2];
@@ -845,7 +853,6 @@ public class AI implements Runnable
 	private void getBestMove() throws InterruptedException
 	{
 		int tmpM = 0;
-		bestMove = 0;
 		int bestMoveValue = 0;
 		int ncount = 0;
 
@@ -878,9 +885,31 @@ public class AI implements Runnable
 
 		genDeepSearch();
 
+                // On non-dedicated computers, the amount of resource
+                // available to the AI will vary from move to move
+                // due to other consumptive tasks running at the same time.
+                // The difference in ply can be quite dissimilar.
+                // One move might get 8 ply and the next only 2 ply.
+                // Thus the analysis from the prior is often more accurate,
+                // subject to the lastMoveInfo() constraints.
+                // So the AI begins the search starting from
+                // the basis of the prior move.
+
+                int nstart=1;
+		long hashOrig = getHash();
+		int index = (int)(hashOrig % ttable[b.bturn].length);
+		TTEntry entry = ttable[b.bturn][index];
+
+		if (entry != null
+                    && entry.hash == hashOrig
+                    && !lastMoveInfo()) {
+			nstart = Math.max(1, entry.depth - 2);
+                        bestMove = entry.bestMove;
+                }
+
 		// Iterative Deepening
 
-		for (int n = 1; n < MAX_PLY; n++) {
+		for (int n = nstart; n < MAX_PLY; n++) {
 
 		Move killerMove = new Move(null, -1);
 		Move returnMove = new Move(null, -1);
@@ -938,7 +967,7 @@ public class AI implements Runnable
 
 		log("\n<<< pick best move");
 
-		if (n == 1
+		if (n == nstart
 			|| deepSearch != 0
 			|| n == MAX_PLY - 1) {
 
@@ -2369,7 +2398,7 @@ public class AI implements Runnable
 			s += 'L';
 		else
 			s += '.';
-		if (p.getMaybeEight())
+		if (p.isMaybeEight())
 			s += '8';
 		else
 			s += '.';

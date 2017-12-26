@@ -42,6 +42,8 @@ public class Piece implements Comparable<Piece>
 	static private final int IS_SUSPECTED = 1 << 4;
 	static private final int IS_SHOWN = 1 << 5;	// visible on screen
 	static private final int IS_SAFE = 1 << 6;
+	static private final int IS_FLAG_BOMB = 1 << 7;
+	static private final int LIKELY_SPY = 1 << 8;
 	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
@@ -135,12 +137,12 @@ public class Piece implements Comparable<Piece>
 			return actualRank;
 	}
 
-	// getApparentRank() returns unknown if the ai piece is unknown,
-	// and otherwise the suspected rank.  This is the rank that
+	// getApparentRank() returns UNKNOWN if the piece is unknown,
+	// and otherwise the rank.  This is the rank that
 	// each side sees.
 	public Rank getApparentRank()
 	{
-		if (!isKnown() && color == Settings.topColor)
+		if (!isKnown())
 			return Rank.UNKNOWN;
 		else
 			return rank;
@@ -154,7 +156,7 @@ public class Piece implements Comparable<Piece>
 	public void makeKnown()
 	{
 		flags |= IS_KNOWN;
-		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT);
+		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT | LIKELY_SPY);
 		clearActingRankFlee();
 	}
 
@@ -369,9 +371,35 @@ public class Piece implements Comparable<Piece>
 			flags &= ~MAYBE_EIGHT;
 	}
 
-	public boolean getMaybeEight()
+	public boolean isMaybeEight()
 	{
 		return (flags & MAYBE_EIGHT) != 0;
+	}
+
+	public void setFlagBomb(boolean b)
+	{
+		if (b)
+			flags |= IS_FLAG_BOMB;
+		else
+			flags &= ~IS_FLAG_BOMB;
+	}
+
+	public boolean isFlagBomb()
+	{
+		return (flags & IS_FLAG_BOMB) != 0;
+	}
+
+	public void setLikelySpy(boolean b)
+	{
+		if (b)
+			flags |= LIKELY_SPY;
+		else
+			flags &= ~LIKELY_SPY;
+	}
+
+	public boolean isLikelySpy()
+	{
+		return (flags & LIKELY_SPY) != 0;
 	}
 
 	public int getIndex()
