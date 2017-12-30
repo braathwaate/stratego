@@ -2060,7 +2060,7 @@ public class AI implements Runnable
 
 		// If piece is being chased, repetitive moves OK
 
-			if (b.isChased(tryMove))
+			if (b.isChased(Move.unpackFrom(tryMove)))
 				b.move(tryMove);
 			else {
 				if (b.bturn == Settings.topColor) {

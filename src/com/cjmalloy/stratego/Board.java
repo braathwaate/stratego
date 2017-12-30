@@ -945,6 +945,34 @@ boardHistory[1-bturn].hash,  0);
 		Rank arank = chased.getActingRankChase();
 		Rank chaserRank = chaser.getApparentRank();
 
+		// Prior to Version 10.4, if an unknown piece had IS_LESS set
+		// (because it protected a piece) and then chased an AI piece,
+		// it always cleared IS_LESS
+		// (actual chases are better indicators of actual rank
+		// than protectors because of bluffing when an opponent
+		// piece is trapped.
+		//
+		// However, if the player wasn't bluffing, then information
+		// about a potential stronger piece is lost.  For example,
+		// An unknown Two protected a Four from attack.   Then
+		// the Two chased a Four.  Prior to Version 10.4, the AI
+		// would guess that the Two was a Three.   So Version 10.4
+		// retains the rank from IS_LESS if the rank is plausible.
+		//
+		// Note: Recall that direct and indirect chase ranks
+		// are assigned differently: If a piece protects
+		// another piece from a Three, it gains an indirect
+		// chase rank of One.   If a piece chases a Three,
+		// it gains a chase rank of Three.  Thus if a piece
+		// has a chase rank of One, the AI will not reset it
+		// if it chases a Three.  But if it chases a Four,
+		// then the AI assumes the piece was bluffing when
+		// it gains the chase rank of One.
+
+                if (chased.isRankLess()
+                    && arank.ordinal() > chaserRank.ordinal() - 2)
+                    return;
+
 		// Do not reset chase rank on a trapped piece
 		// that already has a chase rank
 		// even if it wasn't chased, because it may try
@@ -954,12 +982,13 @@ boardHistory[1-bturn].hash,  0);
 
 		// Example 1		Example 2
 		// R3 -- --		// R? -- --
-		// xx B4 --		// xx B4 --
-		// xx -- R4		// xx -- R?
+		// xx b4 --		// xx b4 --
+		// xx -- R4		// xx -- r?
 		// -- -- --		// -- -- --
 		// 
-		// In example 1, suspected Blue Four anticipates that Red Three
-		// may approach and retreats to a square next to known Red Four.
+		// In example 1, suspected Blue Four anticipates
+                // that Red Three may approach and retreats
+                // to a square next to known Red Four.
 		// Blue Four does not acquire a chase rank of Three,
 		// but remains a Four. Example 2 is also a nervous
 		// situation for Blue Four and it may not wait to be
@@ -1020,19 +1049,10 @@ boardHistory[1-bturn].hash,  0);
 				return;
 		}
 		
-		// An unknown chase rank, once set, is never changed to
-		// a rank lower than Six.  This prevents being duped
-		// by random bluffing, where a high rank piece chases
-		// all pieces, low ranks as well as unknowns.  The AI believes
-		// that unknown pieces that chase AI unknowns are probably
-		// high ranked pieces and can be attacked by a Five or less.
-		//
-		// So if an opponent piece chases an AI unknown and then
-		// chases a Five, it retains the chase rank of unknown,
-		// because a Five chase rank would indicate a suspected rank
-		// of Four, but a Four is less inclined to chase unknown
-		// pieces, so that would be unlikely.
-		//
+		// The AI believes that unknown pieces that chase AI
+                // unknowns are probably high ranked pieces
+                // and can be attacked by a Five or less.
+
 		// Prior to version 9.3, chasing an unknown always
 		// set the chase rank to UNKNOWN.
 		// The problem was that once the AI successfully
@@ -1041,7 +1061,7 @@ boardHistory[1-bturn].hash,  0);
 		// and acquired the UNKNOWN rank.
 		// This led the AI to approach the now unknown opponent
 		// piece and thus lose its piece.
-		//
+
 		// From version 9.3 to 10.0, if a piece has a chase rank
 		// of 4 or lower, the low rank is retained if the piece
 		// chases an unknown.  The side-effect is that the AI is duped
@@ -1052,7 +1072,7 @@ boardHistory[1-bturn].hash,  0);
 		// to attack the bluffing piece, it can also lead to the
 		// AI miscalculation of other suspected ranks on the board,
 		// leading to a loss elsewhere.
-		//
+
 		// The key change in 10.1 is that all chase ranks
 		// other than Four or Five are retained if the piece approaches
 		// an Unknown.  This is because chasing a known piece
@@ -1060,8 +1080,8 @@ boardHistory[1-bturn].hash,  0);
 		// an Unknown.  For example, if a piece chases a Six,
 		// it is probably a Five.  Then if it chases an Unknown,
 		// it still is probably a Five.
-		//
-		// Since Version 10.1, if a piece has a Four or Five chase rank,
+
+		// In Version 10.1, if a piece has a Four or Five chase rank,
 		// (suspected rank of Four) and it then approaches an
 		// Unknown, the chase rank changes to Six which
 		// usually results in a suspected rank of Five.
@@ -1072,52 +1092,16 @@ boardHistory[1-bturn].hash,  0);
 		// chasing an Unknown is a sure sign that the piece
 		// is not a Four but a Five, so the chance of a small loss
 		// (4x5) is a necessary evil.
-		//
-		// There is no way around this.  Bluffing makes assignment
-		// of suspected ranks a challenge.
 
-		if (arank == Rank.UNKNOWN
-			&& chaserRank.ordinal() <= 5)
-		 	return;
+                // Bluffing makes any strategy indeterminate, so
+                // Version 12 simply declines to assign a suspected
+                // rank to any piece chasing an Unknown.   So if a piece
+                // that chased a Three then chased an Unknown, it would
+                // no longer garner a suspected rank.  This is the same
+                // when blufferRisk is 5 and the AI believes that
+                // the opponent is a bluffer.
 
-		if (chaserRank == Rank.UNKNOWN
-			&& (arank == Rank.FIVE
-				|| arank == Rank.FOUR)
-			&& !isInvincible(chased))
-			chased.setActingRankChaseEqual(Rank.SIX);
-
-		else if (arank == Rank.NIL 
-			|| arank.ordinal() >= chaserRank.ordinal()
-
-		// Prior to Version 10.4, if an unknown piece had IS_LESS set
-		// (because it protected a piece) and then chased an AI piece,
-		// it always cleared IS_LESS
-		// (actual chases are better indicators of actual rank
-		// than protectors because of bluffing when an opponent
-		// piece is trapped.
-		//
-		// However, if the player wasn't bluffing, then information
-		// about a potential stronger piece is lost.  For example,
-		// An unknown Two protected a Four from attack.   Then
-		// the Two chased a Four.  Prior to Version 10.4, the AI
-		// would guess that the Two was a Three.   So Version 10.4
-		// retains the rank from IS_LESS if the rank is plausible.
-		//
-		// Note: Recall that direct and indirect chase ranks
-		// are assigned differently: If a piece protects
-		// another piece from a Three, it gains an indirect
-		// chase rank of One.   If a piece chases a Three,
-		// it gains a chase rank of Three.  Thus if a piece
-		// has a chase rank of One, the AI will not reset it
-		// if it chases a Three.  But if it chases a Four,
-		// then the AI assumes the piece was bluffing when
-		// it gains the chase rank of One.
-
-			|| (chased.isRankLess()
-				&& arank.ordinal() < chaserRank.ordinal() - 2)) {
-
-			chased.setActingRankChaseEqual(chaserRank);
-		}
+                chased.setActingRankChaseEqual(chaserRank);
 	}
 
 
@@ -1177,17 +1161,17 @@ boardHistory[1-bturn].hash,  0);
 		Rank chasedRank = chased.getApparentRank();
 		Rank chaserRank = chaser.getApparentRank();
 
-		if (chaserRank == Rank.UNKNOWN) {
+		if (!chaser.isKnown()) {
 
 		// Because ranks 5-9 are often hellbent on discovery,
 		// an adjacent unknown piece next to the chased should
 		// not be misinterpreted as a protector.
 		// Example 1:
-		// R? B6 -- B?
+		// r? B6 -- b?
 		//
 		// Example 2: 
-		// R? -- B6
-		// -- B? --
+		// r? -- B6
+		// -- b? --
 		// Unknown Blue moves towards Blue Six (in Example 1) or
 		// Blue Six moves towards unknown Red in Example 2.
 
@@ -1208,7 +1192,7 @@ boardHistory[1-bturn].hash,  0);
 		// must even be lower.
 		//
 		// For example,
-		// R? -- B?
+		// r? -- b?
 		// -- B2 --
 		// Blue Two moves between Unknown Red and Unknown Blue.
 		// If Blue thinks that Unknown Red could be Red One
@@ -1225,7 +1209,7 @@ boardHistory[1-bturn].hash,  0);
 		// A surer way to determine whether Blue believes Unknown
 		// Red is a superior piece is if Blue neglects to attack
 		// Unknown Red.  For example,
-		// R? B2 -- B?
+		// r? B2 -- b?
 		// If Blue Two does not attack Unknown Red, and instead
 		// moves unknown Blue towards Blue Two, then Blue is
 		// signaling that it believes Unknown Red is Red One.
@@ -1236,7 +1220,7 @@ boardHistory[1-bturn].hash,  0);
 		// protector is even more superior.
 		//
 		// Another example,
-		// R? B3 -- B?
+		// r? B3 -- b?
 		// If Blue Three does not attack Unknown Red, and instead
 		// moves unknown Blue towards Blue Two, then Blue is
 		// signaling that it thinks unknown Red is either Red One,
@@ -1256,25 +1240,31 @@ boardHistory[1-bturn].hash,  0);
 		// by an unknown AI piece, but protected,
 		// then the protection must be strong.
 
-		// If the chased is a lower or equal rank
-		// to the chaser piece, the chased needs no protection.
-		// Set the direct chase rank (when ranks are equal
-		// and the the chased is unknown and suspected)
+		// If the chaser is known and the chased is unknown,
+                // nothing can be determined.  For example,
+                // R4 -- b? b?
+                // Red Four approaches unknown Blue, and Blue does not
+                // move.   Unknown Blue could be another Four and
+                // and delines to move.
+                // r? R4 -- b?
+                // -- -- b? --
+                // Unknown Blue approaches Red Four.  It aquires a
+                // suspected rank.  The other unknown Blue could
+                // be any piece.
+               
+                // chaser is known 
+		} else if (!chased.isKnown()
+                    || chaserRank.ordinal() >= chasedRank.ordinal())
+                        return;
 
-		} else if (chasedRank.ordinal() <= chaserRank.ordinal()
-			|| chasedRank == Rank.FLAG
-			|| chasedRank == Rank.BOMB) {
-			if (chaser.isKnown())
-				return;
-
-		// chaser piece is an unknown piece, but it has a rank
-		// (i.e. not UNKNOWN, because that was tested for above)
-		// But the chased doesn't know the rank, so the chased
-		// could be assuming that it is a lower ranked piece,
-		// and perhaps relying on a lower rank protector.
-		// So continue.
-
-		}
+                //------------------------------------------------
+		// chaser piece is either an unknown piece chasing
+                // a known strong chased piece OR
+                // both chaser and chased are known and chaser is
+                // stronger than the chased piece
+                // If the chased piece does not flee and has
+                // protection, the protection is assigned a chase rank.
+                //------------------------------------------------
 
 		Piece knownProtector = null;
 		Piece unknownProtector = null;
@@ -1361,15 +1351,15 @@ boardHistory[1-bturn].hash,  0);
 			if (p.getColor() == chaser.getColor())
 				continue;
 
-			if (p.getApparentRank() != Rank.UNKNOWN
-				&& chaserRank != Rank.UNKNOWN
-				&& (p.getApparentRank().ordinal() < chaserRank.ordinal()
-					|| p.getApparentRank() == Rank.SPY && chaserRank == Rank.ONE))
+			if (p.isKnown()
+				&& chaser.isKnown()
+				&& (p.getRank().ordinal() < chaserRank.ordinal()
+					|| p.getRank() == Rank.SPY && chaserRank == Rank.ONE))
 					return;
 
 			else if (p.getApparentRank().ordinal() < chasedRank.ordinal()
-				&& chaserRank == Rank.UNKNOWN) {
-				assert chasedRank != Rank.UNKNOWN : "chasedRank must be ranked";
+				&& !chaser.isKnown()) {
+				assert chased.isKnown() : "chasedRank must be ranked";
 				if (knownProtector == null
 					|| p.getApparentRank().ordinal() < knownProtector.getApparentRank().ordinal())
 					knownProtector = p;
@@ -2152,7 +2142,8 @@ boardHistory[1-bturn].hash,  0);
 				p.setMaybeEight(true);
 
 			Rank rank = p.getActingRankChase();
-			if (rank == Rank.NIL)
+			if (rank == Rank.NIL
+                            || p.isChasing(Rank.UNKNOWN))
 				continue;
 
                 // If the opponent is a bluffer, then

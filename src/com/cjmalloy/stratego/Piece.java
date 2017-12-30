@@ -28,7 +28,7 @@ public class Piece implements Comparable<Piece>
 	private Rank rank = null;
 
 	private int actingRankFlee = 0;
-	private Rank actingRankChase = Rank.NIL;
+	private int actingRankChase = 0;
 	private int index = 0;
 	
 	private int moves = 0;	// times piece has moved
@@ -78,7 +78,7 @@ public class Piece implements Comparable<Piece>
 	public void clear()
 	{
 		moves = 0;
-		actingRankChase = Rank.NIL;
+		actingRankChase = 0;
 		clearActingRankFlee();
 		flags = 0;
 		index = 0;
@@ -244,7 +244,9 @@ public class Piece implements Comparable<Piece>
 	public Rank getActingRankChase()
 	{
 		assert !isKnown() : "actingRankChase: piece must be unknown";
-		return actingRankChase;
+		if (actingRankChase == 0)
+			return Rank.NIL;
+		return Rank.toRank(Integer.numberOfTrailingZeros(actingRankChase));
 	}
 
 	public void setActingRankChase(Rank r)
@@ -269,7 +271,7 @@ public class Piece implements Comparable<Piece>
 		//	because the AI Two was invincible and then not.
 		// 	This could cause the AI Two to become cornered.
 
-		if (actingRankChase == Rank.NIL && moves != 0)
+		if (actingRankChase == 0 && moves != 0)
 			moves = 1;
 
 		// actingRankChase of unknown takes precedence over
@@ -278,7 +280,7 @@ public class Piece implements Comparable<Piece>
 		if (r == Rank.UNKNOWN)
 			actingRankFlee &= ~(1 << Rank.UNKNOWN.ordinal());
 
-		actingRankChase = r;
+		actingRankChase |= (1 << r.ordinal());
 	}
 
 	public void setActingRankChaseEqual(Rank r)
@@ -291,6 +293,11 @@ public class Piece implements Comparable<Piece>
 	{
 		setActingRankChase(r);
 		flags |= IS_LESS;
+	}
+
+	public boolean isChasing(Rank rank)
+	{
+		return (actingRankChase & (1 << rank.ordinal())) != 0;
 	}
 
 	public boolean isRankLess()
@@ -328,7 +335,7 @@ public class Piece implements Comparable<Piece>
 		// strong (fleeing to prevent discovery).
 
 		if (r == Rank.UNKNOWN
-			&& actingRankChase == Rank.UNKNOWN)
+			&& (actingRankChase & (1 << Rank.UNKNOWN.ordinal())) != 0)
 			return;
 
 		actingRankFlee |= (1 << r.ordinal());
