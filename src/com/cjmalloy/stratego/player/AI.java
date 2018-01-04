@@ -723,6 +723,9 @@ public class AI implements Runnable
 
 	private void getBombFlagMoves(ArrayList<Integer> moveList)
 	{
+                if (b.grid.pieceCount(b.bturn) - (b.rankAtLarge(b.bturn, Rank.BOMB) + 1) == b.grid.movablePieceCount(b.bturn))
+                    return;
+
 		BitGrid bg = new BitGrid();
 
 		// Find the neighboring bombs and flags
@@ -902,7 +905,9 @@ public class AI implements Runnable
 
 		if (entry != null
                     && entry.hash == hashOrig
-                    && !lastMoveInfo()) {
+                    && !lastMoveInfo()
+                    && entry.bestMove != -1
+                    && b.validMove(entry.bestMove)) {
 			nstart = Math.max(1, entry.depth - 2);
                         bestMove = entry.bestMove;
                 }

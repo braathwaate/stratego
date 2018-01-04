@@ -157,6 +157,12 @@ public class Grid
                     movablePieceBitGrid[p.getColor()].setBit(i);
 	}
 
+	public void clearMovable(Piece p) 
+	{
+                int i = p.getIndex();
+                movablePieceBitGrid[p.getColor()].clearBit(i);
+        }
+
 	static private void setWater(int i) 
 	{
 		isWater[i] = true;
