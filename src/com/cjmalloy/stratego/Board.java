@@ -1271,7 +1271,8 @@ boardHistory[1-bturn].hash,  0);
 
 			if (chasedRank.ordinal() >= 5	// or UNKNOWN
 				|| isInvincible(chased)
-				|| chaser.isFleeing(chasedRank))
+				|| chaser.isFleeing(chasedRank)
+				|| (chaser.isWeak() && blufferRisk >= 3))
 				return;
 
 		// If the chased piece is a strong but not invincible piece,
@@ -2221,7 +2222,8 @@ boardHistory[1-bturn].hash,  0);
                 // because the remaining pieces are stronger
                 // and have started to guess the rank of unknown pieces.
 
-                        p.setSafe(!hasFewWeakRanks(1-p.getColor(), 12));
+                        p.setSafe(isInvincible(p)
+                            || !hasFewWeakRanks(1-p.getColor(), 12));
 
                         if (p.getColor() != Settings.bottomColor)
                             continue;
@@ -2521,6 +2523,8 @@ boardHistory[1-bturn].hash,  0);
                         if (isBombedLane(lane))
                             continue;
 			int power = 0;
+                        int three = 0;
+                        int four = 0;
 			for (int y = 0; y < 10; y++)
 			for (int x = 0; x < 4; x++) {
 				int i = Grid.getIndex(x + lane*3, y);
@@ -2544,12 +2548,16 @@ boardHistory[1-bturn].hash,  0);
 		// to ignore any opponent attempts at bluffing.
 
 				else if (p.getRank() == Rank.FOUR)
-					power++;
+                                    four = 1;
 				else if (p.getRank() == Rank.THREE)
-					power+=2;
-				else if (p.getRank() == Rank.TWO)
-					power+=3;
+                                    three = 1;
+				else if (p.getRank() == Rank.TWO ||
+                                    p.getRank() == Rank.ONE)
+                                    power+=3;
+                                if (p.isKnown())
+                                    power++;
 			}
+                        power += four + three*2;
 			if (power < maxPower)
 				continue;
 			if (lane == 0)
