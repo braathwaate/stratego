@@ -239,7 +239,8 @@ public class WSettings {
 		if (twoSquares == null) {
 			twoSquares = new JCheckBox();
 			twoSquares.setBounds(new Rectangle(15, 345, 21, 21));
-			// twoSquares.doClick();
+                        if (Settings.twoSquares)
+                            twoSquares.doClick();
 			twoSquares.addActionListener(new java.awt.event.ActionListener()
 			{
 				public void actionPerformed(java.awt.event.ActionEvent e)

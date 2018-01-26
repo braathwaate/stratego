@@ -21,6 +21,7 @@ import com.cjmalloy.stratego.Piece;
 public class TestPiece extends Piece
 {
         protected Piece orig;
+        public int value;
 
 	public TestPiece(Piece p) 
 	{

@@ -29,6 +29,8 @@ public class StrategoDriver
 		for(String arg:args)
 		    if (arg.equals("-g"))
 			graphics = true;
+		    else if (arg.equals("-1"))
+			Settings.twoSquares = false;
 		    else if (arg.equals("-2"))
 			Settings.twoSquares = true;
 		    else if (arg.equals("-v"))

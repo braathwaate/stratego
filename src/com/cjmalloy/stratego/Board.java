@@ -2552,10 +2552,11 @@ boardHistory[1-bturn].hash,  0);
 				else if (p.getRank() == Rank.THREE)
                                     three = 1;
 				else if (p.getRank() == Rank.TWO ||
-                                    p.getRank() == Rank.ONE)
+                                    p.getRank() == Rank.ONE) {
                                     power+=3;
-                                if (p.isKnown())
-                                    power++;
+                                    if (p.isKnown())
+                                        power++;
+                                }
 			}
                         power += four + three*2;
 			if (power < maxPower)

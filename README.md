@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.11.1][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.11.1/stratego_v0.11.1.jar
+[Stratego player v0.12.0][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.12.0/stratego_v0.12.0.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -26,9 +26,11 @@ or set up your computer to select which program opens the jar file.
 
 Finally, you can try to run it from the command line:
 
-	java -jar stratego_v0.10.4.jar
+	java -jar stratego_v0.12.0.jar
 
-For a more challenging game, click the Settings menu and set the difficulty level to the middle (about 1 second) and enable the Two Squares rule.
+For a more challenging game, click the Settings menu and set the difficulty level to the middle (about 1 second).
+For an easier game, keep the difficulty all the way to the left
+ and disable the Two Squares rule.
 
 # About the AI (Artificial Intelligence)
 
@@ -99,7 +101,7 @@ a piece of expendable rank.
 Areas for improvements are:
 
 ## Search tree.
-Forward pruning will be required to get to deeper levels.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the Two Squares rule but does not enforce the same of the opponent.  If the Two Squares Settings box is checked, making the opponent abide by the Two Squares rule, then chase attacks would be much more successful and worthy of deep analysis.  Restrict move generation to only those pieces that can affect the outcome.
+Forward pruning will be required to get to deeper levels.  There is code that forward prunes the search tree for defending against chases.  Can similar code be used to determine attack plans as well?  The AI always abides by the Two Squares rule.  If the Two Squares Settings box is checked, making the opponent abide by the Two Squares rule, then chase attacks would be much more successful and worthy of deep analysis.  Restrict move generation to only those pieces that can affect the outcome.
 ## Eliminate pointless moves from the search tree.
 Pointless moves reduce the effective depth of the search.  For example, a common attack involves a win based on the defender limited out by the Two Squares rule, such as in the example below:
 ```
@@ -160,7 +162,7 @@ so that it can attack pieces on the rear that are statistically weak
 and eventually make it to the flag structure.
 
 ##  Static position analysis
-Unlike chess, stratego probably requires more pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.
+Stratego using brute force requires pre-processing because it is difficult to obtain the search depths that would render it obsolete.  The simple maze running approach has severe limitations and should be replaced by forward pruning and deep search.  Once the goal for a piece has been established, the move sequence can be determined by selecting only that piece and neighboring pieces on its journey in a deep tree search.  Ideally, these chases could be run in parallel on separate threads while the broad search continues on the main thread, taking advantage of today's multiple core hardware.  It is probably only a matter of time until superior algorithms such as those used in the Google Deepmind AlphaZero chess engine make this approach obsolete.
 ## Performance Tuning
 Use perf and perf-map-agent to locate hotspots.
 ## Setups

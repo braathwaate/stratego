@@ -28,7 +28,7 @@ public class Settings
 	public static boolean bNoMoveDefender = true;
 	public static boolean bNoShowDefender = false;
 	public static boolean bOneTimeBombs = false;
-	public static boolean twoSquares = false;
+	public static boolean twoSquares = true;
 	public static int debugLevel = 0;
 	
 	private Settings(){}
