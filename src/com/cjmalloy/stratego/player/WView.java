@@ -446,7 +446,6 @@ public class WView extends View implements MoveListener
 		Settings.bNoMoveDefender = false;
 		Settings.bNoShowDefender = false;
 		Settings.bOneTimeBombs = false;
-		Settings.twoSquares = true;
 		newGame();
 	}
 	

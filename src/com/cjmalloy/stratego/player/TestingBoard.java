@@ -5050,7 +5050,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                                     break;
 				}
 
-				if (tp.hasMoved()) {
+				if (tp.hasMoved()
+                                    || fprank == Rank.EIGHT) {
 					if (tp.isFleeing(fprank))
 						fpvalue = 0;
 
@@ -5059,7 +5060,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 						&& tp.isWeak())
 						fpvalue /= 2;
                                             if (isForay(to))
-						fpvalue /= 2;
+						fpvalue /= 4;
 					}
 
                                         vm += unknownValue(fpvalue, fp, tp) - fpvalue;
@@ -5323,7 +5324,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                                     || !tp.isKnown() && fp.isFleeing(Rank.UNKNOWN)) {
                                     tpvalue /= 2;
                                     vm += tpvalue - fpvalue;
-                            }
+                                }
 
 		// Outcome is the negation as if ai were the attacker.
 		// Note: prior to version 9.8, the number of
@@ -7794,24 +7795,20 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
                 assert fp.getColor() == Settings.topColor : "riskOfWin only for AI";
                 assert !tp.isKnown() : "riskOfWin: opponent piece must be unknown";
-
                 Rank fprank = fp.getRank();
+                assert !(maybeBomb && fprank == Rank.EIGHT);
+
                 int v = fpvalue/ 5;
 
-                // Risk does not change much for an Eight regardless
-                // of whether the opponent piece has moved
-
-                if (fprank != Rank.EIGHT) {
-                    if (!maybeBomb
-                        && !(tp.isChasing(Rank.UNKNOWN)
-                            && fprank.ordinal() >= 7))
-                            v += fpvalue/ 5;
-                    else {
-                        if (tp.getRank() != Rank.BOMB)
-                            v += fpvalue/ 10;
-                        if (tp.isFleeing(fp.getRank()))
-                            v += fpvalue/ 5;
-                    }
+                if (!maybeBomb
+                    && !(tp.isChasing(Rank.UNKNOWN)
+                        && fprank.ordinal() >= 7))
+                        v += fpvalue/ 5;
+                else {
+                    if (tp.getRank() != Rank.BOMB)
+                        v += fpvalue/ 10;
+                    if (tp.isFleeing(fp.getRank()))
+                        v += fpvalue/ 5;
                 }
 
                 if (tp.isSuspectedRank())
