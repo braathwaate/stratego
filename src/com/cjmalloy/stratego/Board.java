@@ -54,14 +54,14 @@ public class Board
 	// TBD: try to guess the opponents entire setup by
 	// correllating against all setups in the database
 	protected Piece[] setup = new Piece[121];
-	protected static int[] dir = { -11, -1,  1, 11 };
+	protected static final int[] dir = { -11, -1,  1, 11 };
 	protected static long[][][][][] boardHash = new long[2][8][2][15][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
 	protected static BoardHistory[] boardHistory = new BoardHistory[2];
 	protected static Piece[][] alternateSquares = new Piece[121][2];
-        protected int[][] knownRank = new int[2][15];   // discovered ranks
-        protected int[][] trayRank = new int[2][15];    // ranks in trays
-	protected int[][] suspectedRank = new int[2][15];	// guessed ranks
+        protected int[][] knownRank = new int[2][12];   // discovered ranks
+        protected int[][] allRank = new int[2][12];    // ranks in trays
+	protected int[][] suspectedRank = new int[2][12];	// guessed ranks
 	protected Rank[] chaseRank = new Rank[15];	// usual chase rank
 	protected boolean[][] invincibleRank = new boolean[2][15];// rank that always wins or is even
 	protected int[] invincibleWinRank = new int[2];	// rank that always wins
@@ -82,11 +82,11 @@ public class Board
 	protected boolean[] isBombedFlag = new boolean[2];
 	protected int unknownBombs[] = new int[2];
         protected Random rnd = new Random();
-        protected int[] forayLane = new int[2];
+        protected static int forayLane[] = { -1, -1 };
         public ReentrantLock lock = new ReentrantLock();  // graphics lock
 
 	// generate bomb patterns
-	static int[][] bombPattern = new int[30][6];
+	static final int[][] bombPattern = new int[30][6];
 	static {
 	for (int y = 0; y <= 2; y++)
 	for (int x = 0; x <= 9; x++) {
@@ -2142,19 +2142,19 @@ boardHistory[1-bturn].hash,  0);
                         piecesInTray[c] = 0;
                         piecesMovableOrKnown[c] = 0;
 			flag[c] = 0;
-                        for (int j=0;j<15;j++) {
-                                trayRank[c][j] = 0;
+                        for (int j=0;j<12;j++) {
+                                allRank[c][j] = Rank.getRanks(Rank.toRank(j+1));
                                 knownRank[c][j] = 0;
 				suspectedRank[c][j] = 0;
 			}
 
 		} // c
 
-		// add in the tray pieces to trayRank
+		// subtract the tray pieces from allRank[]
 		for (int i=0;i<getTraySize();i++) {
 			Piece p = getTrayPiece(i);
 			int r = p.getRank().ordinal();
-			trayRank[p.getColor()][r-1]++;
+			allRank[p.getColor()][r-1]--;
 			piecesInTray[p.getColor()]++;
 		}
 
@@ -2513,10 +2513,19 @@ boardHistory[1-bturn].hash,  0);
         }
 
 	// Choose the foray lane.
+
+        // Version 12.1 makes this a one-time decision
+        // to avoid alternating lanes, which also can cause the suspected flag
+        // location to alternate.
 	void selectForayLane(int color)
 	{
-                if (hasFewWeakRanks(1-color, 5))
+                if (forayLane[color] == -99)
                         return;
+
+                if (hasFewWeakRanks(1-color, 5)) {
+                    forayLane[color] = -99;
+                    return;
+                }
 
 		int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
@@ -2588,8 +2597,6 @@ boardHistory[1-bturn].hash,  0);
 	protected void possibleFlag()
 	{
 		for (int c = RED; c <= BLUE; c++) {
-
-                forayLane[1-c] = -99;
 
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
@@ -3716,8 +3723,7 @@ boardHistory[1-bturn].hash,  0);
 
 	public int unknownRankAtLarge(int color, int r)
 	{
-		return Rank.getRanks(Rank.toRank(r))
-			- trayRank[color][r-1]
+		return allRank[color][r-1]
 			- knownRank[color][r-1];
 	}
 
@@ -3738,7 +3744,7 @@ boardHistory[1-bturn].hash,  0);
 
 	public int rankAtLarge(int color, int rank)
 	{
-		return (Rank.getRanks(Rank.toRank(rank)) - trayRank[color][rank-1]);
+		return (allRank[color][rank-1]);
 	}
 
 	public int rankAtLarge(int color, Rank rank)
