@@ -1208,31 +1208,34 @@ public class AI implements Runnable
 
 			boolean isBombOrFlag = (fprank == Rank.BOMB
 				|| fprank == Rank.FLAG);
-                        if (isBombOrFlag
-                            && fp.isKnown())
-                            continue;
+            if (isBombOrFlag
+                && fp.isKnown())
+                continue;
 
-                        boolean noFlee = isBombOrFlag;
+            boolean noFlee = isBombOrFlag;
 			for (int d : dir ) {
 				int t = i + d;	
 
 				Piece tp = b.getPiece(t); // defender
+                int move = Move.packMove(i, t);
 
 				if (tp == null) {
 					if (noFlee
-						|| b.isPossibleTwoSquares(Move.packMove(i, t)))
+						|| b.isPossibleTwoSquares(move))
 						continue;
+                    // log(DETAIL, "\n   qs(" + n + "x.):" + logMove(b, n, move) + " " + b.getValue());
 					b.pushFleeMove(fp);
 					noFlee = true;
 
 				} else if (tp.getColor() != 1 - b.bturn
-                                    || (isBombOrFlag
-                                            && !b.isEffectiveBombBluff(fp,tp)))
+                    || (isBombOrFlag
+                            && !b.isEffectiveBombBluff(fp,tp)))
 					continue;
 				else {
 					boolean wasKnown = tp.isKnown();
 					int bvalue = negQS(b.getValue());
-					b.move(Move.packMove(i, t));
+                    // log(DETAIL, "\n   qs(" + n + "x.):" + logMove(b, n, move) + " " + b.getValue());
+					b.move(move);
 					int v = -negQS(b.getValue()) - bvalue;
 
 		// It is tempting to skip losing captures to save time
@@ -1309,34 +1312,34 @@ public class AI implements Runnable
 		// was unknown and unmoved to support foray mining where an expendable
 		// piece attacks while a power piece sits in wait.
 
-					if ((wasKnown || tp.hasMoved())
-						&& v < 0
-						&& tp == b.getPiece(t)	// lost the attack
-						&& enemies < 2) {
-							b.undo();
-							continue;
-					}
-				}
-		
-				int vm = -qs(n-1, -beta, -alpha);
+                        if ((wasKnown || tp.hasMoved())
+                            && v < 0
+                            && tp == b.getPiece(t)	// lost the attack
+                            && enemies < 2) {
+                                b.undo();
+                                continue;
+                        }
+                    }
+            
+                    int vm = -qs(n-1, -beta, -alpha);
 
-				b.undo();
+                    b.undo();
 
-				// log(DETAIL, "   qs(" + n + "x.):" + logMove(b, n, tmpM, MoveResult.OK) + " " + b.getValue() + " " + negQS(vm));
+                    // log(DETAIL, " " + negQS(vm));
 
-		// Save worthwhile attack (vm > best)
-		// (if vm < best, the player will play
-		// some other move)
+        // Save worthwhile attack (vm > best)
+        // (if vm < best, the player will play
+        // some other move)
 
-				if (vm > best)
-					best = vm;
+                    if (vm > best)
+                        best = vm;
 
-				alpha = Math.max(alpha, vm);
+                    alpha = Math.max(alpha, vm);
 
-				if (alpha >= beta)
-					return vm;
-			} // dir
-		} // data
+                    if (alpha >= beta)
+                        return vm;
+                } // dir
+            } // data
 		} // bi
 
 		return best;
@@ -1858,7 +1861,7 @@ public class AI implements Runnable
 
 			if (bestPrunedMove != -1) {
 
-			logMove(n, bestPrunedMove, bestPrunedMoveValue, MoveType.PR);
+			logMove(n, bestPrunedMove, b.getValue(), MoveType.PR);
 			MoveResult mt = makeMove(n, bestPrunedMove);
 			assert mt == MoveResult.OK : "Pruned move tested OK above?";
 

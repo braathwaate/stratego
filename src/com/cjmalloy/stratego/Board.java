@@ -1099,48 +1099,49 @@ boardHistory[1-bturn].hash,  0);
 
 		if (chaser.isKnown()) {
 
-                // Version 12 does not assign a chase rank if the chaser
-                // is invincible, because it is rare that the opponent
-                // will approach a known rank with the same rank, due to
-                // loss of stealth.  This fixes the bug where the
-                // AI thinks that every piece approaching a known One is
-                // an unknown One.  This happens when the opponent is
-                // using two unknown pieces to approach the known AI One
-                // when the opponent Spy is still on the board.
-                // R1 --
-                // b? b?
+        // Version 12 does not assign a chase rank if the chaser
+        // is invincible, because it is rare that the opponent
+        // will approach a known rank with the same rank, due to
+        // loss of stealth.  This fixes the bug where the
+        // AI thinks that every piece approaching a known One is
+        // an unknown One.  This happens when the opponent is
+        // using two unknown pieces to approach the known AI One
+        // when the opponent Spy is still on the board.
+        // R1 --
+        // b? b?
 
-                    if (isInvincible(chaser))
-                        return;
+            if (isInvincible(chaser))
+                return;
 
-                    for (int d : dir) {
-			int j =  i + d;
-			Piece p = getPiece(j);
-			if (p == null
-				|| p.getColor() != chased.getColor())
-				continue;
+            for (int d : dir) {
+                int j =  i + d;
+                Piece p = getPiece(j);
+                if (p == null
+                    || p.getColor() != chased.getColor())
+                    continue;
 
-			Rank prank = p.getApparentRank();
+                Rank prank = p.getApparentRank();
 
-                // If the protector is unknown, then the AI should
-                // assign a chase rank to the chased piece.
-                // (Although the protector could be strong, the AI
-                // assumes that the chased piece is the strong piece.)
+            // If the protector is unknown, then the AI should
+            // assign a chase rank to the chased piece.
+            // (Although the protector could be strong, the AI
+            // assumes that the chased piece is the strong piece.)
 
 			if (prank == Rank.UNKNOWN)
 				continue;
 
-                // Both chaser and defender have known or suspected ranks.
-                // If the defender would win the chaser,
-                // then the AI does not assign a chase rank to the chased piece.
+            // Both chaser and defender have known or suspected ranks.
+            // If the defender would win the chaser,
+            // then the AI does not assign a chase rank to the chased piece.
+
 			if (prank.winFight(chaserRank) == Rank.WINS)
 				return;
-                    }
-                }
+            }
+        } // chaser is known
 		
 		// The AI believes that unknown pieces that chase AI
-                // unknowns are probably high ranked pieces
-                // and can be attacked by a Five or less.
+        // unknowns are probably high ranked pieces
+        // and can be attacked by a Five or less.
 
 		// Prior to version 9.3, chasing an unknown always
 		// set the chase rank to UNKNOWN.
@@ -1182,15 +1183,21 @@ boardHistory[1-bturn].hash,  0);
 		// is not a Four but a Five, so the chance of a small loss
 		// (4x5) is a necessary evil.
 
-                // Bluffing makes any strategy indeterminate, so
-                // Version 12 simply declines to assign a suspected
-                // rank to any piece chasing an Unknown.   So if a piece
-                // that chased a Three then chased an Unknown, it would
-                // no longer garner a suspected rank.  This is the same
-                // when blufferRisk is 5 and the AI believes that
-                // the opponent is a bluffer.
+        // Bluffing makes any strategy indeterminate, so
+        // Version 12 simply declines to assign a suspected
+        // rank to any piece chasing an Unknown.   So if a piece
+        // that chased a Three then chased an Unknown, it would
+        // no longer garner a suspected rank.  This is the same
+        // when blufferRisk is 5 and the AI believes that
+        // the opponent is a bluffer.
 
-                chased.setActingRankChaseEqual(chaserRank);
+        // Version 12.1 checks blufferRisk (in genSuspectedRank())
+        // and if the opponent blufferRisk is 3-4, then it uses
+        // the 12.0 strategy.  However, if opponent is a dumb bot
+        // (not bluffing), then genSuspectedRank() uses
+        // strategy similar to 10.1 and retains all chase ranks.
+
+        chased.setActingRankChaseEqual(chaserRank);
 	}
 
 
@@ -1772,7 +1779,7 @@ boardHistory[1-bturn].hash,  0);
 
 	protected void genChaseRank(int turn)
 	{
-                lock.lock();
+        lock.lock();
 		// Indirect chase rank now depends on unassigned
 		// suspected ranks because of bluffing.
 		genSuspectedRank();
@@ -1899,7 +1906,7 @@ boardHistory[1-bturn].hash,  0);
 				isProtectedChase(chased, chaser, j);
 			} // d
 		} // i
-                lock.unlock();
+        lock.unlock();
 	}
 
 	// ********* start suspected ranks
@@ -2238,24 +2245,24 @@ boardHistory[1-bturn].hash,  0);
 
 			p.setMaybeEight(unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0);
 
-			Rank rank = p.getActingRankChase();
-			if (rank == Rank.NIL
-                            || p.isChasing(Rank.UNKNOWN))
-				continue;
-
-                // If the opponent is a bluffer, then
-                // the AI does not assign any suspected ranks.
-                // Otherwise, a bluffer could use any piece to thwart
-                // an AI attack.
+        // If the opponent is a bluffer, then
+        // the AI does not assign any suspected ranks.
+        // Otherwise, a bluffer could use any piece to thwart
+        // an AI attack.
 
 			if (blufferRisk == 5)
 				continue;
 
-                Rank suspRank;
-		if (!p.isRankLess())
-			suspRank = getChaseRank(rank);
-                else
-			suspRank = chaseRank[rank.ordinal()];
+			Rank rank = p.getActingRankChase();
+			if (rank == Rank.NIL
+                || (p.isChasing(Rank.UNKNOWN) && blufferRisk >=3))
+				continue;
+
+            Rank suspRank;
+            if (!p.isRankLess())
+                suspRank = getChaseRank(rank);
+            else
+                suspRank = chaseRank[rank.ordinal()];
 
 		// If the piece both chased and fled from the same rank,
 		// it means that the piece is not dangerous to the
@@ -2265,8 +2272,8 @@ boardHistory[1-bturn].hash,  0);
 		// unusual behavior, the piece stays Unknown.
 
 			if (rank != suspRank
-                                && (rank == p.getActingRankFleeLow()
-                                    || rank == p.getActingRankFleeHigh()))
+                && (rank == p.getActingRankFleeLow()
+                    || rank == p.getActingRankFleeHigh()))
 				continue;
 
 		// The AI needs time to confirm whether a suspected
