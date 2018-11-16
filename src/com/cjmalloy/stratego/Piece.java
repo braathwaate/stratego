@@ -274,12 +274,6 @@ public class Piece implements Comparable<Piece>
 		if (actingRankChase == 0 && moves != 0)
 			moves = 1;
 
-		// actingRankChase of unknown takes precedence over
-		// actingRankFlee (see setActingRankFlee)
-
-		if (r == Rank.UNKNOWN)
-			actingRankFlee &= ~(1 << Rank.UNKNOWN.ordinal());
-
 		actingRankChase |= (1 << r.ordinal());
 	}
 
@@ -328,16 +322,6 @@ public class Piece implements Comparable<Piece>
 
 	public void setActingRankFlee(Rank r)
 	{
-		// If a piece both chases and flees from an unknown,
-		// the chase rank has precedence, because an unknown
-		// chase rank suggests that the piece is weak, whereas
-		// a flee rank of unknown suggests that the piece is
-		// strong (fleeing to prevent discovery).
-
-		if (r == Rank.UNKNOWN
-			&& (actingRankChase & (1 << Rank.UNKNOWN.ordinal())) != 0)
-			return;
-
 		actingRankFlee |= (1 << r.ordinal());
 	}
 

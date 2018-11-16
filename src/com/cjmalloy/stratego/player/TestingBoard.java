@@ -383,7 +383,7 @@ public class TestingBoard extends Board
 		// If the bomb is deemed valuable, launch an effort
         // to remove it.
 
-				if (p.isFlagBomb() || inForayLane(1-p.getColor(), p.getIndex())) {
+				if (p.isFlagBomb() || isForaySquare(1-p.getColor(), p.getIndex())) {
 					attackBomb(p);
                     if (p.targetValue == 0)
                         p.targetValue = pieceValue(Settings.topColor, 8);
@@ -1528,7 +1528,7 @@ public class TestingBoard extends Board
                 unmovedValue[i] += Math.min(
                     2*valueStealth[Settings.bottomColor][Rank.BOMB.ordinal()-1],
                     stealthValue(Settings.bottomColor, unknownRank[Settings.bottomColor]));
-                if (inForayLane(Settings.topColor, i))
+                if (isForaySquare(Settings.topColor, i))
                     unmovedValue[i] = Math.max(unmovedValue[i], pieceValue(Settings.topColor, Rank.NINE));
                 continue;
             }
@@ -1826,6 +1826,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		// no point in chasing a Nine because
 		// it can easily get away
+
 			if (p.getRank() == Rank.NINE)
 				return;
 
@@ -1834,7 +1835,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// This prevents a pile-up of ai pieces
 		// chasing one opponent piece that is protected
 		// by an unknown and possibly lower piece.
-		//
+
 			int found = 0;
 			int minsteps = 99;
 			for (int j = chasedRank - 1; j > 0; j--)
@@ -1852,7 +1853,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 			if (found != 0) {
 
-		// Most pieces chase at low priority, except:
+		// Most pieces chase at low priority, except if the
+        // target is on a foray square OR
 		//
 		// Three chasing a Four, when the opponent Two
 		// is known or suspected.  This makes the Three invincible
@@ -1864,45 +1866,46 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// making the player Four invincible, because 1?x4 is positive).
 
 				int priority = DEST_PRIORITY_CHASE;
-				if (found == 3
+				if ((found == 3
 					&& unknownNotSuspectedRankAtLarge(p.getColor(), Rank.TWO) == 0)
+                    || isForaySquare(1-p.getColor(), p.getIndex()))
 					priority = DEST_PRIORITY_CHASE_ATTACK;
 				
 				int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(found));
 				genNeededPlanA(rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), found, priority);
-                                genNeededPlanB(destTmp2, 1-p.getColor(), found, priority);
-                            }
+                genNeededPlanB(destTmp2, 1-p.getColor(), found, priority);
+            }
 
-                    // Chase a known One with a Spy.
-                    // The chase is limited to the AI side of the board
-                    // until there are no opponent expendable pieces remaining
-                    // as a gross effort to limit the Spy's vulernability.
-                    //
-                    // Note the use of GUARDED_CAUTIOUS.  GUARDED_CAUTIOUS is used
-                    // for Eights and invincible pieces, because unmoved enemy ranks
-                    // are no detriment to the goal.  Here, GUARDED_CAUTIOUS
-                    // is not quite right, because unmoved ranks do pose
-                    // a threat to the Spy.  But this is better than
-                    // any of the other options.
-                    //
-                    // Once the opponent One is known and approaches
-                    // the AI side of the board, the Spy must be called up,
-                    // because the One is a dangerous piece, and could obliterate
-                    // the AIs moved pieces.  Because of the low probability
-                    // of encountering a Spy amongst many pieces, opponents
-                    // often play the odds of capturing just enough pieces to get
-                    // ahead and then play conservatively to a winning finish.
+        // Chase a known One with a Spy.
+        // The chase is limited to the AI side of the board
+        // until there are no opponent expendable pieces remaining
+        // as a gross effort to limit the Spy's vulernability.
+        //
+        // Note the use of GUARDED_CAUTIOUS.  GUARDED_CAUTIOUS is used
+        // for Eights and invincible pieces, because unmoved enemy ranks
+        // are no detriment to the goal.  Here, GUARDED_CAUTIOUS
+        // is not quite right, because unmoved ranks do pose
+        // a threat to the Spy.  But this is better than
+        // any of the other options.
+        //
+        // Once the opponent One is known and approaches
+        // the AI side of the board, the Spy must be called up,
+        // because the One is a dangerous piece, and could obliterate
+        // the AIs moved pieces.  Because of the low probability
+        // of encountering a Spy amongst many pieces, opponents
+        // often play the odds of capturing just enough pieces to get
+        // ahead and then play conservatively to a winning finish.
 
-                            else if (chasedRank == 1
-                                    && p.isKnown()
-                                    && hasSpy(1-p.getColor())
-                                    && (p.getColor() == Settings.topColor
-                                            || hasFewWeakRanks(p.getColor(), 4)
-                                            || p.getIndex() <= 65)) {
-                                    int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.SPY);
-                                    genNeededPlanA(rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
-				chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
-			}
+            else if (chasedRank == 1
+                && p.isKnown()
+                && hasSpy(1-p.getColor())
+                && (p.getColor() == Settings.topColor
+                        || hasFewWeakRanks(p.getColor(), 4)
+                        || p.getIndex() <= 65)) {
+                int destTmp2[] = genDestTmpGuarded(p.getColor(), i, Rank.SPY);
+                genNeededPlanA(rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
+                chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
+            }
 
 		// Chase an opponent piece with an unknown piece.
 		//
@@ -2068,7 +2071,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 // in the foray lane.
 		
                     if (!p.isWeak()
-                        || inForayLane(1-p.getColor(), p.getIndex()))
+                        || isForaySquare(1-p.getColor(), p.getIndex()))
                             chaseWithExpendable(p, i, DEST_PRIORITY_LOW);
 
                     if (!p.hasMoved())
@@ -3410,15 +3413,15 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		return sumValues[color] - sumValues[1-color];
 	}
 
-        // The AI thinks an aggressive piece is probably weak if:
-        //	- it chases an unknown
-        // 	- it chases an expendable piece
-        public boolean isWeakAggressive(Piece p)
-        {
-            return (p.isChasing(Rank.UNKNOWN)
-                || (p.getActingRankChase() != Rank.NIL
-                        && isExpendable(1-p.getColor(), p.getActingRankChase().ordinal())));
-        }
+    // The AI thinks an aggressive piece is probably weak if:
+    //	- it chases an unknown
+    // 	- it chases an expendable piece
+    public boolean isWeakAggressive(Piece p)
+    {
+        return (p.isChasing(Rank.UNKNOWN)
+            || (p.getActingRankChase() != Rank.NIL
+                    && isExpendable(1-p.getColor(), p.getActingRankChase().ordinal())));
+    }
 
 	public boolean hasLowValue(Piece p)
 	{
@@ -3845,12 +3848,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// flag area, this will attract more player pieces
 		// towards the flag in the chase() code.
 
-                // Note that plan A/B chase offers more points, so
-                // pieces should follow plans first.   But having a default
-                // direction helps prevent pieces from wandering
-                // aimlessly around the board.
+        // Note that plan A/B chase offers more points, so
+        // pieces should follow plans first.   But having a default
+        // direction helps prevent pieces from wandering
+        // aimlessly around the board.
 
-                // TBD: This causes stacking and needs to be dealt with
+        // TBD: This causes stacking and needs to be dealt with
 
 			assert flag[1-fpcolor] != 0;
                         if ((!isBombedFlag[1-fpcolor]
@@ -3868,14 +3871,14 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// the player piece is probably
 		// weak, so it gains a temporary chase rank so that deeper
 		// evaluation is consistent.  For example,
-		// RS --
-		// R3 --
+		// rS --
+		// r3 --
 		// -- xx
-		// B? xx
+		// b? xx
 		// All pieces are unknown.  When the Red considers the
-		// move sequence beginning with B? moving up towards
+		// move sequence beginning with b? moving up towards
 		// unknown Red Three, unknown Blue gains a chase rank
-		// of unknown, so Red can plan to play R3xB? with the
+		// of unknown, so Red can plan to play r3xb? with the
 		// expectation of a WIN.
 		//
 		// Note that without this code, unknown Blue would be
@@ -3950,11 +3953,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 					if (fpcolor == Settings.topColor
                         && !isForay(to)) {
-					if (oppRank == Rank.UNKNOWN) {
-						if (hasLowValue(fp))
-							vm -= stealthValue(fp)/3;
-					} else if (fprank.ordinal() <= oppRank.ordinal())
-						vm -= stealthValue(fp)/3;
+                        if (oppRank == Rank.UNKNOWN) {
+                            if (hasLowValue(fp))
+                                vm -= stealthValue(fp)/3;
+                        } else if (fprank.ordinal() <= oppRank.ordinal())
+                            vm -= stealthValue(fp)/3;
 					}
 				}
 			}
@@ -4392,7 +4395,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// nothing if the defender may think that it is
 		// a lower ranked piece.  The value
 		// of an unknown protector piece is irrelevant.
-		//
+
 					if (depth != 0
 						&& !unknownScoutFarMove
                         && ((fprank == Rank.BOMB || fprank == Rank.FLAG)
@@ -5742,9 +5745,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	// Bluffing doesn't work:
 	//	- if the AI piece is known
 	//	- if the opponent piece is trapped and cannot retreat
-        //              (only has one move, which is to attack bluffer,
-	//		so it may be forced to call the bluff
-        //              if it happens to lack protection)
+    //      (only has one move, which is to attack bluffer,
+	//      so it may be forced to call the bluff
+    //      if it happens to lack protection)
 	//		(TBD: or if the piece is forced towards a dead-end)
 	// 	- if the AI piece has fled from this same piece rank before
 	//		(or neglected to attack)
@@ -5762,15 +5765,15 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	//	  	on the board (a bluff cannot remove the piece,
 	//		or the AI will think the game has ended when
 	//		the opponent has to move and call the bluff)
-        //              (note: clearPiece(tp) was called earlier, so
-        //              movablePieceCount is tested for 0).
+    //     (note: clearPiece(tp) was called earlier, so
+    //     movablePieceCount is tested for 0).
 
 	public boolean isEffectiveBluff(Piece fp, Piece tp)
 	{
 		assert fp.getColor() == Settings.topColor : "AI only";
 
 		if (fp.isKnown()
-                        || isExpendable(tp)
+            || isExpendable(tp)
 			|| fp.isFleeing(tp.getRank())
 			|| grid.moveCount(tp.getColor(), tp.getIndex()) == 1
 			|| (fp.getActingRankFleeLow() != Rank.NIL
@@ -5796,9 +5799,22 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	public boolean isEffectiveBluffLoses(Piece fp, Piece tp)
 	{
-            return !isInvincibleDefender(tp)
-                && isEffectiveBluff(fp, tp);
-        }
+        if (isInvincibleDefender(tp)
+            || !isEffectiveBluff(fp, tp))
+            return false;
+
+        // Bluffing is effective only if the opponent piece approached
+        // on the last move.  If the opponent lingers, then
+        // it is obvious that the opponent called the bluff
+
+		// (note that getLastMove(2) is called to get the prior
+		// move, because the current move is already on the
+		// stack when isEffectiveBluffLoses() is called)
+
+		UndoMove prev2 = getLastMove(2);
+		return (prev2 != UndoMove.NullMove
+			&& prev2.getPiece() == tp);
+    }
 
 	// It is always risky to bluff by pushing an unknown piece
 	// towards an opponent piece of superior rank.
@@ -5818,7 +5834,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
 		return isEffectiveBluff(fp, tp)
 			&& !(blufferRisk >= 4
-                                && (fp.isWeak() || isWeakAggressive(fp)))
+                && (fp.isWeak() || isWeakAggressive(fp)))
 			&& !isNearOpponentFlag(Move.unpackTo(m));
 	}
 
@@ -5973,26 +5989,26 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// by the Spy, but this is of course a risk that could
 		// lose the game).
 
-                // But if the One is trapped, approaching the One with
-                // is a bad bluff (unless the adjacent unknown Red piece
-                // IS the Spy), because the One will likely attack.
-                // For example:
+        // But if the One is trapped, approaching the One with
+        // is a bad bluff (unless the adjacent unknown Red piece
+        // IS the Spy), because the One will likely attack.
+        // For example:
 		// -- -- R? --
 		// -- -- -- R?
 		// B? B? B1 B? 
 		// xx xx xx xx
 		// If the unknown Red piece above Blue One moves
-                // down what should Blue do?  Most bots will play
-                // B1xR?, because then at least Blue One wins a piece before
-                // a possible Spy attack.  Note that if the adjacent
-                // unknown Red piece is actually the Spy, the loss of
-                // the first unknown Red piece will not deter the approach.
+        // down what should Blue do?  Most bots will play
+        // B1xR?, because then at least Blue One wins a piece before
+        // a possible Spy attack.  Note that if the adjacent
+        // unknown Red piece is actually the Spy, the loss of
+        // the first unknown Red piece will not deter the approach.
 
-                // TBD: Of course, if the opponent was aware that the AI
-                // does not bluff in a trapped situation, then Blue One
-                // would stand pat, knowing that the approaching piece
-                // is not the Spy and the adjacent piece must the Spy.
-                // I doubt that anyone will ever realize this.
+        // TBD: Of course, if the opponent was aware that the AI
+        // does not bluff in a trapped situation, then Blue One
+        // would stand pat, knowing that the approaching piece
+        // is not the Spy and the adjacent piece must the Spy.
+        // I doubt that anyone will ever realize this.
             
 			if (tp.getRank() == Rank.ONE
 				&& tp.isKnown()
@@ -6120,30 +6136,31 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// an approach by either expendable piece would also be counterproductive.
 
 		int valueBluff = values[Settings.topColor][unknownRank[Settings.topColor]]/2;
-                // Consider this example:
-                // r4 r9 r9
-                // rB r7 r6
-                // -- -- R5
-                // -- rS --
-                // xx -- B4
-                // xx -- b?
-                // -- -- B2
-                // bB -- b?
-                // -- b? --
-                // b? -- --
-                // Red Spy is worried about b?xRS because unknown blue may
-                // be a Scout (it actually was).   It discards the move
-                // right to approach Blue Four, because hasLowValue
-                // qualifies isEffectiveBluff.  But the approach would be
-                // worth a shot. (It did not go left because of
-                // possible two squares, another bug).
+
+        // Consider this example:
+        // r4 r9 r9
+        // rB r7 r6
+        // -- -- R5
+        // -- rS --
+        // xx -- B4
+        // xx -- b?
+        // -- -- B2
+        // bB -- b?
+        // -- b? --
+        // b? -- --
+        // Red Spy is worried about b?xRS because unknown blue may
+        // be a Scout (it actually was).   It discards the move
+        // right to approach Blue Four, because hasLowValue
+        // qualifies isEffectiveBluff.  But the approach would be
+        // worth a shot. (It did not go left because of
+        // possible two squares, another bug).
 
 		// A suspected Four (that chased a Five) could well be a Five.
 		// If so, the piece might attack and the AI would
 		// lose its piece.
 
-                // Version 12 allows bluffs on weaker pieces, but
-                // returns a positive value, discouraging the AI from doing it.
+        // Version 12 allows bluffs on weaker pieces, but
+        // returns a positive value, discouraging the AI from doing it.
 
 		if (hasLowValue(oppPiece))
                     return valueBluff;
@@ -6194,30 +6211,30 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		return valueBluff(oppPiece, aiPiece);
 	}
 
-        // The AI relies too much on bluffing with any handy piece.
-        // While this works against feeble-minded bots, it might
-        // not work against aggressive bots or humans.
-        // For example,
-        // | r6 r4 rb r8
-        // | -- R2 -- r9
-        // | B1 -- xx xx
-        // Blue One moves right to attack Red Two.  Red Two should
-        // move to the left to nullify the attack by the Two Squares rule.
-        // But instead the AI moves right.  Why?   It thinks that
-        // Blue One will not move up to attack Red Two because r4xB1
-        // is an effective bluff because Red Spy is still unknown.
-        // But Blue doesn't care and wins Red Two.
+    // The AI relies too much on bluffing with any handy piece.
+    // While this works against feeble-minded bots, it might
+    // not work against aggressive bots or humans.
+    // For example,
+    // | r6 r4 rb r8
+    // | -- R2 -- r9
+    // | B1 -- xx xx
+    // Blue One moves right to attack Red Two.  Red Two should
+    // move to the left to nullify the attack by the Two Squares rule.
+    // But instead the AI moves right.  Why?   It thinks that
+    // Blue One will not move up to attack Red Two because r4xB1
+    // is an effective bluff because Red Spy is still unknown.
+    // But Blue doesn't care and wins Red Two.
 
-        // The following check deters bluffing if the opponent can
-        // immediately attack another AI piece.
+    // The following check deters bluffing if the opponent can
+    // immediately attack another AI piece.
 	protected int valueBluffLoses(Piece oppPiece, Piece aiPiece)
 	{
-                if (grid.hasAttack(oppPiece)) {
+        if (grid.hasAttack(oppPiece)) {
 			int valueBluff = values[Settings.topColor][unknownRank[Settings.topColor]]/2;
 			return valueBluff;
-                }
-		return valueBluff(oppPiece, aiPiece);
         }
+		return valueBluff(oppPiece, aiPiece);
+    }
 
 	public int getValue()
 	{
@@ -6246,33 +6263,13 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		Rank rank = p.getRank();
 
-		// Unknowns that chase unknowns have low stealth.
-        // So we assign a stealth value of a Five.
+        if (p.getColor() == Settings.topColor) {
 
-		// If an unknown piece flees from an opponent unknown piece,
-		// it is an indication that the opponent piece
-		// is either a high ranked piece (7-9, Spy)
-        // avoiding capture
-        // or an unknown low ranked piece trying to maintain stealth.
-        // The high ranked piece would not have very much stealth,
-		// so we assign the stealth value of a Seven, which
-        // is much greater than a Five, but not as much as a Four.
+            int actualStealth = stealthValue(Settings.topColor, rank);
 
-        int maybeRank;
-
-        if (rank == Rank.UNKNOWN
-            || p.getColor() == Settings.topColor) {
             if (isWeakAggressive(p)
-                    || p.isWeak())
-                    maybeRank = 5;
-            else if (p.getActingRankFleeLow() == Rank.UNKNOWN
-                    && !isPossibleBomb(p))
-                    maybeRank = 7;
-            else 
-                    maybeRank = 4;
-
-            if (rank == Rank.UNKNOWN)
-                return stealthValue(p.getColor(), maybeRank);
+                || p.isWeak())
+                return actualStealth;
 
         // A human opponent (or advanced bot such as the AI)
         // will notice that the AI shelters its unknown
@@ -6281,16 +6278,44 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // inferior pieces need to behave similarly.
         // Expendable AI pieces that have not chased unknowns or
         // allowed themselves to be exposed to scout attacks
-        // have nearly the stealth of a Four, but not quite,
-        // so when the AI is forced to choose between them,
-        // it will shelter the piece with highest actual stealth.
+        // have nearly the stealth of a Three, because if the piece
+        // appears weak, the opponent will attack it.
 
-            int maybeStealth = stealthValue(Settings.topColor, maybeRank);
-            int actualStealth = stealthValue(Settings.topColor, rank);
-            return Math.max(actualStealth, (maybeStealth * 2 + actualStealth)/ 3);
+        // However, if the AI is forced to choose between the actual
+        // or bluffer, it must shelter the actual piece.
+
+            int v = stealthValue(p.getColor(), Rank.THREE);
+            return Math.max(actualStealth, (v * 2 + actualStealth)/ 3);
         }
 
-        return stealthValue(p.getColor(), rank);
+		// Unknowns that chase unknowns have low stealth.
+
+        if (rank == Rank.UNKNOWN) {
+
+            int v = stealthValue(p.getColor(), Rank.THREE);
+
+            if (isWeakAggressive(p)
+                || p.isWeak())
+                v /= 2;
+
+		// If an unknown piece flees from an opponent unknown piece,
+		// it is an indication that the opponent piece
+		// is either a high ranked piece (7-9, Spy) avoiding capture
+        // or an unknown low ranked piece trying to maintain stealth.
+        // Although the high ranked piece would not have very much stealth,
+        // this is more information than a completely unknown piece,
+        // making it a more desirable target
+
+            if (rank == Rank.UNKNOWN) {
+                if (p.getActingRankFleeLow() == Rank.UNKNOWN
+                    && !isPossibleBomb(p))
+                    return v/2;
+                else
+                    return v/3;
+            }
+        }
+
+        return stealthValue(Settings.topColor, rank);
 	}
 
 	// If the opponent has an invincible win rank,
@@ -6960,15 +6985,15 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// with chase() because unknown moved pieces do not deter
 		// the chaser from its target.
 
-                // While an AI piece is safe, all opponent attacks lose,
-                // except the One is not safe it if the opponent
-                // is a LIKELY_SPY
+        // While an AI piece is safe, all opponent attacks lose,
+        // except the One is not safe it if the opponent
+        // is a LIKELY_SPY
 
 			else if (tp.isSafe()
-                            && isWinning(Settings.topColor) <= pieceValue(tp)/2
-                            && !(tprank == Rank.ONE && fp.isLikelySpy())
+                && isWinning(Settings.topColor) <= pieceValue(tp)/2
+                && !(tprank == Rank.ONE && fp.isLikelySpy())
 			    && tprank.ordinal() <= lowestUnknownExpendableRank + 1)
-                                return LOSES;	// maybe not
+                    return LOSES;	// maybe not
 
 		// By definition, attack on invincible rank LOSES
 		// But invincible eights should be used for attacking
@@ -7272,7 +7297,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			    || unk.isKnown())
 				continue;
 
-                        if (isWeakAggressive(unk))
+            if (isWeakAggressive(unk))
 				unk.setWeak(true);
 
 		Rank lowfleeRank = unk.getActingRankFleeLow();
@@ -7495,16 +7520,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// Red should play R9xB9.  Yes, this case is unusual
 		// but it does happen.
 
-            || rank == Rank.NINE
+            || (rank == Rank.NINE
                 && p.getColor() == Settings.bottomColor)
+            || isForaySquare(1-p.getColor(), p.getIndex()))
             return true;
 
-        int v;
-        if (rank == Rank.UNKNOWN && !p.hasMoved())
-            v = unmovedValue[p.getIndex()];
-        else
-            v = stealthValue(p);
-        return v >=  pieceValue(1-p.getColor(), 9);
+        return stealthValue(p) >=  pieceValue(1-p.getColor(), 9);
 	}
 
 	// If all bombs have been accounted for,
@@ -8186,52 +8207,34 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	}
 
-        // Safe Foray patterns
-        // R  --        -- --
-        // -- --        R  --
-        // R  b?        R  b?
-        // b? b?        b? b?
-        // The idea is to have some backup (stacking) before attack.
-        // In the both patterns, Red is safe from attack by unknowns.
-        // In the second pattern, Red is safe to attack lower Blue.
+    // Foray Squares (FO):
+    // -- xx xx -- FO |
+    // -- xx xx -- FO |
+    // -- -- -- -- FO |
+    // -- -- -- -- FO |
+    // -- -- -- -- FO |
+    // FO FO FO FO FO |
+    // ----------------
 
-        boolean inForayLane(int color, int i)
-        {
-            return forayLane[color] == Grid.getX(i);
-        }
-
-        boolean forayPattern(int i)
-        {
-            if (!inForayLane(Settings.topColor, i))
-                return false;
-
-            if (i < 34)
-                return false;
-
-            Piece pp2 = getPiece(i-22);
-            Piece pp1 = getPiece(i-11);
-            return (pp1 != null && pp1.getColor() == Settings.topColor)
-                ||  (pp2 != null && pp2.getColor() == Settings.topColor);
-        }
+    boolean isForaySquare(int color, int i)
+    {
+        return forayLane[color] == Grid.getX(i)
+            || (Math.abs(forayLane[color] - Grid.getX(i)) < 5
+                && Grid.yside(color, 9) == Grid.getY(i));
+    }
 
 	// Aggressively attack pieces in the foray lane to try
-	// to get to the back row,
-	// where it should encounter weaker pieces.  Any bomb encountered
-	// should be removed.  If it is lucky, the flag will be
+	// to get to the back row, where it should encounter weaker pieces.
+    // Any bomb encountered should be removed.
+    // If it is lucky, the flag will be
 	// in a corner structure in the foray lane.
 	// This should make for fireworks, with the AI throwing
-	// its pieces towards the flag and attacking all the defenders that
+	// its pieces towards the foray lane and attacking all the defenders that
 	// come in its way.
-	//
-	// The AI chooses the lane on the side where it has the most
-	// firepower, at least a Two or Three.  It plays the odds that an
-	// even lower opponent piece is not in the foray lane.
-	// Although a risky strategy, statistically it should work
-	// more than half of the time.
 
 	boolean isForay(int i)
 	{
-            return randomForay || forayPattern(i);
+            return randomForay || isForaySquare(Settings.topColor, i);
 	}
 
 	// Return a result between 0 and vm, depending on the value vm.

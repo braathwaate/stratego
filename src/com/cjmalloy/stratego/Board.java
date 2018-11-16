@@ -81,9 +81,9 @@ public class Board
 	protected int[][] lowerKnownOrSuspectedRankCount = new int[2][10];
 	protected boolean[] isBombedFlag = new boolean[2];
 	protected int unknownBombs[] = new int[2];
-        protected Random rnd = new Random();
-        protected static int forayLane[] = { -1, -1 };
-        public ReentrantLock lock = new ReentrantLock();  // graphics lock
+    protected Random rnd = new Random();
+    protected static int forayLane[] = { -1, -1 };
+    public ReentrantLock lock = new ReentrantLock();  // graphics lock
 
 	// generate bomb patterns
 	static final int[][] bombPattern = new int[30][6];
@@ -2519,62 +2519,65 @@ boardHistory[1-bturn].hash,  0);
                 && p2.getRank() == Rank.BOMB);
         }
 
-	// Choose the foray lane.
+	// Favor the foray lane with the most powerful unimpeded piece and lack
+    // of own bombs.  This makes it difficult for the opponent to determine
+    // if the AI is attacking because it has its One in the area or if
+    // it is just avoiding its own bombs.
 
-        // Version 12.1 makes this a one-time decision
-        // to avoid alternating lanes, which also can cause the suspected flag
-        // location to alternate.
 	void selectForayLane(int color)
 	{
-                if (forayLane[color] == -99)
-                        return;
+        int [] lowrank = new int[2];
 
-                if (hasFewWeakRanks(1-color, 5)) {
-                    forayLane[color] = -99;
-                    return;
-                }
+        if (forayLane[color] == -99)
+                return;
+
+        if (hasFewWeakRanks(1-color, 5)) {
+            forayLane[color] = -99;
+            return;
+        }
 
 		int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
-                        if (isBombedLane(lane))
-                            continue;
-			int power = 0;
-                        int three = 0;
-                        int four = 0;
-			for (int y = 0; y < 10; y++)
-			for (int x = 0; x < 4; x++) {
-				int i = Grid.getIndex(x + lane*3, y);
-				Piece p = getPiece(i);
-				if (p == null
-					|| p.getColor() != color)
-					continue;
+            if (isBombedLane(lane))
+                continue;
+            int power = 0;
+            lowrank[0] = lowrank[1] = 99;
+            
+            for (int y = 0; y < 10; y++) {
+                for (int x = 0; x < 4; x++) {
+                    int i = Grid.getIndex(x + lane*3, y);
+                    if (!Grid.isValid(i))
+                        continue;
+                    Piece p = getPiece(i);
+                    if (p == null)
+                        continue;
+
+                    lowrank[p.getColor()] = Math.min(
+                        lowrank[p.getColor()], p.getRank().ordinal());
+                    if (p.getColor() != color)
+                        continue;
 
 		// Avoid pushing pieces and leaving unknown bombs behind
 		// because then the bombs become obvious 
 
-				if (!p.isKnown()
-					&& p.getRank() == Rank.BOMB
-                                        && Grid.yside(color, y) >= 1 ) {
-					power-= (Grid.yside(color,y)-1)*2;
-                                }
+                    if (!p.isKnown()
+                        && p.getRank() == Rank.BOMB
+                        && Grid.yside(color, y) >= 1 )
+                    power-= (Grid.yside(color,y)-1);
+                }  // x
+			} // y
 
-		// Need some powerful pieces for the foray to succeed.
-		// We are counting on having a superior rank advantage
-		// in the area because we are going
-		// to ignore any opponent attempts at bluffing.
+            if (lowrank[1-color] <= lowrank[color])
+                continue;
+            power -= lowrank[color];
 
-				else if (p.getRank() == Rank.FOUR)
-                                    four = 1;
-				else if (p.getRank() == Rank.THREE)
-                                    three = 1;
-				else if (p.getRank() == Rank.TWO ||
-                                    p.getRank() == Rank.ONE) {
-                                    power+=3;
-                                    if (p.isKnown())
-                                        power++;
-                                }
-			}
-                        power += four + three*2;
+        // Discourage forays in the center lane because they are much more
+        // easily defended, but allow them rarely just to keep the
+        // opponent guessing
+
+            if (lane == 1)
+                power-=2;
+
 			if (power < maxPower)
 				continue;
 			if (lane == 0)
@@ -2892,7 +2895,7 @@ boardHistory[1-bturn].hash,  0);
         // because thats where the action is headed, and we don't
         // want to be mislead elsewhere until we know its not there.
 
-                selectForayLane(1-color);
+        selectForayLane(1-color);
 
 		for (int i = 0; i < maybe_count; i++) {
 
@@ -2932,8 +2935,8 @@ boardHistory[1-bturn].hash,  0);
 					break;
 				}
 
-                                if (forayLane[1-color] == Grid.getX(j))
-                                    prob++;
+                if (forayLane[1-color] == Grid.getX(j))
+                    prob++;
 			}
 
 		// The AI examines the opponent setup for possible sentries
