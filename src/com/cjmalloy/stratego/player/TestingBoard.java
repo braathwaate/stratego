@@ -2787,26 +2787,26 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
-		int flagi = flag[c];
-		if (flagi == 0)
-			continue;
-		Piece pflag = getPiece(flagi);
+            int flagi = flag[c];
+            if (flagi == 0)
+                continue;
+            Piece pflag = getPiece(flagi);
 
-                int opponentEightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
-		int bombedStructuresRemaining = maybe_count[c] - open_count[c];
+            int opponentEightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
+            int bombedStructuresRemaining = maybe_count[c] - open_count[c];
 
-                if (!isBombedFlag[c]
-			|| bombedStructuresRemaining == 0
-			|| bombedStructuresRemaining + 1 < opponentEightsAtLarge)
+            if (!isBombedFlag[c]
+                || bombedStructuresRemaining == 0
+                || bombedStructuresRemaining + 1 < opponentEightsAtLarge)
 
-		// At least 1 opponent color Miner is expendable
-		// (The AI assumes that the player
-		// keeps one more Miner around than
-		// necessary to insure for an unforeseen mortality).
+            // At least 1 opponent color Miner is expendable
+            // (The AI assumes that the player
+            // keeps one more Miner around than
+            // necessary to insure for an unforeseen mortality).
 
-                        setExpendableEights(1-c);
+                setExpendableEights(1-c);
 
-                else {
+            else {
 
 		// When the number of possible structures is greater
 		// than the supply of Miners, the Miner retains
@@ -5077,9 +5077,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         break;
                     }
 
-                    if (tp.hasMoved()
-                        || fprank == Rank.EIGHT) {
-
+                    if (fprank == Rank.EIGHT) {
+                        if (tp.isFleeing(fprank))
+                            fpvalue = 0;
+                        vm += unknownValue(fpvalue, fp, tp) - fpvalue;
+                    } else if (tp.hasMoved()) {
                         if (tp.isFleeing(fprank))
                             fpvalue = 0;
                         else {
@@ -5089,7 +5091,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                             if (isForay(to))
                                 fpvalue /= 4;
                         }
-
                         vm += unknownValue(fpvalue, fp, tp) - fpvalue;
                     } else {
 
@@ -5791,11 +5792,16 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	public boolean isEffectiveBombBluff(Piece fp, Piece tp)
 	{
-            return !isInvincibleDefender(tp)
-		&& !(fp.isKnown()
-			|| hasLowValue(tp)
-			|| fp.isFleeing(tp.getRank()));
-        }
+        if (isInvincibleDefender(tp)
+            || fp.isKnown()
+            || hasLowValue(tp)
+            || fp.isFleeing(tp.getRank()))
+            return false;
+
+		UndoMove prev2 = getLastMove();
+		return (prev2 != UndoMove.NullMove
+			&& prev2.getPiece() == tp);
+    }
 
 	public boolean isEffectiveBluffLoses(Piece fp, Piece tp)
 	{
@@ -6315,7 +6321,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             }
         }
 
-        return stealthValue(Settings.topColor, rank);
+        return stealthValue(p.getColor(), rank);
 	}
 
 	// If the opponent has an invincible win rank,

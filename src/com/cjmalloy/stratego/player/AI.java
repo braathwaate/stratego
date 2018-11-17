@@ -1923,7 +1923,13 @@ public class AI implements Runnable
 					&& !isPruned)
 					addMove(moveList[INACTIVE], 0);
 
-			} else if (mo == IMMOBILE)
+		// Immobile Pieces
+		// Bombs and the Flag are not legal moves.  However,
+		// the AI generates moves for unknown bombs because
+		// the apparent rank is unknown to the opponent, so
+		// these pieces can protect another piece as a bluff.
+
+			} else if (b.depth != -1 && mo == IMMOBILE)
 				getBombFlagMoves(moveList[mo]);
 
 		// Scout far moves are expensive to generate and
@@ -2030,20 +2036,6 @@ public class AI implements Runnable
 			b.pushNullMove();
 			return MoveResult.OK;
 		}
-
-		// Immobile Pieces
-		// Bombs and the Flag are not legal moves.  However,
-		// the AI generates moves for unknown bombs because
-		// the apparent rank is unknown to the opponent, so
-		// these pieces can protect another piece as a bluff.
-		if (b.depth == -1) {
-			Piece p = b.getPiece(Move.unpackFrom(tryMove));
-			if (p.getRank() == Rank.BOMB
-				|| p.getRank() == Rank.FLAG) {
-				return MoveResult.IMMOBILE;
-			}
-		}
-
 
 		if (b.isTwoSquares(tryMove))
 			return MoveResult.TWO_SQUARES;

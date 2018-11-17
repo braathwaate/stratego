@@ -225,6 +225,7 @@ public class Board
 	{
 		if (validAttack(m))
 		{
+            lock.lock();
 			Piece fp = getPiece(m.getFrom());
 			Piece tp = getPiece(m.getTo());
 			moveHistory(fp, tp, m.getMove());
@@ -270,6 +271,7 @@ public class Board
 			}
 			genChaseRank(fp.getColor());
 			genFleeRank(fp, tp);	// depends on suspected rank
+            lock.unlock();
 			return true;
 		}
 		return false;
@@ -752,105 +754,105 @@ public class Board
 		}
 	}
 
-        // Consider the following example:
-        // -- -- -- --
+    // Consider the following example:
+    // -- -- -- --
+    // xx -- -- xx
+    // xx R2 -- xx
+    // B? B3 B? --
+    // B? B? B? B?
+
+    // Unknown Red Two has trapped Blue Three and Red wants
+    // to play R2xB3 because it believes it has the element of
+    // surprise (so statistically, R2xB3 wins at least 2/3 of
+    // the time because unknown Blue One could be in any of three
+    // lanes.
+
+    // But if unknown Blue to the right of Red Two moves up
+    // after R2xB3, then
+    // Red Two becomes trapped if it thinks that any unknown
+    // piece could be Blue One after the moment of surprise
+    // (i.e. R2xB3).
+
+    // There are perhaps various ways of solving this,
+    // but the logical approach used by the AI is to assign
+    // indirect flee rank to pieces that fail to attack.
+    // But assigning indirect flee rank on the fly
+    // immediately after a move would cause the AI to attack all pieces
+    // because it will think that their neighbors are no threat.
+
+    // Alternatively, assigning indirect flee rank after the opponent
+    // makes its move is complicated because the opponent may have
+    // moved one of the neighboring pieces that should be assigned
+    // a flee rank.  Assignment is also complicated because
+    // R2 could be protected and by delaying moves.  This is
+    // handled in Board, but is time-consuming to do every move.
+    // Finally, moveHistory/undo handles only the piece that moves, and
+    // not any other pieces.
+
+    // Prior to Version 12, acting rank flee was assigned to
+    // pieces that directly flee during tree search.
+    // In the above example,
+    // the unknown Blue moved piece is assigned a flee rank of Two, so
+    // that Two can fearlessly backpedal because it is in no danger
+    // of attack from a piece that fled from it.  This allows the
+    // to play R2xR3 in this situation.
+
+    // Yet that code suffered from this bug:
+    // -- R4 RB
+    // R4 b3 xx
+    // -- -- xx
+    // Unknown Blue Three has forked two known Fours.  But
+    // the AI thinks that it is safe, because it would gain
+    // a temporary flee rank of Four, regardless of which
+    // Four it attacked.  So setDirectActingRankFlee() needs
+    // to be called after move processing, not before.
+
+    // However, Version 12 experiments with simply extending
+    // the time a piece is safe from attack during tree
+    // processing.  Safeness terminates only when the safe
+    // piece actually moves to an open square (depth = 0).
+    // The thought is that will not change the on board
+    // behavior of the piece.  Qs speed is an issue and
+    // this strategy is much faster.
+
+    protected void updateSafe(Piece p, Move m)
+    {
+
+        if (!p.isKnown())
+            return;
+
+        // Moved piece is known, might not be safe anymore
+
+            UndoMove m2 = getLastMove(2);
+
+            if (isPossibleTwoSquaresChase()
+
+        // A known piece is still safe
+        // if it was just attacked on the last move
+        // For example,
+        // -- r3 --
         // xx -- -- xx
-        // xx R2 -- xx
-        // B? B3 B? --
-        // B? B? B? B?
+        // xx B6 -- xx
+        // b? B4 -- b?
+        // b? b? b? b?
+        // Unknown Red Three should approach Blue Four.
+        // B6xR3 does not change the safe Two Squares result.
 
-        // Unknown Red Two has trapped Blue Three and Red wants
-        // to play R2xB3 because it believes it has the element of
-        // surprise (so statistically, R2xB3 wins at least 2/3 of
-        // the time because unknown Blue One could be in any of three
-        // lanes.
+                || m2 != UndoMove.NullMove && m2.getTo() == p.getIndex()
 
-        // But if unknown Blue to the right of Red Two moves up
-        // after R2xB3, then
-        // Red Two becomes trapped if it thinks that any unknown
-        // piece could be Blue One after the moment of surprise
-        // (i.e. R2xB3).
+        // A known piece is still safe if it moves vertically.
+        // This helps it escape the following trap:
+        // xx -- -- xx
+        // b? r3 b? b?
+        // b? B4 b? b?
+        // After r3xB4 it becomes known and would not try to exit
+        // because b?xR3 on the upper row of Blue pieces.
 
-        // There are perhaps various ways of solving this,
-        // but the logical approach used by the AI is to assign
-        // indirect flee rank to pieces that fail to attack.
-        // But assigning indirect flee rank on the fly
-        // immediately after a move would cause the AI to attack all pieces
-        // because it will think that their neighbors are no threat.
-
-        // Alternatively, assigning indirect flee rank after the opponent
-        // makes its move is complicated because the opponent may have
-        // moved one of the neighboring pieces that should be assigned
-        // a flee rank.  Assignment is also complicated because
-        // R2 could be protected and by delaying moves.  This is
-        // handled in Board, but is time-consuming to do every move.
-        // Finally, moveHistory/undo handles only the piece that moves, and
-        // not any other pieces.
-
-        // Prior to Version 12, acting rank flee was assigned to
-        // pieces that directly flee during tree search.
-        // In the above example,
-        // the unknown Blue moved piece is assigned a flee rank of Two, so
-        // that Two can fearlessly backpedal because it is in no danger
-        // of attack from a piece that fled from it.  This allows the
-        // to play R2xR3 in this situation.
-
-        // Yet that code suffered from this bug:
-        // -- R4 RB
-        // R4 b3 xx
-        // -- -- xx
-        // Unknown Blue Three has forked two known Fours.  But
-        // the AI thinks that it is safe, because it would gain
-        // a temporary flee rank of Four, regardless of which
-        // Four it attacked.  So setDirectActingRankFlee() needs
-        // to be called after move processing, not before.
-
-        // However, Version 12 experiments with simply extending
-        // the time a piece is safe from attack during tree
-        // processing.  Safeness terminates only when the safe
-        // piece actually moves to an open square (depth = 0).
-        // The thought is that will not change the on board
-        // behavior of the piece.  Qs speed is an issue and
-        // this strategy is much faster.
-
-        protected void updateSafe(Piece p, Move m)
-        {
-
-            if (!p.isKnown())
+                || (m.getTo() - m.getFrom()) == 11)
                 return;
 
-            // Moved piece is known, might not be safe anymore
-
-                UndoMove m2 = getLastMove(2);
-
-                if (isPossibleTwoSquaresChase()
-
-            // A known piece is still safe
-            // if it was just attacked on the last move
-            // For example,
-            // -- r3 --
-            // xx -- -- xx
-            // xx B6 -- xx
-            // b? B4 -- b?
-            // b? b? b? b?
-            // Unknown Red Three should approach Blue Four.
-            // B6xR3 does not change the safe Two Squares result.
-
-                    || m2 != UndoMove.NullMove && m2.getTo() == p.getIndex()
-
-            // A known piece is still safe if it moves vertically.
-            // This helps it escape the following trap:
-            // xx -- -- xx
-            // b? r3 b? b?
-            // b? B4 b? b?
-            // After r3xB4 it becomes known and would not try to exit
-            // because b?xR3 on the upper row of Blue pieces.
-
-                    || (m.getTo() - m.getFrom()) == 11)
-                    return;
-
-                p.setSafe(false);
-        }
+            p.setSafe(false);
+    }
 
 	// stores the state prior to the move
 	// the hash is the position prior to the move
@@ -1779,7 +1781,6 @@ boardHistory[1-bturn].hash,  0);
 
 	protected void genChaseRank(int turn)
 	{
-        lock.lock();
 		// Indirect chase rank now depends on unassigned
 		// suspected ranks because of bluffing.
 		genSuspectedRank();
@@ -1906,7 +1907,6 @@ boardHistory[1-bturn].hash,  0);
 				isProtectedChase(chased, chaser, j);
 			} // d
 		} // i
-        lock.unlock();
 	}
 
 	// ********* start suspected ranks
@@ -2224,23 +2224,23 @@ boardHistory[1-bturn].hash,  0);
 				|| p.isKnown())
 				continue;
 
-                // Unknown pieces become less safe
-                // as weak pieces are removed from the board
-                // because the remaining pieces are stronger
-                // and have started to guess the rank of unknown pieces.
+    // Unknown pieces become less safe
+    // as weak pieces are removed from the board
+    // because the remaining pieces are stronger
+    // and have started to guess the rank of unknown pieces.
 
-                        p.setSafe(isInvincible(p)
-                            || !hasFewWeakRanks(1-p.getColor(), 12));
+            p.setSafe(isInvincible(p)
+                || !hasFewWeakRanks(1-p.getColor(), 12));
 
-                        if (p.getColor() != Settings.bottomColor)
-                            continue;
+            if (p.getColor() != Settings.bottomColor)
+                continue;
 
 			if (p.hasMoved()
 				&& !p.isKnown()
 				&& unknownRank[p.getColor()] != 0) {
 				p.setRank(Rank.toRank(unknownRank[p.getColor()]));
 				p.makeKnown();
-                                continue;
+                continue;
 			}
 
 			p.setMaybeEight(unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0);
@@ -3083,6 +3083,7 @@ boardHistory[1-bturn].hash,  0);
 
 		if (validMove(m.getMove()))
 		{
+            lock.lock();
 			Piece fp = getPiece(m.getFrom());
 			moveHistory(fp, null, m.getMove());
 
@@ -3100,7 +3101,8 @@ boardHistory[1-bturn].hash,  0);
 			}
 			genChaseRank(fp.getColor());
 			genFleeRank(fp, null);	// depends on suspected rank
-                        updateSafe(fp, m);
+            updateSafe(fp, m);
+            lock.unlock();
 			return true;
 		}
 		
