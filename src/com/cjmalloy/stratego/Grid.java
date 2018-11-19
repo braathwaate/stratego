@@ -431,18 +431,28 @@ public class Grid
 	}
 
 	static public int yside(int color, int y)
-        {
-                if (color == Settings.topColor)
-                        return y;
-                else
-                        return 9-y;
-        }
+    {
+        if (color == Settings.topColor)
+                return y;
+        else
+                return 9-y;
+    }
 
 	static public int side(int color, int i)
-        {
+    {
 		if (color == Settings.topColor)
 			return i;
 		else
 			return getIndex(getX(i), 9-getY(i));
+	}
+
+	static public boolean isRetreat(int color, int m)
+	{
+        int from = Move.unpackFrom(m);
+        int to = Move.unpackTo(m);
+
+		int d = to - from;
+		return (d == 11 && color == Settings.bottomColor)
+			|| (d == -11 && color == Settings.topColor);
 	}
 }

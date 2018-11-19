@@ -817,7 +817,6 @@ public class Board
 
     protected void updateSafe(Piece p, Move m)
     {
-
         if (!p.isKnown())
             return;
 
@@ -840,7 +839,7 @@ public class Board
 
                 || m2 != UndoMove.NullMove && m2.getTo() == p.getIndex()
 
-        // A known piece is still safe if it moves vertically.
+        // A known piece is still safe if it retreats vertically.
         // This helps it escape the following trap:
         // xx -- -- xx
         // b? r3 b? b?
@@ -848,7 +847,7 @@ public class Board
         // After r3xB4 it becomes known and would not try to exit
         // because b?xR3 on the upper row of Blue pieces.
 
-                || (m.getTo() - m.getFrom()) == 11)
+                || Grid.isRetreat(p.getColor(), m.getMove()))
                 return;
 
             p.setSafe(false);
@@ -859,7 +858,7 @@ public class Board
 	protected void moveHistory(Piece fp, Piece tp, int m)
 	{
 		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash,
-boardHistory[1-bturn].hash,  0);
+            boardHistory[1-bturn].hash,  0);
 		undoList.add(um);
 
 		// save the hash to detect board repetitions

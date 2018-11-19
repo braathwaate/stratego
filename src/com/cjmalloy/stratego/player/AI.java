@@ -2094,6 +2094,7 @@ public class AI implements Runnable
 					|| m.getPiece().getRank() == Rank.NINE)) {
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));
 				if (tp == m.tp) {	// lost the attack
+                    log(DETAIL, " " + b.getValue());
 					b.undo();
 					return MoveResult.NEG;
 				}
