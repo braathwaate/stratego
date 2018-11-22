@@ -289,6 +289,14 @@ public class Piece implements Comparable<Piece>
 		flags |= IS_LESS;
 	}
 
+	public void clearActingRankChase()
+	{
+		actingRankChase = 0;
+        if (moves != 0)
+            moves=1;
+		flags &= ~IS_LESS;
+	}
+
 	public boolean isChasing(Rank rank)
 	{
 		return (actingRankChase & (1 << rank.ordinal())) != 0;
