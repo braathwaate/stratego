@@ -5119,7 +5119,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// Perhaps the AI has correctly guessed all the bomb locations,
 		// so the remaining unmoved pieces are fair game?
 
-                            if (isForay(to) && hasLowValue(fp))
+                            if (isForay(to) && isExpendable(fp))
                                 fpvalue /= 4;
 
                             vm += riskOfWin(fpvalue, fp, tp, true) - fpvalue;

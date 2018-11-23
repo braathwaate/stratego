@@ -1104,8 +1104,8 @@ public class Board
 		// -- -- --		// -- -- --
 		// 
 		// In example 1, suspected Blue Four anticipates
-                // that Red Three may approach and retreats
-                // to a square next to known Red Four.
+        // that Red Three may approach and retreats
+        // to a square next to known Red Four.
 		// Blue Four does not acquire a chase rank of Three,
 		// but remains a Four. Example 2 is also a nervous
 		// situation for Blue Four and it may not wait to be
@@ -1250,12 +1250,15 @@ public class Board
         // blufferRisk when the piece finally attacks.
         //
         // Therefore, in Version 12.1 if the opponent
-        // chases both an unknown and superior piece,
-        // blufferRisk is increased, and chase rank is reset to NIL.
+        // chases both an unknown or inferior and also a superior piece,
+        // blufferRisk is increased, and chase rank is set to UNKNOWN.
         // This prevents assignment of any suspected rank.  It also allows the
         // piece to continue its rampage, so if it continues, blufferRisk
         // will continue to increase to the point where the AI knows it
         // is playing a human and can adjust its tactics accordingly.
+        // Finally, if the piece has cornered a superior piece by chasing
+        // it past unknowns, the superior piece will strike back against
+        // a bluffing opponent.
         //
         // Why is this important to know?  So that the AI can clobber
         // the bot faster.  Humans also invariably adjust their
@@ -1271,6 +1274,7 @@ public class Board
         if ((chaserRank.ordinal() >= 6 && arank.ordinal() <= 4)
             || (chaserRank.ordinal() <= 4 && arank.ordinal() >= 6)) {
                 chased.clearActingRankChase();
+                chased.setActingRankChase(Rank.UNKNOWN);
                 guess(false);
         }
 
@@ -2564,8 +2568,8 @@ public class Board
 	//
 	// Usual flag locations are on the back row, and usually
 	// in the corners or beneath the lakes.  However,
-        // compound bomb structures may require the AI to attack
-        // side structures to get at the back row.
+    // compound bomb structures may require the AI to attack
+    // side structures to get at the back row.
 	// F -- F F -- -- F F -- F
 	protected boolean usualFlagLocation(int color, int i)
 	{
@@ -2616,8 +2620,8 @@ public class Board
             lowrank[0] = lowrank[1] = 99;
             
             for (int y = 0; y < 10; y++) {
-                for (int x = 0; x < 3; x++) {
-                    int i = Grid.getIndex(x + lane*3, y);
+                for (int x = 0; x < 2; x++) {
+                    int i = Grid.getIndex(x + lane*4, y);
                     if (!Grid.isValid(i))
                         continue;
                     Piece p = getPiece(i);
@@ -2633,9 +2637,8 @@ public class Board
 		// because then the bombs become obvious 
 
                     if (!p.isKnown()
-                        && p.getRank() == Rank.BOMB
-                        && Grid.yside(color, y) >= 1 )
-                    power-= (Grid.yside(color,y)-1);
+                        && p.getRank() == Rank.BOMB)
+                        power-= Grid.yside(color,y);
                 }  // x
 			} // y
 
