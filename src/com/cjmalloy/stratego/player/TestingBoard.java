@@ -225,8 +225,9 @@ public class TestingBoard extends Board
 	protected int[] unknownRank = new int[2];
 	public int depth = -1;
 	protected int needExpendableRank;
-        protected ArrayList<Piece> ghostPieceStack = new ArrayList<Piece>();
-        protected Piece ghostPiece = null;
+    protected ArrayList<Piece> ghostPieceStack = new ArrayList<Piece>();
+    protected Piece ghostPiece = null;
+    protected boolean[][] foraySquare =  new boolean[2][121];
 
 // Silly Java warning:
 // Java won't let you declare a typed list array like
@@ -279,6 +280,7 @@ public class TestingBoard extends Board
 		// markWeakPieces() depends on hasFewWeakRanks()
 		// which depends on genSuspectedRank
 		markWeakPieces();
+        guessRanks();
 
 		value = 0;
 		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
@@ -299,32 +301,53 @@ public class TestingBoard extends Board
 			if (!Grid.isValid(i))
 				continue;
 			Piece bp = getPiece(i);
-			if (bp != null) {
+			if (bp == null)
+                continue;
 
 		// Make a copy of the piece because the graphics
 		// thread is also using board/piece information for display
 
-				TestPiece p = new TestPiece(bp);
-				grid.setPiece(i, p);
+            TestPiece p = new TestPiece(bp);
+            grid.setPiece(i, p);
 
-				Rank rank = p.getRank();
-				int r = rank.ordinal();
+            Rank rank = p.getRank();
+            int r = rank.ordinal();
 
 		// only one piece of a rank is assigned plan A
 		// and preferably a piece that has moved or is known and as
 		// far forward on the board as possible
 
-				if (!hasPlan(planAPiece, p.getColor(), r))
-					planAPiece[p.getColor()][r-1]=p;
+            if (!hasPlan(planAPiece, p.getColor(), r))
+                planAPiece[p.getColor()][r-1]=p;
 
-				if (p.isKnown()
-					|| (p.hasMoved() && !planAPiece[p.getColor()][r-1].isKnown())) {
-					planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
-					planAPiece[p.getColor()][r-1]=p;
-				} else
-					planBPiece[p.getColor()][r-1]=p;
-			}
-		}
+            if (p.isKnown()
+                || (p.hasMoved() && !planAPiece[p.getColor()][r-1].isKnown())) {
+                planBPiece[p.getColor()][r-1]=planAPiece[p.getColor()][r-1];
+                planAPiece[p.getColor()][r-1]=p;
+            } else
+                planBPiece[p.getColor()][r-1]=p;
+
+        // Foray Squares (FO):
+        // -- xx xx -- FO |
+        // -- xx xx -- FO |
+        // -- -- -- -- FO |
+        // -- -- -- -- FO |
+        // -- -- -- -- FO |
+        // FO FO FO FO FO |
+        // ----------------
+
+            for (int c = RED; c <= BLUE; c++) {
+                if (forayLane[c] == Grid.getX(i)
+                    || (Math.abs(forayLane[c] - Grid.getX(i)) < 5
+                        && Grid.yside(c, 9) == Grid.getY(i))
+                    || (Math.abs(forayLane[c] - Grid.getX(i)) < 5
+                        && Grid.yside(c, 8) == Grid.getY(i))
+                        && getRank(getPiece(Grid.getX(i), Grid.yside(c, 9))) == Rank.BOMB)
+                    foraySquare[c][i] = true;
+                else
+                    foraySquare[c][i] = false;
+            }
+        }
 
 		adjustPieceValues();
 		genDangerousRanks();
@@ -1269,7 +1292,7 @@ public class TestingBoard extends Board
 		// All pieces (except eights) flee the lane
 		// if front opponent pieces are likely bombs.
 
-            if (isBombedLane(lane)) {
+            if (bombedLane(lane) == 2) {
                     for (int r = 1; r <= 10; r++) {
                             if (r == 8)
                                     continue;
@@ -1422,10 +1445,16 @@ public class TestingBoard extends Board
 			int thisRank = lowRank[c];
 			if (oppRank < thisRank)
 				for (int i : attacklanes[lane]) {
+
+        // If the lane is partially blocked, stay back to prevent blocking
+        // of own pieces and if suspected bomb blocking the lane
+        // is actually a piece, then it cannot pass
+
+                    int goal = (bombedLane(lane) == 1 ? i - 22 : i - 11);
 					int ranksNeeded = 1;
 					for (int r = oppRank; ranksNeeded <= 3 && r > 1; r--) {
 						if (rankAtLarge(c, r) != 0) {
-							int tmp2[] = genDestTmpGuarded(1-c, i - 11, Rank.toRank(r));
+							int tmp2[] = genDestTmpGuarded(1-c, goal, Rank.toRank(r));
 							if (!isStealthy(planAPiece[c][r-1], oppRank))
 								genPlanA(false, tmp2, c, r, DEST_PRIORITY_CHASE);
 							if (!isStealthy(planBPiece[c][r-1], oppRank))
@@ -1514,18 +1543,19 @@ public class TestingBoard extends Board
 			Piece p = getPiece(i);
 			if (p == null)
 				continue;
+            int color = p.getColor();
 
             if (p.hasMoved()
 				|| p.isKnown()) {
                 if (p.getRank() != Rank.BOMB
                     && p.getRank() != Rank.FLAG
                     && p.getRank().ordinal() > dangerousKnownRank
-                    && p.getColor() != Settings.topColor)
+                    && color != Settings.topColor)
                     atRisk++;
                 continue;
             }
 
-            if (p.getColor() != Settings.topColor) {
+            if (color != Settings.topColor) {
                 unmovedValue[i] += Math.min(
                     2*valueStealth[Settings.bottomColor][Rank.BOMB.ordinal()-1],
                     stealthValue(Settings.bottomColor, unknownRank[Settings.bottomColor]));
@@ -1554,7 +1584,6 @@ public class TestingBoard extends Board
 		// real structure.
 
 				int rank = p.getRank().ordinal();
-				int color = p.getColor();
 				unmovedValue[i] += VALUE_MOVED +values[color][rank]/(VALUE_MOVED * 10);
 			}
 
@@ -1564,8 +1593,8 @@ public class TestingBoard extends Board
             // helps clear the pieces out so that others outside
             // the foray area can more easily assist (less blockage).
 
-            if (isForayLane(p.getColor(), i))
-                unmovedValue[i]/=2;
+            if (isForayLane(color, i))
+                unmovedValue[i]/=4;
 		} // i
 
 
@@ -5079,7 +5108,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                                 && tp.isWeak())
                                 fpvalue /= 2;
                             if (isForayLane(fpcolor, to) && hasLowValue(fp))
-                                fpvalue /= 4;
+                                fpvalue /= 5;
                         }
                         vm += unknownValue(fpvalue, fp, tp) - fpvalue;
                     } else {
@@ -5318,7 +5347,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// latter uses the apparent piece value.
 
                     if (isForay(to) && hasLowValue(tp))
-                        tpvalue /= 4;
+                        tpvalue /= 5;
 
                     if (fp.isFleeing(tprank))
                         vm -= unknownValue(tpvalue, tp, fp) + stealthValue(tp);
@@ -5818,7 +5847,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	// It is especially risky to bluff with a piece from a weak area
 	// or approach the opponent flag.
 	// Thus an effective bluff for WINS must not be a weak piece
-        // (unless the opponent is an idiot bot)
+    // (unless the opponent is an idiot bot)
 	// or near the opponent flag.
 
 	// Yet it is a good bet to make moves that force
@@ -7457,16 +7486,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
             } // rank
 
-
-        // Simplistic, the Spy is thought to be adjacent to the Two
-        // TBD: its not so simple
-        // TBD: if all adjacent pieces are known, then where?
-
-        if (setupRank[color][2] != 0
-            && unknownRankAtLarge(color, Rank.SPY) != 0
-            && Grid.isAdjacent(setupRank[color][2], unk.getIndex()))
-                unk.setLikelySpy(true);
-
 		} // i
 	}
 
@@ -8257,25 +8276,96 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	}
 
+    void guessRanks()
+    {
+        // When a player's superior piece is revealed, there is
+        // more to be learned than just the rank of that piece.
+        // This information can be used in guessing the
+        // approximate position of the remaining superior pieces and the Spy.
+
+        // In predictable setups, the opponent separates the One
+        // from the Two and the Threes from each other.
+
+        // Simplistic, the Spy is thought to be adjacent to the Two
+        // TBD: its not so simple
+        // TBD: if all adjacent pieces are known, then where?
+
+        if (lastRevealed[Settings.bottomColor] != null)
+        switch (lastRevealed[Settings.bottomColor].getRank()) {
+            case ONE :
+            case TWO :
+            case THREE :
+                 {
+                int i = getSetupIndex(lastRevealed[Settings.bottomColor]);
+                for (int d : dir) {
+                    int j = i + d;
+                    if (!Grid.isValid(j))
+                        continue;
+                    Piece unk = getPiece(j);
+                    if (unk == null
+                        || unk.getColor() != Settings.bottomColor
+                        || unk.isKnown())
+                        continue;
+                    Rank revealRank = lastRevealed[Settings.bottomColor].getRank();
+                    if (revealRank == Rank.ONE)
+                        unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
+                    else if (revealRank == Rank.TWO) {
+                        unk.setLikelySpy(true);
+                        unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
+                    } else
+                        unk.setActingRankFlee(Rank.THREE);  // safe for a Three
+                }
+                }
+                break;
+
+            case SPY :
+                for (int i=12;i<=120;i++) {
+                    if (!Grid.isValid(i))
+                        continue;
+                    Piece p = getPiece(i);
+                    if (p != null
+                        && p.getColor() == Settings.bottomColor)
+                        p.setLikelySpy(false);
+                }
+                break;
+        }
+
+        // The AI guesses that the opponent will be surprised by
+        // the discovery of an AI superior piece and will not have
+        // a defender nearby
+
+        if (lastRevealed[Settings.topColor] != null)
+        switch (lastRevealed[Settings.topColor].getRank()) {
+            case ONE :
+            case TWO :
+            case THREE :
+                int i = lastRevealed[Settings.topColor].getIndex();
+                for (int d1 : dir)
+                    for (int d2 : dir) {
+                        int j = i + d1 + d2;
+                        if (!Grid.isValid(j))
+                            continue;
+                        Piece p = getPiece(j);
+                        if (p == null
+                            || p.getColor() != Settings.bottomColor
+                            || !p.hasMoved()
+                            || p.isKnown())
+                            continue;
+                        p.setActingRankFlee(lastRevealed[Settings.topColor].getRank());
+                    }
+                break;
+        }
+    }
+
+
     boolean isForayLane(int color, int i)
     {
         return Math.abs(forayLane[color] - Grid.getX(i)) < 2;
     }
 
-    // Foray Squares (FO):
-    // -- xx xx -- FO |
-    // -- xx xx -- FO |
-    // -- -- -- -- FO |
-    // -- -- -- -- FO |
-    // -- -- -- -- FO |
-    // FO FO FO FO FO |
-    // ----------------
-
     boolean isForaySquare(int color, int i)
     {
-        return forayLane[color] == Grid.getX(i)
-            || (Math.abs(forayLane[color] - Grid.getX(i)) < 5
-                && Grid.yside(color, 9) == Grid.getY(i));
+        return foraySquare[color][i];
     }
 
 	// Aggressively attack pieces in the foray lane to try
