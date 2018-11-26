@@ -109,6 +109,11 @@ public class Grid
 
 	}
 
+	public boolean isOnBoard(int i)
+	{
+		return i >=0 && i < grid.length;
+	}
+
 	static public boolean isValid(int i)
 	{
 		return !isWater[i];
@@ -143,25 +148,25 @@ public class Grid
 	{
 		grid[i] = p;
 		pieceBitGrid[p.getColor()].setBit(i);
-                setMovable(p);
+        setMovable(p);
 	}
 
 	public void setMovable(Piece p) 
 	{
-                int i = p.getIndex();
-                Rank rank = p.getRank();
+        int i = p.getIndex();
+        Rank rank = p.getRank();
 		if (rank == Rank.BOMB
-                    || rank == Rank.FLAG)
-                    movablePieceBitGrid[p.getColor()].clearBit(i);
-                else
-                    movablePieceBitGrid[p.getColor()].setBit(i);
+            || rank == Rank.FLAG)
+            movablePieceBitGrid[p.getColor()].clearBit(i);
+        else
+            movablePieceBitGrid[p.getColor()].setBit(i);
 	}
 
 	public void clearMovable(Piece p) 
 	{
-                int i = p.getIndex();
-                movablePieceBitGrid[p.getColor()].clearBit(i);
-        }
+            int i = p.getIndex();
+            movablePieceBitGrid[p.getColor()].clearBit(i);
+    }
 
 	static private void setWater(int i) 
 	{
@@ -282,15 +287,15 @@ public class Grid
 
 	public void getMovablePieces(int turn, int n, BitGrid unpruned, BitGrid out, BitGrid outpruned)
 	{
-	// get the enemy piece bit grid
+        // get the enemy piece bit grid
 
 		long elow = pieceBitGrid[1-turn].low;
 		long ehigh = pieceBitGrid[1-turn].high;
 
-	// grow it
+        // grow it
 
         // Prior to Version 12, the code was:
-	//	for (int i = 0; i <= (n+1)/2; i++) {
+        //	for (int i = 0; i <= (n+1)/2; i++) {
         // For a more accurate qs, Version 12 adds pieces outside
         // the active area which could block an attack.
         // For example,
@@ -308,7 +313,7 @@ public class Grid
 			ehigh = out.high & ~waterGrid.high;
 		}
 
-	// get the possible move spaces
+        // get the possible move spaces
 
 		long low = ~(pieceBitGrid[turn].low | waterGrid.low);
 		long high = ~(pieceBitGrid[turn].high | waterGrid.high);
@@ -320,15 +325,15 @@ public class Grid
 			movablePieceBitGrid[turn].low,
 			movablePieceBitGrid[turn].high, outpruned);
 
-	// Intersect it with the movable pieces
-	// so pieces outside of the enemy area are cleared
+        // Intersect it with the movable pieces
+        // so pieces outside of the enemy area are cleared
 
 		elow &= outpruned.low;
 		ehigh &= outpruned.high;
 
         // Unpruned squares are open squares that
-	// are considered at all depths.
-	// Add in the neighbors of the unpruned squares.
+        // are considered at all depths.
+        // Add in the neighbors of the unpruned squares.
 
 		BitGrid.getNeighbors(unpruned.low, unpruned.high,
 			movablePieceBitGrid[turn].low,
@@ -337,8 +342,8 @@ public class Grid
 		out.low |= elow;
 		out.high |= ehigh;
 
-            outpruned.low = outpruned.low & ~out.low;
-            outpruned.high = outpruned.high & ~out.high;
+        outpruned.low = outpruned.low & ~out.low;
+        outpruned.high = outpruned.high & ~out.high;
 	}
 
 	public int movablePieceCount(int turn)

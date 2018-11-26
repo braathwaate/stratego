@@ -840,13 +840,13 @@ public class AI implements Runnable
 		}
 	}
 
-        // If the opponent's last move provided any new info
-        boolean lastMoveInfo()
-        {
-            UndoMove lastMove = b.getLastMove(1);
-            return (lastMove != UndoMove.NullMove
-                && lastMove.tp != null);
-        }
+    // If the opponent's last move provided any new info
+    boolean lastMoveInfo()
+    {
+        UndoMove lastMove = b.getLastMove(1);
+        return (lastMove != UndoMove.NullMove
+            && lastMove.tp != null);
+    }
 
 // Silly Java warning:
 // Java won't let you declare a typed list array like
@@ -888,29 +888,31 @@ public class AI implements Runnable
 
 		genDeepSearch();
 
-                // On non-dedicated computers, the amount of resource
-                // available to the AI will vary from move to move
-                // due to other consumptive tasks running at the same time.
-                // The difference in ply can be quite dissimilar.
-                // One move might get 8 ply and the next only 2 ply.
-                // Thus the analysis from the prior is often more accurate,
-                // subject to the lastMoveInfo() constraints.
-                // So the AI begins the search starting from
-                // the basis of the prior move.
+        // On non-dedicated computers, the amount of resource
+        // available to the AI will vary from move to move
+        // due to other consumptive tasks running at the same time.
+        // The difference in ply can be quite dissimilar.
+        // One move might get 8 ply and the next only 2 ply.
+        // Thus the analysis from the prior is often more accurate,
+        // subject to the lastMoveInfo() constraints.
+        // So the AI begins the search starting from
+        // the basis of the prior move.
 
-                int nstart=1;
+        int nstart=1;
 		long hashOrig = getHash();
 		int index = (int)(hashOrig % ttable[b.bturn].length);
 		TTEntry entry = ttable[b.bturn][index];
 
+        bestMove = 0;
 		if (entry != null
-                    && entry.hash == hashOrig
-                    && !lastMoveInfo()
-                    && entry.bestMove != -1
-                    && b.validMove(entry.bestMove)) {
-			nstart = Math.max(1, entry.depth - 2);
-                        bestMove = entry.bestMove;
-                }
+            && entry.hash == hashOrig
+            && !lastMoveInfo()
+            && entry.bestMove != -1
+            && b.validMove(entry.bestMove)) {
+                nstart = Math.max(1, entry.depth - 2);
+                log("\n<<< Reusing prior move state starting at " + nstart);
+                bestMove = entry.bestMove;
+        }
 
 		// Iterative Deepening
 

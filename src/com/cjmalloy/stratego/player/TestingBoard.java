@@ -5108,7 +5108,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                                 && tp.isWeak())
                                 fpvalue /= 2;
                             if (isForayLane(fpcolor, to) && hasLowValue(fp))
-                                fpvalue /= 5;
+                                fpvalue /= 10;
                         }
                         vm += unknownValue(fpvalue, fp, tp) - fpvalue;
                     } else {
@@ -5149,7 +5149,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// so the remaining unmoved pieces are fair game?
 
                             if (isForay(to) && isExpendable(fp))
-                                fpvalue /= 4;
+                                fpvalue /= 8;
 
                             vm += riskOfWin(fpvalue, fp, tp, true) - fpvalue;
                     }
@@ -8313,7 +8313,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         unk.setLikelySpy(true);
                         unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
                     } else
-                        unk.setActingRankFlee(Rank.THREE);  // safe for a Three
+            // safe for a Four, but maybe not a Three (could be a One)
+                        unk.setActingRankFlee(Rank.FOUR);
                 }
                 }
                 break;
@@ -8343,7 +8344,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 for (int d1 : dir)
                     for (int d2 : dir) {
                         int j = i + d1 + d2;
-                        if (!Grid.isValid(j))
+                        if (!grid.isOnBoard(j))
                             continue;
                         Piece p = getPiece(j);
                         if (p == null
