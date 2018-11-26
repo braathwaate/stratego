@@ -7,8 +7,8 @@ and mainly offers a much improved AI and some other features.
 
 # Download
 
-[Stratego player v0.12.0][dl]
-[dl]: https://github.com/braathwaate/stratego/releases/download/v0.12.0/stratego_v0.12.0.jar
+[Stratego player v0.12.1][dl]
+[dl]: https://github.com/braathwaate/stratego/releases/download/v0.12.1/stratego_v0.12.1.jar
 
 For two person play over TCP/IP, you need the Stratego server,
 which you need to make from source.
@@ -26,7 +26,7 @@ or set up your computer to select which program opens the jar file.
 
 Finally, you can try to run it from the command line:
 
-	java -jar stratego_v0.12.0.jar
+	java -jar stratego_v0.12.1.jar
 
 For a more challenging game, click the Settings menu and set the difficulty level to the middle (about 1 second).
 For an easier game, keep the difficulty all the way to the left
@@ -127,7 +127,10 @@ it is imperative that when evaluating the risk and reward of an attack
 assumptions must be made about the opponent setup,
 and the attack must then be executed fully, ignoring opponent unknown piece attempts at rebuff.
 
-The Stratego bot Probe 2 makes guesses about the opponent setup, favoring the Marshal and General to attack unknown unmoved pieces on the front row below the lakes.  This strategy, once discovered, allows a player to place bombs below the lakes (an unusual setup from an advanced player point of view) and win Probe's Marshal and General in a high percentage of games.  Yet it demonstrates the correct approach: formulate an attack based on risk and reward, and stick to it.  However,  Probe suffers from susceptibility to bluffing by any piece. Thus any unknown chaser is assumed to be of superior rank, and the opponent can push Probe's superior pieces at will.
+The Stratego bot Probe 2 makes guesses about the opponent setup,
+favoring the Marshal and General to attack unknown unmoved pieces on the front row below the lakes(aka "lottoing").
+This strategy, once discovered, allows a player to place bombs below the lakes
+and win Probe's Marshal and General in a high percentage of games.  Yet it demonstrates the correct approach: formulate an attack based on risk and reward, and stick to it.  However,  Probe suffers from susceptibility to bluffing by any piece. Thus any unknown chaser is assumed to be of superior rank, and the opponent can push Probe's superior pieces at will.
 
 Probe 2 is also frequently successful at identifying the opponent location of the flag, perhaps by looking at setup information or pattern matching.
 
