@@ -997,7 +997,7 @@ public class AI implements Runnable
 			MoveResult mt = makeMove(n, bestMovePly);
 			vm = -negamax(n+1, -22222, 22222, killerMove, returnMove); 
 			b.undo();
-			log(DETAIL, " " + negQS(vm));
+			log(DETAIL, " " + b.boardValue(vm));
 
 
 		// The new move is kept until the ply deepens beyond the depth
@@ -1127,7 +1127,7 @@ public class AI implements Runnable
 
 	private int qs(int n, int alpha, int beta)
 	{
-		int bvalue = negQS(b.getValue());
+		int bvalue = b.boardValue(b.getValue());
 		if (n < 1)
 			return bvalue;
 
@@ -1235,10 +1235,10 @@ public class AI implements Runnable
 					continue;
 				else {
 					boolean wasKnown = tp.isKnown();
-					int bvalue = negQS(b.getValue());
+					int bvalue = b.boardValue(b.getValue());
                     // log(DETAIL, "\n   qs(" + n + "x.):" + logMove(b, n, move) + " " + b.getValue());
 					b.move(move);
-					int v = -negQS(b.getValue()) - bvalue;
+					int v = -b.boardValue(b.getValue()) - bvalue;
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
@@ -1327,7 +1327,7 @@ public class AI implements Runnable
 
                     b.undo();
 
-                    // log(DETAIL, " " + negQS(vm));
+                    // log(DETAIL, " " + b.boardValue(vm));
 
         // Save worthwhile attack (vm > best)
         // (if vm < best, the player will play
@@ -1345,14 +1345,6 @@ public class AI implements Runnable
 		} // bi
 
 		return best;
-	}
-
-	private int negQS(int qs)
-	{
-		if (b.bturn == Settings.topColor)
-			return qs;
-		else
-			return -qs;
 	}
 
 	boolean endOfSearch()
@@ -1532,7 +1524,7 @@ public class AI implements Runnable
 					returnMove.setMove(entry.bestMove);
 					if (entry.bestMove != 0)
 						killerMove.setMove(entry.bestMove);
-					log(DETAIL, " exact " + index + " " + negQS(entry.exactValue));
+					log(DETAIL, " exact " + index + " " + b.boardValue(entry.exactValue));
 					return entry.exactValue;
 				} else {
 				if (entry.flags == TTEntry.Flags.LOWERBOUND)
@@ -1543,7 +1535,7 @@ public class AI implements Runnable
 					returnMove.setMove(entry.bestMove);
 					if (entry.bestMove != 0)
 						killerMove.setMove(entry.bestMove);
-					log(DETAIL, " cutoff " + index + " " + negQS(entry.bestValue));
+					log(DETAIL, " cutoff " + index + " " + b.boardValue(entry.bestValue));
 					return entry.bestValue;
 				}
 				}
@@ -1714,7 +1706,7 @@ public class AI implements Runnable
 
 				b.undo();
 
-				log(DETAIL, " " + negQS(vm));
+				log(DETAIL, " " + b.boardValue(vm));
 
 				alpha = Math.max(alpha, vm);
 
@@ -1752,7 +1744,7 @@ public class AI implements Runnable
 			if (mt == MoveResult.OK) {
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove);
 				b.undo();
-				log(DETAIL, " " + negQS(vm));
+				log(DETAIL, " " + b.boardValue(vm));
 				
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -1855,7 +1847,7 @@ public class AI implements Runnable
 						bestPrunedMove = move;
 					}
 					b.undo();
-					log(DETAIL, " " + negQS(vm));
+					log(DETAIL, " " + b.boardValue(vm));
 				} else
 					log(DETAIL, " " + mt);
 			} // moves
@@ -1871,7 +1863,7 @@ public class AI implements Runnable
 
 			b.undo();
 
-			log(DETAIL, " " + negQS(vm));
+			log(DETAIL, " " + b.boardValue(vm));
 
 			if (vm > bestValue) {
 				bestValue = vm;
@@ -1970,7 +1962,7 @@ public class AI implements Runnable
 
 				b.undo();
 
-				log(DETAIL, " " + negQS(vm));
+				log(DETAIL, " " + b.boardValue(vm));
 
 				if (vm > bestValue) {
 					bestValue = vm;
@@ -2087,7 +2079,7 @@ public class AI implements Runnable
 	// Losing captures are discarded (see qs())
 
 		if (enemies < 2
-			&& -negQS(b.getValue() - bvalue) < 0) {
+			&& -b.boardValue(b.getValue() - bvalue) < 0) {
 			
 			UndoMove m = b.getLastMove(1);
 			if (m.tp != null

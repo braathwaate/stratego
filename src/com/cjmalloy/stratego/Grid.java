@@ -109,11 +109,6 @@ public class Grid
 
 	}
 
-	public boolean isOnBoard(int i)
-	{
-		return i >=0 && i < grid.length;
-	}
-
 	static public boolean isValid(int i)
 	{
 		return !isWater[i];
