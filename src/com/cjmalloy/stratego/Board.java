@@ -54,7 +54,6 @@ public class Board
 	// TBD: try to guess the opponents entire setup by
 	// correllating against all setups in the database
 	protected Piece[] setup = new Piece[121];
-    protected Piece[] lastRevealed = new Piece[2];
 	protected static final int[] dir = { -11, -1,  1, 11 };
 	protected static long[][][][][] boardHash = new long[2][8][2][15][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
@@ -195,7 +194,6 @@ public class Board
 		setup = b.setup.clone();
 		blufferRisk = b.blufferRisk;
 		guessedRankCorrect = b.guessedRankCorrect;
-        lastRevealed = b.lastRevealed.clone();
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -352,8 +350,6 @@ public class Board
 			alternateSquares[i][0] = null;
 			alternateSquares[i][1] = null;
 		}
-        lastRevealed[0] = null;
-        lastRevealed[1] = null;
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -1343,11 +1339,13 @@ public class Board
 		// -- b? --
 		// Unknown Blue moves towards Blue Six (in Example 1) or
 		// Blue Six moves towards unknown Red in Example 2.
-
 		// If Unknown Blue is viewed as a protector, it would
 		// acquire a chase rank of 4.  But Unknown Blue might not
 		// care about protecting Blue 6, if Blue intends
 		// to attack unknown Red anyway.
+        //
+        // (However, if the chaser is known, the protector is
+        // probably stronger.)
 
 			if (chasedRank.ordinal() >= 5	// or UNKNOWN
 				|| isInvincible(chased)
@@ -1427,11 +1425,15 @@ public class Board
         // R3 b? -- b?
         // Red Three has been chasing unknown Blue. Then
         // the right unknown Blue moves left to protect.
+        // However, is left unknown Blue is a suspected Three,
+        // then right unknown blue is not a protector.
        
         // chaser is known 
-		} else if (!(chased.isKnown() || chased.isFleeing(chaserRank))
-                || chaserRank.ordinal() >= chasedRank.ordinal())
-                    return;
+		} else if (!(chased.isKnown()
+                || (chased.isFleeing(chaserRank)
+                    && chaserRank != chasedRank))
+            || chaserRank.ordinal() >= chasedRank.ordinal())
+                return;
 
         //------------------------------------------------
 		// chaser piece is either an unknown piece chasing
@@ -1895,7 +1897,13 @@ public class Board
 		// If an unprotected unknown chaser forks a known and unknown
 		// piece, assume that the chaser is after the known piece.
 		// -- R3 --
-		// B? -- R?
+		// b? -- r?
+		// This assigns the chaser a rank of Two.
+		//
+		// If an unprotected unknown chaser forks two known pieces
+		// assume that the chaser is after the stronger known piece.
+		// -- R3 --
+		// b? -- R6
 		// This assigns the chaser a rank of Two.
 		//
 		// If the known piece is expendable (5-9) or a Bomb,
@@ -1929,6 +1937,11 @@ public class Board
 					if (!chased.isKnown()
 						&& chased2.isKnown()
 						&& chased2.getRank().ordinal() <= 4)
+						break;
+
+					if (chased.isKnown()
+						&& chased2.isKnown()
+						&& chased2.getRank().ordinal() < chased.getRank().ordinal())
 						break;
 
 		// Unknown chaser can be assigned a chase rank.
@@ -3200,7 +3213,6 @@ public class Board
 			genChaseRank(fp.getColor());
 			genFleeRank(fp, null);	// depends on suspected rank
             updateSafe(fp);
-            lastRevealed[fp.getColor()] = null;
             lock.unlock();
 			return true;
 		}
@@ -3931,9 +3943,7 @@ public class Board
 	protected void revealRank(Piece p)
 	{
         if (!p.isKnown())
-            lastRevealed[p.getColor()] = p;
-        else
-            lastRevealed[p.getColor()] = null;
+            guessRanks(p);
 
         if (p.getColor() == Settings.bottomColor
                 && !p.isKnown()) {
@@ -3961,5 +3971,110 @@ public class Board
 
         }
         p.revealRank();
+    }
+
+    protected void guessRanks(Piece reveal)
+    {
+        // When a player's superior piece is revealed, there is
+        // more to be learned than just the rank of that piece.
+        // This information can be used in guessing the
+        // approximate position of the remaining superior pieces and the Spy.
+
+        // In predictable setups, the opponent separates the One
+        // from the Two and the Threes from each other.
+
+        // Simplistic, the Spy is thought to be adjacent to the Two
+        // TBD: its not so simple
+        // TBD: if all adjacent pieces are known, then where?
+
+        Rank revealRank = reveal.getRank();
+        if (reveal.getColor() == Settings.bottomColor)
+        switch (revealRank) {
+            case ONE :
+            case TWO :
+            case THREE :
+                 {
+                int i = getSetupIndex(reveal);
+                for (int d : dir) {
+                    int j = i + d;
+                    if (!Grid.isValid(j))
+                        continue;
+                    Piece unk = getSetupPiece(j);
+                    if (unk == null
+                        || unk.getColor() != Settings.bottomColor
+                        || unk.isKnown())
+                        continue;
+                    if (revealRank == Rank.ONE)
+                        unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
+                    else if (revealRank == Rank.TWO) {
+                        unk.setLikelySpy(true);
+                        unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
+                    } else
+            // safe for a Four, but maybe not a Three (could be a One)
+                        unk.setActingRankFlee(Rank.FOUR);
+                }
+                }
+                break;
+
+            case SPY :
+                for (int i=12;i<=120;i++) {
+                    if (!Grid.isValid(i))
+                        continue;
+                    Piece p = getSetupPiece(i);
+                    if (p != null
+                        && p.getColor() == Settings.bottomColor)
+                        p.setLikelySpy(false);
+                }
+                break;
+        }
+
+        // The AI guesses that the opponent will be surprised by
+        // the discovery of an AI superior piece and will not have
+        // an adjacent defender
+
+        else {
+            boolean surprise = (revealRank.ordinal() <= 3
+                && !hasFewWeakRanks(Settings.bottomColor, 4));
+        switch (revealRank) {
+            case ONE :
+            case TWO :
+            case THREE :
+            case FOUR :
+            case FIVE :
+                int i = reveal.getIndex();
+                for (int d1 : dir) {
+                    int j = i + d1;
+                    if (!Grid.isValid(j))
+                        continue;
+                    Piece p = getPiece(j);
+                    if (p == null
+                        || p.getColor() != Settings.bottomColor
+                        || p.isKnown())
+                        continue;
+                    p.setActingRankFlee(revealRank);
+
+        // The AI also guesses that the opponent will be surprised by
+        // the discovery of an AI superior piece and will not have
+        // a defender with 2 squares.  This is rather aggressive, but
+        // it is better than waiting for an unknown attacker to show up
+        // later.
+                    if (surprise)
+                    for (int d2 : dir) {
+                        int k = j + d2;
+                        if (!Grid.isValid(k))
+                            continue;
+                        p = getPiece(k);
+                        if (p == null
+                            || p.getColor() != Settings.bottomColor
+                            || p.isKnown()
+                            || !p.hasMoved())
+                            continue;
+                        p.setActingRankFlee(revealRank);
+                    }
+                    break;
+                }
+                break;
+        }
+        }
     }
 }

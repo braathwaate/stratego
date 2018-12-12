@@ -101,13 +101,6 @@ public class AI implements Runnable
 		GE	// generated move
 	};
 
-	static private long twoSquaresHash;
-	static {
-		Random rnd = new Random();
-		twoSquaresHash = Math.abs(rnd.nextLong());
-	}
-
-
 	public AI(Board b, CompControls u) 
 	{
 		board = b;
@@ -1386,23 +1379,6 @@ public class AI implements Runnable
 			return;
 		}
 
-		// Yet we want to retain an exact entry as well.
-		// Otherwise, a deeper search might overwrite the entry with
-		// a lower bound or upper bound entry.  So we keep both.
-		//
-		// (Note: This prevents the pruned moves from losing their exact
-		// transposition table values when the move is considered
-		// in the best move search, which uses null moves, and thus
-		// overwrites the lower depth entries).
-
-		// Clear the exact entry when the entry is reused.
-
-		if (moveRoot != entry.moveRoot
-			|| hashOrig != entry.hash) {
-			entry.exactDepth = -1;
-			entry.exactValue = -22222;
-		}
-
 		// The transposition table cannot be used if the current position
 		// results from moves leading to a possible Two Squares ending.
 		// That is because it is the order of the moves that is important,
@@ -1428,14 +1404,40 @@ public class AI implements Runnable
 		// retrieved for the latter position, the AI would erroneously
 		// believe it had a Two Squares ending when it really didn't.
 		//
-		// The solution is store positions separately that can or cannot
-		// lead immediately to a two squares result.  Prior to version 10.0,
-		// the fix was not to store *any* chases, but this was
-		// a performance hit.  Version 10.0 checks if
+		// Prior to version 10.0, the fix was not to store *any* chases,
+        // but this was a performance hit.
+		// The version 10.0 solution was to store positions separately that
+        // can or cannot lead immediately to a two squares result.  It checks if
 		// player and opponent piece are alternating in the same
 		// row or column, and if so, assumes that a two squares
 		// result might be in the offing.  It hashes the two positions
 		// separately in the transposition table.
+        //
+        // However, this was not good enough, because a possible two squares chase might
+        // not actually be a two squares chase, so the transposition table
+        // entry could be wrong for a given position.  Version 12.2 simply
+        // does not store *any* chase that can lead to a two squares result.
+
+        if (b.isPossibleTwoSquaresChase())
+            return;
+
+		// Yet we want to retain an exact entry as well.
+		// Otherwise, a deeper search might overwrite the entry with
+		// a lower bound or upper bound entry.  So we keep both.
+		//
+		// (Note: This prevents the pruned moves from losing their exact
+		// transposition table values when the move is considered
+		// in the best move search, which uses null moves, and thus
+		// overwrites the lower depth entries).
+
+		// Clear the exact entry when the entry is reused.
+
+		if (moveRoot != entry.moveRoot
+			|| hashOrig != entry.hash) {
+			entry.exactDepth = -1;
+			entry.exactValue = -22222;
+		}
+
 
 		entry.type = searchType;
 		entry.flags = entryFlags;
@@ -2069,9 +2071,6 @@ public class AI implements Runnable
 					}
 				} else
 					b.move(tryMove);
-
-				if (b.isPossibleTwoSquaresChase())
-					b.hashDepth(b.depth);
 			}
 		} else
 			b.move(tryMove);
@@ -2122,9 +2121,6 @@ public class AI implements Runnable
 
 	private long getHash()
 	{
-		if (b.isPossibleTwoSquaresChase())
-			return b.getHash() ^ twoSquaresHash;
-
 		return b.getHash();
 	}
 

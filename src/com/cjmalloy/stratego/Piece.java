@@ -35,15 +35,15 @@ public class Piece implements Comparable<Piece>
 
 	// a known piece can be not shown
 	// a shown piece can be unknown to the computer
-	static private final int MAYBE_EIGHT = 1 << 0;	// unknown piece could be an eight
-	static private final int IS_WEAK = 1 << 1;
-	static private final int IS_KNOWN = 1 << 2;	// known to players
-	static private final int IS_LESS = 1 << 3;
-	static private final int IS_SUSPECTED = 1 << 4;
-	static private final int IS_SHOWN = 1 << 5;	// visible on screen
-	static private final int IS_SAFE = 1 << 6;
-	static private final int IS_FLAG_BOMB = 1 << 7;
-	static private final int LIKELY_SPY = 1 << 8;
+	static public final int MAYBE_EIGHT = 1 << 0;	// unknown piece could be an eight
+	static public final int WEAK = 1 << 1;
+	static public final int KNOWN = 1 << 2;	// known to players
+	static public final int LESS = 1 << 3;
+	static public final int SUSPECTED = 1 << 4;
+	static public final int SHOWN = 1 << 5;	// visible on screen
+	static public final int SAFE = 1 << 6;
+	static public final int FLAG_BOMB = 1 << 7;
+	static public final int LIKELY_SPY = 1 << 8;
 	static Piece[] lastKill = new Piece[2];
 
 	private int flags = 0;
@@ -87,7 +87,7 @@ public class Piece implements Comparable<Piece>
 	public void setRank(Rank r)
 	{
 		rank = r;
-		flags &= ~IS_SUSPECTED;
+		flags &= ~SUSPECTED;
 	}
 
 	// When the AI is playing an external agent, opponent rank in
@@ -155,8 +155,8 @@ public class Piece implements Comparable<Piece>
 
 	public void makeKnown()
 	{
-		flags |= IS_KNOWN;
-		flags &= ~(IS_SUSPECTED | IS_LESS | MAYBE_EIGHT | LIKELY_SPY);
+		flags |= KNOWN;
+		flags &= ~(SUSPECTED | LESS | MAYBE_EIGHT | LIKELY_SPY);
 		clearActingRankFlee();
 	}
 
@@ -169,10 +169,25 @@ public class Piece implements Comparable<Piece>
 	{
 		return uniqueID;
 	}
-	
+
+    public boolean is(int f)
+    {
+		return (flags & f) != 0;
+    }
+
+    public void set(int f)
+    {
+		flags |= f;
+    }
+
+    public void clear(int f)
+    {
+		flags &= ~f;
+    }
+
 	public boolean isShown()
 	{
-		return (flags & IS_SHOWN) != 0;
+		return (flags & SHOWN) != 0;
 	}
 
 	public void kill()
@@ -185,14 +200,14 @@ public class Piece implements Comparable<Piece>
 	public void setShown(boolean b)
 	{
 		if (b)
-			flags |= IS_SHOWN;
+			flags |= SHOWN;
 		else
-			flags &= ~IS_SHOWN;
+			flags &= ~SHOWN;
 	}	
 	
 	public boolean isKnown()
 	{
-		return (flags & IS_KNOWN) != 0;
+		return (flags & KNOWN) != 0;
 	}
 
 	public boolean isHighLight()
@@ -203,22 +218,22 @@ public class Piece implements Comparable<Piece>
 	public void setKnown(boolean b)
 	{
 		if (b)
-			flags |= IS_KNOWN;
+			flags |= KNOWN;
 		else
-			flags &= ~IS_KNOWN;
+			flags &= ~KNOWN;
 	}
 
 	public void setSafe(boolean b)
 	{
 		if (b)
-			flags |= IS_SAFE;
+			flags |= SAFE;
 		else
-			flags &= ~IS_SAFE;
+			flags &= ~SAFE;
 	}
 
 	public boolean isSafe()
 	{
-		return (flags & IS_SAFE) != 0;
+		return (flags & SAFE) != 0;
 	}
 
 	public boolean hasMoved()
@@ -280,13 +295,13 @@ public class Piece implements Comparable<Piece>
 	public void setActingRankChaseEqual(Rank r)
 	{
 		setActingRankChase(r);
-		flags &= ~IS_LESS;
+		flags &= ~LESS;
 	}
 
 	public void setActingRankChaseLess(Rank r)
 	{
 		setActingRankChase(r);
-		flags |= IS_LESS;
+		flags |= LESS;
 	}
 
 	public void clearActingRankChase()
@@ -294,7 +309,7 @@ public class Piece implements Comparable<Piece>
 		actingRankChase = 0;
         if (moves != 0)
             moves=1;
-		flags &= ~IS_LESS;
+		flags &= ~LESS;
 	}
 
 	public boolean isChasing(Rank rank)
@@ -304,7 +319,7 @@ public class Piece implements Comparable<Piece>
 
 	public boolean isRankLess()
 	{
-		return (flags & IS_LESS) != 0;
+		return (flags & LESS) != 0;
 	}
 
 	public boolean isFleeing(Rank rank)
@@ -340,26 +355,26 @@ public class Piece implements Comparable<Piece>
 
 	public boolean isSuspectedRank()
 	{
-		return (flags & IS_SUSPECTED) != 0;
+		return (flags & SUSPECTED) != 0;
 	}
 
 	public void setSuspectedRank(Rank r)
 	{
 		rank = r;
-		flags |= IS_SUSPECTED;
+		flags |= SUSPECTED;
 	}
 
 	public void setWeak(boolean b)
 	{
 		if (b)
-			flags |= IS_WEAK;
+			flags |= WEAK;
 		else
-			flags &= ~IS_WEAK;
+			flags &= ~WEAK;
 	}
 
 	public boolean isWeak()
 	{
-		return (flags & IS_WEAK) != 0;
+		return (flags & WEAK) != 0;
 	}
 
 	public void setMaybeEight(boolean b)
@@ -378,14 +393,14 @@ public class Piece implements Comparable<Piece>
 	public void setFlagBomb(boolean b)
 	{
 		if (b)
-			flags |= IS_FLAG_BOMB;
+			flags |= FLAG_BOMB;
 		else
-			flags &= ~IS_FLAG_BOMB;
+			flags &= ~FLAG_BOMB;
 	}
 
 	public boolean isFlagBomb()
 	{
-		return (flags & IS_FLAG_BOMB) != 0;
+		return (flags & FLAG_BOMB) != 0;
 	}
 
 	public void setLikelySpy(boolean b)
@@ -430,7 +445,7 @@ public class Piece implements Comparable<Piece>
 
 	public int getStateFlags()
 	{
-		return flags & (MAYBE_EIGHT | IS_WEAK | IS_KNOWN);
+		return flags & (MAYBE_EIGHT | WEAK | KNOWN);
 	}
 	
 	public boolean equals(Object p)
