@@ -55,7 +55,7 @@ public class Board
 	// correllating against all setups in the database
 	protected Piece[] setup = new Piece[121];
 	protected static final int[] dir = { -11, -1,  1, 11 };
-	protected static long[][][][][] boardHash = new long[2][8][2][15][121];
+    protected static long[][][][] boardHash = new long[8][2][82][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
 	protected static BoardHistory[] boardHistory = new BoardHistory[2];
 	protected static Piece[][] alternateSquares = new Piece[121][2];
@@ -120,12 +120,12 @@ public class Board
 	//
 
 		Random rnd = new Random();
-		for ( int c = RED; c <= BLUE; c++)
+
 		for ( int k = 0; k < 8; k++)
 		for ( int m = 0; m < 2; m++)
-		for ( int r = 0; r < 15; r++)
+		for ( int id = 0; id < 82; id++)
 		for ( int i = 12; i <= 120; i++)
-			boardHash[c][k][m][r][i] = Math.abs(rnd.nextLong());
+			boardHash[k][m][id][i] = Math.abs(rnd.nextLong());
 
 		for ( int i = 0; i < depthHash.length; i++)
 			depthHash[i] = Math.abs(rnd.nextLong());
@@ -441,12 +441,12 @@ public class Board
 	// Used to determine redundant board positions.
 	//
 	// Unknown pieces (ai or opponent) are not all identical.
-	// Hence, if two unknown pieces swap positions, the board is different,
+	// If two unknown pieces swap positions, the board is different,
 	// because the AI bases rank predictions based on setup
 	// and the history of the piece interactions.
-	// Presently the AI does not consolidate all its information
-	// (i.e. actingranks) into a single predicted rank, so the
-	// hash cannot be relied on for unknown ranks.
+    // The opponent may also be tracking behavior of AI pieces.
+    // Therefore, each piece is considered unique and results
+    // in differing hash regardless if the ranks are the same.
 	//
 	// Should "known" be included in the hash?  At first glance,
 	// a known piece creates a different board position from
@@ -459,35 +459,13 @@ public class Board
 	// worth distinguishing is an unknown AI Nine moving more than one
 	// square.
 
-	// A board position (and hash) reflects all that each player
-	// knows.  The AI knows its piece ranks and has information
-	// it keeps about the opponent ranks.  The opponent sees
-	// only what is known and what information can be gathered.
-	//
-	// Note that the hash is unreliable for unknown pieces
-	// (see above).
-
 	static public long hashPiece(int turn, Piece p, int i)
 	{
-		if (turn == Settings.topColor) {
-			return boardHash
-				[p.getColor()]
-				[p.getStateFlags()]
-				[p.hasMoved() ? 1 : 0]
-				[p.getRank().ordinal()-1]
-				[i];
-		} else {
-			Rank rank = p.getRank();
-			if (p.getColor() == Settings.topColor
-				&& !p.isKnown())
-				rank = Rank.UNKNOWN;
-			return boardHash
-				[p.getColor()]
-				[p.getStateFlags()]
-				[p.hasMoved() ? 1 : 0]
-				[rank.ordinal()-1]
-				[i];
-		}
+        return boardHash
+            [p.getStateFlags()]
+            [p.hasMoved() ? 1 : 0]
+            [p.getID()]
+            [i];
 	}
 
 	public void rehash(Piece p, int i)
@@ -852,7 +830,7 @@ public class Board
             Piece priorPiece = m3.getPiece();
             if (priorPiece != p
                 && priorPiece.isKnown())
-                priorPiece.setSafe(false);
+                priorPiece.clear(Piece.SAFE);
         }
 
         if (!p.isKnown())
@@ -877,7 +855,7 @@ public class Board
             || m2.getTo() == p.getIndex())
             return;
 
-        p.setSafe(false);
+        p.clear(Piece.SAFE);
     }
 
 	// stores the state prior to the move
@@ -1350,7 +1328,7 @@ public class Board
 			if (chasedRank.ordinal() >= 5	// or UNKNOWN
 				|| isInvincible(chased)
 				|| chaser.isFleeing(chasedRank)
-				|| (chaser.isWeak() && blufferRisk >= 3))
+				|| (chaser.is(Piece.WEAK) && blufferRisk >= 3))
 				return;
 
 		// If the chased piece is a strong but not invincible piece,
@@ -1562,7 +1540,7 @@ public class Board
 		// thinks are weak or bombs, and certainly unlikely solitary
 		// protectors!
 
-			else if (!p.isFleeing(chaserRank) && !p.isWeak()) {
+			else if (!p.isFleeing(chaserRank) && !p.is(Piece.WEAK)) {
 
 		// more than one unknown protector?
 
@@ -2297,8 +2275,11 @@ public class Board
     // because the remaining pieces are stronger
     // and have started to guess the rank of unknown pieces.
 
-            p.setSafe(isInvincible(p)
-                || !hasFewWeakRanks(1-p.getColor(), 12));
+            if (isInvincible(p)
+                || !hasFewWeakRanks(1-p.getColor(), 12))
+                p.set(Piece.SAFE);
+            else
+                p.clear(Piece.SAFE);
 
             if (p.getColor() != Settings.bottomColor)
                 continue;
@@ -4007,7 +3988,7 @@ public class Board
                     if (revealRank == Rank.ONE)
                         unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
                     else if (revealRank == Rank.TWO) {
-                        unk.setLikelySpy(true);
+                        unk.set(Piece.LIKELY_SPY);
                         unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
                     } else
             // safe for a Four, but maybe not a Three (could be a One)
@@ -4023,7 +4004,7 @@ public class Board
                     Piece p = getSetupPiece(i);
                     if (p != null
                         && p.getColor() == Settings.bottomColor)
-                        p.setLikelySpy(false);
+                        p.clear(Piece.LIKELY_SPY);
                 }
                 break;
         }

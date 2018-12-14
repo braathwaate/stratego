@@ -223,19 +223,6 @@ public class Piece implements Comparable<Piece>
 			flags &= ~KNOWN;
 	}
 
-	public void setSafe(boolean b)
-	{
-		if (b)
-			flags |= SAFE;
-		else
-			flags &= ~SAFE;
-	}
-
-	public boolean isSafe()
-	{
-		return (flags & SAFE) != 0;
-	}
-
 	public boolean hasMoved()
 	{
 		return moves != 0;
@@ -364,19 +351,6 @@ public class Piece implements Comparable<Piece>
 		flags |= SUSPECTED;
 	}
 
-	public void setWeak(boolean b)
-	{
-		if (b)
-			flags |= WEAK;
-		else
-			flags &= ~WEAK;
-	}
-
-	public boolean isWeak()
-	{
-		return (flags & WEAK) != 0;
-	}
-
 	public void setMaybeEight(boolean b)
 	{
 		if (b)
@@ -401,19 +375,6 @@ public class Piece implements Comparable<Piece>
 	public boolean isFlagBomb()
 	{
 		return (flags & FLAG_BOMB) != 0;
-	}
-
-	public void setLikelySpy(boolean b)
-	{
-		if (b)
-			flags |= LIKELY_SPY;
-		else
-			flags &= ~LIKELY_SPY;
-	}
-
-	public boolean isLikelySpy()
-	{
-		return (flags & LIKELY_SPY) != 0;
 	}
 
 	public int getIndex()

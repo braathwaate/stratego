@@ -220,7 +220,14 @@ public class TestingBoard extends Board
 	protected int[][] valueStealth = new int[2][15];
 	protected static final int attacklanes[][] = { { 89, 90}, { 93, 94}, {97, 98} };
 	protected long[] hashTest = new long [2];
+
+    // lowestUnknownNotSuspectedRank is the lowest opponent rank
+    // that is not known or *matured* suspected.   Note that an opponent
+    // piece can have a rank of lowestUnknownNotSuspectedRank, yet
+    // have a suspected rank, if the rank has not yet matured or if
+    // there are multiple pieces of the same rank, with one not known or suspected.
 	protected int lowestUnknownNotSuspectedRank;
+
 	protected int lowestUnknownExpendableRank;
 	protected int dangerousKnownRank;
 	protected int dangerousUnknownRank;
@@ -361,7 +368,9 @@ public class TestingBoard extends Board
 		valuePieces();
 		genValueStealth();	// depends on valuePieces
 		genInvincibleRank();	// depends on stealth
-		genDestFlag();
+
+		genUnknownRank();   // first pass
+		genDestFlag();      // depends on unknown rank (actualValue)
 		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
 
 		// The following code depends on values[] and valueStealth[]
@@ -491,9 +500,9 @@ public class TestingBoard extends Board
 		// a Spy.
 
 			for (int r = 7; r >=1; r--)
-				if (rankAtLarge(c, r) == 0) {
-                    if (rankAtLarge(1-c, r) != 0)
-                        values[1-c][r] = missingValue(c, r+1);
+				if (rankAtLarge(1-c, r) == 0) {
+                    if (rankAtLarge(c, r) != 0)
+                        values[c][r] = missingValue(1-c, r+1);
                     else {
 
         // If rank is missing from both sides,
@@ -502,16 +511,14 @@ public class TestingBoard extends Board
         // the Ones, Twos and Threes on both sides
         // become 2X valuable as Fives rather than 4X
 
-                        for (int i = r-1; i >=1; i--) {
+                        for (int i = 1; i <= r-1; i++)
                             values[c][i] = values[c][i+1];
-                            values[1-c][i] = values[1-c][i+1];
-                        }
                     }
                 }
 
 		// The stealth value of the Spy is worth somewhere between
 		// a Three and a Four with the opponent One still on the board.
-        // As those pieces are removed, the Spy stealth falls in value.
+        // As ranks are removed, the Spy stealth falls in value.
         // (A high Spy stealth value results in the AI dropping pieces).
 
         // Note: The reason why the Spy has high stealth rather than a high
@@ -520,9 +527,11 @@ public class TestingBoard extends Board
         // search, so if it had high value, then the calculation would be
         // erroneous if the opponent could recapture the Spy.
 
-			valueStealth[c][9] = Math.min(
-                            values[1-c][3] + values[1-c][4],
-                            values[c][3] + values[c][4])/2;
+            valueStealth[c][9] = 0;
+			for (int r = 3; r <= 7; r++)
+                if (rankAtLarge(c, r) != 0)
+                    valueStealth[c][9] += values[c][r];
+            valueStealth[c][9] /= 3;
 
 		// The value of a One is worth somewhat less if the opponent
 		// still has the Spy.  This encourages the One to trade
@@ -1268,8 +1277,16 @@ public class TestingBoard extends Board
     // and the opponent rank is not invincible (i.e. lower opponent rank not known),
     // increase the value of the player's piece
 
-                if (isInvincibleDefender(c, rank)
-                    && !isInvincibleDefender(1-c, rank)) {
+                if ((isInvincibleDefender(c, rank)
+                    && !isInvincibleDefender(1-c, rank))
+
+    // If the opponent has a dangerous rank, encourage the AI to quickly
+    // exchange its low ranks if possible,
+    // thus preventing them from loss by the dangerous rank.
+
+                    || (c == Settings.bottomColor
+                        && (rank > dangerousUnknownRank || rank > dangerousKnownRank)
+                        && rank <= 4)) {
                     values[c][rank] = values[1-c][rank] + stealthValue(1-c, rank) + values[1-c][unknownRank[1-c]]/2;
                     break;
                 }
@@ -1604,8 +1621,10 @@ public class TestingBoard extends Board
 		} // i
 
 
-		// If the opponent has a known invincible rank,
+		// If the opponent has a dangerous invincible rank
+        // (i.e. the players lower ranks are all known),
 		// it will be hellbent on obliterating all moved pieces,
+        // especially if it is known,
 		// so movement of additional pieces is heavily discouraged
         // because the pieces instantly become additional targets.
         // The risk of loss increases with the number of
@@ -1625,12 +1644,14 @@ public class TestingBoard extends Board
 				|| p.getColor() != Settings.topColor
                 || p.hasMoved())
 				continue;
-			if (p.getRank().ordinal() > dangerousKnownRank
-				&& p.getRank() != Rank.BOMB
-				&& p.getRank() != Rank.FLAG
-				&& (lowerKnownOrSuspectedRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2
-                || atRisk >= 1))
-				unmovedValue[i] += VALUE_MOVED*2;
+				if ((p.getRank() != Rank.BOMB
+                    && p.getRank() != Rank.FLAG
+                    && (lowerKnownOrSuspectedRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2
+                        || atRisk >= 1))
+                    && (p.getRank().ordinal() > dangerousKnownRank
+                        || (p.getRank().ordinal() > dangerousUnknownRank
+                            && !hasLowValue(p))))
+                    unmovedValue[i] += VALUE_MOVED*2;
 
 		} // i
 	}
@@ -2076,7 +2097,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // to expendables chasing non-weak pieces and pieces
         // in the foray lane.
 		
-            if (!p.isWeak()
+            if (!p.is(Piece.WEAK)
                 || isForaySquare(1-p.getColor(), p.getIndex()))
                     chaseWithExpendable(p, i, DEST_PRIORITY_LOW);
 
@@ -4213,10 +4234,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
             // same as board.updateSafe()
             if (fp.isKnown()
-                && fp.isSafe()
+                && fp.is(Piece.SAFE)
                 && !(isPossibleTwoSquaresChase()
                     || m2 != UndoMove.NullMove && m2.getTo() == fp.getIndex()))
-                fp.setSafe(false);
+                fp.clear(Piece.SAFE);
         }
 
 		} else { // attack
@@ -4736,7 +4757,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 						if (!tp.isKnown()
 							|| isExpendable(tp)
-							|| (fp.isWeak()
+							|| (fp.is(Piece.WEAK)
 								&& tprank.ordinal() <= 4))
 							vm += 1;
 
@@ -5236,7 +5257,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                             fpvalue = stealthValue(fp);
                         else if (fprank != Rank.EIGHT) {
                             if (fprank.ordinal() <= 5
-                                && tp.isWeak())
+                                && tp.is(Piece.WEAK))
                                 fpvalue /= 2;
                             if (isForayLane(fpcolor, to) && hasLowValue(fp))
                                 fpvalue /= 10;
@@ -5482,8 +5503,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
                     if (fp.isFleeing(tprank))
                         vm -= unknownValue(tpvalue, tp, fp) + stealthValue(tp);
-                    else if (isStrongExpendable(tp) && !fp.isWeak()
-                        || tprank.ordinal() <= 5  && fp.isWeak()
+                    else if (isStrongExpendable(tp) && !fp.is(Piece.WEAK)
+                        || tprank.ordinal() <= 5  && fp.is(Piece.WEAK)
 
 		// If fp fled from some unknown AI piece before,
         // will it neglect to attack this unknown AI piece?
@@ -5991,7 +6012,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
 		return isEffectiveBluff(fp, tp)
 			&& !(blufferRisk >= 3
-                && (fp.isWeak() || isWeakAggressive(fp)))
+                && (fp.is(Piece.WEAK) || isWeakAggressive(fp)))
 			&& !isNearOpponentFlag(Move.unpackTo(m));
 	}
 
@@ -6225,7 +6246,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// of capture of a known piece, even when the piece
 		// appears to be protected.
 
-			if (fp.isWeak())
+			if (fp.is(Piece.WEAK))
 				return v / 3;
 			else
 				return v * 2 / 3;
@@ -6433,7 +6454,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             int actualStealth = stealthValue(Settings.topColor, rank);
 
             if (isWeakAggressive(p)
-                || p.isWeak()
+                || p.is(Piece.WEAK)
                 || rank != Rank.NINE)
                 return actualStealth;
 
@@ -6484,7 +6505,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             int v = stealthValue(p.getColor(), Rank.FOUR);
 
             if (isWeakAggressive(p)
-                || p.isWeak())
+                || p.is(Piece.WEAK))
                 v /= 2;
 
 		// If an unknown piece flees from an opponent unknown piece,
@@ -6498,7 +6519,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             if (rank == Rank.UNKNOWN) {
                 if ((p.getActingRankFleeLow() == Rank.UNKNOWN
                     && !isPossibleBomb(p))
-                    || p.isLikelySpy()) {
+                    || p.is(Piece.LIKELY_SPY)) {
                     return Math.min(v/2 + v/2 * p.getMoves() / 25, v);
                 } else
                     return v/3;
@@ -7215,8 +7236,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // except the One is not safe it if the opponent
         // is a LIKELY_SPY
 
-			else if (tp.isSafe()
-                && !(tprank == Rank.ONE && fp.isLikelySpy())
+			else if (tp.is(Piece.SAFE)
+                && !(tprank == Rank.ONE && fp.is(Piece.LIKELY_SPY))
 			    && tprank.ordinal() <= lowestUnknownExpendableRank + 1)
                     return LOSES;	// maybe not
 
@@ -7325,7 +7346,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 			} else if (fp.isFleeing(tprank)
 				&& (tprank.ordinal() <= 4
-					|| fp.isWeak()))
+					|| fp.is(Piece.WEAK)))
 					return LOSES;	// maybe not
 
 		// If the opponent no longer has any unknown expendable
@@ -7421,8 +7442,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				if ((isWeakAggressive(fp)
 					&& tprank.ordinal() <= 7)
 					|| riskExpendable
-					|| ((randomForay || tp.isSafe())
-						&& fp.isWeak()
+					|| ((randomForay || tp.is(Piece.SAFE))
+						&& fp.is(Piece.WEAK)
 						&& hasLowValue(tp)))
 						return result;	// maybe not
 			}
@@ -7461,7 +7482,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 					return WINS;	// maybe not, could be EVEN
 			} else if (tp.isFleeing(fprank)
 				&& (fprank.ordinal() <= 4
-					|| tp.isWeak()))
+					|| tp.is(Piece.WEAK)))
 					return WINS;	// maybe not
 
 			else if (fprank.ordinal() <= lowestUnknownExpendableRank + 1) {
@@ -7478,7 +7499,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 					return result;	// maybe not
 
 				if (randomForay
-					&& tp.isWeak()
+					&& tp.is(Piece.WEAK)
 					&& hasLowValue(fp))
 					return result;	// maybe not
 			}
@@ -7524,7 +7545,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             int color = unk.getColor();
 
             if (isWeakAggressive(unk))
-				unk.setWeak(true);
+				unk.set(Piece.WEAK);
 
             Rank lowfleeRank = unk.getActingRankFleeLow();
             Rank highfleeRank = unk.getActingRankFleeHigh();
@@ -7554,7 +7575,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// known or unknown.
 
 			if (highfleeRank == Rank.UNKNOWN) {
-				if (!unk.isWeak()
+				if (!unk.is(Piece.WEAK)
 					&& isExpendable(1-color, rank))
 					unk.setActingRankFlee(Rank.toRank(rank));
 				continue;
@@ -7885,12 +7906,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	// TBD: Playing with a known One is challenging, and this code
 	// has seesawed to and from being aggressive and conservative.
-	// A possible "improvement" is to analyze the opponent pieces
-	// after the discovery of the One to try to identify pieces most
-	// likely to be the Spy.  For example, if the opponent Two is
-	// known or suspected, then mark the pieces near the Two.
 
-		if (tp.getRank() == Rank.SPY)
+		if (tp.getRank() == Rank.SPY
+            || tp.is(Piece.LIKELY_SPY))
 			return true;
 
 	// If the AI has guessed the location of the Spy, the AI One is safe
@@ -7942,7 +7960,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	//	(Note: unknown piece will always have an actingRankFleeHigh
 	//	of at least One, because it was approached by the One).
 	//
-        if (tp.isWeak()
+        if (tp.is(Piece.WEAK)
 			|| (tp.getRank() == Rank.BOMB
 				&& tp.getActingRankFleeHigh().ordinal() >= 5))
 			return false;
@@ -7976,8 +7994,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
         // Note: b?xR1 or N?xR1 have some risk of loss if
         // the opponent piece turns out to be the Spy.  However, winFight makes
-        // b?xR1 WINS, so riskOfLoss is not called.  Here, isLikelySpy()
-            // is called to be consistent with isSafe() in winFight().  Thus,
+        // b?xR1 WINS, so riskOfLoss is not called.  Here, is(Piece.LIKELY_SPY)
+            // is called to be consistent with is(Piece.SAFE) in winFight().  Thus,
             // a successful Spy would have to be not adjacent to the opponent Two,
             // then chase a known piece, while not bluffing with other pieces to keep bluffer risk
             // low to maintain its suspected rank. This is very unlikely so
@@ -7988,7 +8006,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
                 if (fp.isKnown()
                     && fprank == Rank.ONE
-                    && tp.isLikelySpy())
+                    && tp.is(Piece.LIKELY_SPY))
                     return values[fp.getColor()][fprank.ordinal()]*7/10;
                 return 0;
             }
@@ -8272,7 +8290,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                     // This is just a wild guess, but in stratego
                     // you live or die by your guesses.
 
-                    oppPiece.setWeak(true);
+                    oppPiece.set(Piece.WEAK);
 
                     // Prior to Version 12, the oppPiece was set
                     // with a flee rank of One and Two, because
@@ -8409,7 +8427,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             for (int lane = 0; lane < 3; lane++)
             for (int x = 0; x < 2; x++) {
                 Piece p = getSetupPiece(Grid.getIndex(lane*4+x, Grid.yside(1-c, 3)));
-                p.setWeak(true);
+                p.set(Piece.WEAK);
                 p.setMaybeEight(false);
             }
 
@@ -8417,7 +8435,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             // guessing that most opponents do not bury strong pieces
 
             for (int x = 0; x < 10; x++)
-                getSetupPiece(Grid.getIndex(x, Grid.yside(1-c, 0))).setWeak(true);
+                getSetupPiece(Grid.getIndex(x, Grid.yside(1-c, 0))).set(Piece.WEAK);
 
             } // c
 

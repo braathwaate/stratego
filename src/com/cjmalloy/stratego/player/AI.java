@@ -101,6 +101,13 @@ public class AI implements Runnable
 		GE	// generated move
 	};
 
+	static private long twoSquaresHash;
+	static {
+		Random rnd = new Random();
+		twoSquaresHash = Math.abs(rnd.nextLong());
+	}
+
+
 	public AI(Board b, CompControls u) 
 	{
 		board = b;
@@ -1379,48 +1386,6 @@ public class AI implements Runnable
 			return;
 		}
 
-		// The transposition table cannot be used if the current position
-		// results from moves leading to a possible Two Squares ending.
-		// That is because it is the order of the moves that is important,
-		// and therefore the value of the position depends on whether the
-		// moves were issued in the proper order to result in a
-		// possible Two Squares ending.  For example,
-		// BB -- BB -- |
-		// -- -- -- BB |
-		// R3 -- B4 -- |
-		// -------------
-		// Red has the move.  Two Squares is possible after R3 moves right,
-		// B4 moves up, R3 moves up. B4 moving down is then disallowed by
-		// isPossibleTwoSquares(), so the value of the position to Red is
-		// the win of Blue Four.
-		//
-		// But this is the same position as R3 moves up, B4 moves up,
-		// R3 moves right.  B4 moving down is allowed.  So if this latter
-		// position is stored in the transposition table, and is retrieved for
-		// the value of the first position, Red would not be awarded
-		// the win of Blue Four.
-		//
-		// Vice versa, if the first position were stored, and the value
-		// retrieved for the latter position, the AI would erroneously
-		// believe it had a Two Squares ending when it really didn't.
-		//
-		// Prior to version 10.0, the fix was not to store *any* chases,
-        // but this was a performance hit.
-		// The version 10.0 solution was to store positions separately that
-        // can or cannot lead immediately to a two squares result.  It checks if
-		// player and opponent piece are alternating in the same
-		// row or column, and if so, assumes that a two squares
-		// result might be in the offing.  It hashes the two positions
-		// separately in the transposition table.
-        //
-        // However, this was not good enough, because a possible two squares chase might
-        // not actually be a two squares chase, so the transposition table
-        // entry could be wrong for a given position.  Version 12.2 simply
-        // does not store *any* chase that can lead to a two squares result.
-
-        if (b.isPossibleTwoSquaresChase())
-            return;
-
 		// Yet we want to retain an exact entry as well.
 		// Otherwise, a deeper search might overwrite the entry with
 		// a lower bound or upper bound entry.  So we keep both.
@@ -1437,7 +1402,6 @@ public class AI implements Runnable
 			entry.exactDepth = -1;
 			entry.exactValue = -22222;
 		}
-
 
 		entry.type = searchType;
 		entry.flags = entryFlags;
@@ -2071,6 +2035,9 @@ public class AI implements Runnable
 					}
 				} else
 					b.move(tryMove);
+
+				if (b.isPossibleTwoSquaresChase())
+					b.hashDepth(b.depth);
 			}
 		} else
 			b.move(tryMove);
@@ -2097,7 +2064,7 @@ public class AI implements Runnable
 		return MoveResult.OK;
 	}
 
-	// An important complication with using a transposition table
+	// An important complication with using a transposition table (TT)
 	// in Stratego is that it is not just the position but how
 	// the position was reached that governs the result
 	// if the move sequence can lead to a Two Squares ending.
@@ -2119,8 +2086,54 @@ public class AI implements Runnable
 	// the two squares chase sequence must be retrieved and stored
 	// using a different hash table entry.
 
+    // The TT cannot be used if the current position
+    // results from moves leading to a possible Two Squares ending.
+    // That is because it is the order of the moves that is important,
+    // and therefore the value of the position depends on whether the
+    // moves were issued in the proper order to result in a
+    // possible Two Squares ending.  For example,
+    // BB -- BB -- |
+    // -- -- -- BB |
+    // R3 -- B4 -- |
+    // -------------
+    // Red has the move.  Two Squares is possible after R3 moves right,
+    // B4 moves up, R3 moves up. B4 moving down is then disallowed by
+    // isPossibleTwoSquares(), so the value of the position to Red is
+    // the win of Blue Four.
+    //
+    // But this is the same position as R3 moves up, B4 moves up,
+    // R3 moves right.  B4 moving down is allowed.  So if this latter
+    // position is stored in the TT, and is retrieved for
+    // the value of the first position, Red would not be awarded
+    // the win of Blue Four.
+    //
+    // Vice versa, if the first position were stored, and the value
+    // retrieved for the latter position, the AI would erroneously
+    // believe it had a Two Squares ending when it really didn't.
+    //
+    // The solution is store positions separately that can or cannot
+    // lead immediately to a two squares result.  Prior to version 10.0,
+    // the fix was not to store *any* chases, but this was
+    // a performance hit.  Version 10.0 checks if
+    // player and opponent piece are alternating in the same
+    // row or column, and if so, assumes that a two squares
+    // result might be in the offing.  It hashes the two positions
+    // separately in the TT.
+    //
+    // Warning: Moves *must* be stored in the TT and must not be omitted
+    // because the TT is used to store the best move from the search,
+    // so if the best move is omitted, the principal variation does
+    // not work, and perhaps the wrong move is selected as the best move.
+    //
+    // TBD: also need to check for actual two squares (3 repeating moves)
+    // because this is not equivalent to b.isPossibleTwoSquaresChase
+    // (2 repeating moves).
+
 	private long getHash()
 	{
+		if (b.isPossibleTwoSquaresChase())
+			return b.getHash() ^ twoSquaresHash;
+
 		return b.getHash();
 	}
 
@@ -2393,11 +2406,11 @@ public class AI implements Runnable
 			s += '8';
 		else
 			s += '.';
-		if (p.isWeak())
+		if (p.is(Piece.WEAK))
 			s += 'W';
 		else
 			s += '.';
-		if (p.isSafe())
+		if (p.is(Piece.SAFE))
 			s += 's';
 		else
 			s += '.';
