@@ -3575,6 +3575,25 @@ public class Board
 			&& m1.getToY() == m2.getToY());
     }
 
+    // Returns the number of sequential chase moves
+    // (for use in the transposition table)
+    public int twoSquaresChases()
+    {
+        Move m1 = null;
+        for (int i = 0; i < 4; i++) {
+            Move m2 = getLastMove(i+1);
+            if (m2 == UndoMove.NullMove)
+                return 0;
+            if (i != 0
+                 && (!(m1.getFromX() == m2.getFromX()
+                    && m1.getToX() == m2.getToX())
+                    || (m1.getFromY() == m2.getFromY()
+                    && m1.getToY() == m2.getToY())))
+                    return i-1;
+            m1 = m2;
+        }
+        return 3;
+    }
 
 	// A chasing move back to the square where the chasing piece
 	// came from in the directly preceding turn is allowed

@@ -101,10 +101,11 @@ public class AI implements Runnable
 		GE	// generated move
 	};
 
-	static private long twoSquaresHash;
+	static private long[] twoSquaresHash = new long[3];
 	static {
 		Random rnd = new Random();
-		twoSquaresHash = Math.abs(rnd.nextLong());
+        for (int i = 0; i < 3; i++)
+            twoSquaresHash[i] = Math.abs(rnd.nextLong());
 	}
 
 
@@ -2131,8 +2132,9 @@ public class AI implements Runnable
 
 	private long getHash()
 	{
-		if (b.isPossibleTwoSquaresChase())
-			return b.getHash() ^ twoSquaresHash;
+		int n = b.twoSquaresChases();
+        if (n != 0)
+			return b.getHash() ^ twoSquaresHash[n-1];
 
 		return b.getHash();
 	}
