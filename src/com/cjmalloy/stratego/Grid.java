@@ -16,6 +16,7 @@
 */
 
 package com.cjmalloy.stratego;
+import java.util.ArrayList;
 
 
 public class Grid 
@@ -42,6 +43,7 @@ public class Grid
 	static public final int NEIGHBORS = 5;
 	static protected BitGrid neighbor[][] = new BitGrid[NEIGHBORS][121];
 	static protected BitGrid waterGrid = new BitGrid();
+	static private int[][] steps = new int[121][121];
 
 	static {
 		setWater(2,4);
@@ -73,19 +75,49 @@ public class Grid
 				neighbor[n][f].setBit(t);
 			}
 		}
-	}
+
+    // steps between squares
+
+        ArrayList<Integer> queue = new ArrayList<Integer>();
+        final int[] dir = { -11, -1,  1, 11 };
+
+        for (int f = 12; f <= 120; f++) {
+            if (!isValid(f))
+                continue;
+            queue.clear();
+            queue.add(f);
+            steps[f][f]=1;
+            int count = 0;
+            while (count < queue.size()) {
+                int j = queue.get(count++);
+                if (!isValid(j))
+                    continue;
+                int n = steps[f][j];
+
+                // set the neighbors
+                for (int d : dir) {
+                    int i = j + d;
+                    if (!isValid(i) || steps[f][i] != 0)
+                        continue;
+
+                    steps[f][i] = n + 1;
+                    queue.add(i);
+                } // d
+            }
+        }
+    }
 
 	public static class UniqueID
-        {
-                private static int id = 0;
+    {
+            private static int id = 0;
 
-                static public int get()
-                {
-                        id++;
-			assert id <= 81 : "Only 81 unique pieces including water";
-                        return id;
-                }
-        }
+            static public int get()
+            {
+                    id++;
+        assert id <= 81 : "Only 81 unique pieces including water";
+                    return id;
+            }
+    }
 
 	public Grid() 
 	{
@@ -394,9 +426,7 @@ public class Grid
 	// number of steps between indicies
 	static public int steps(int f, int t)
 	{
-		int ty = t/11;
-		int fy = f/11;
-		return Math.abs(ty-fy) + Math.abs((t-ty*11)-(f-fy*11));
+        return Math.abs(steps[f][f] - steps[f][t]);
 	}
 
 	static public int dir(int f, int t)

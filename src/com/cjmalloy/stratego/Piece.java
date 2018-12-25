@@ -299,6 +299,16 @@ public class Piece implements Comparable<Piece>
 		flags &= ~LESS;
 	}
 
+	public Rank convertActingRankChaseLess()
+	{
+        if ((flags & LESS) != 0) {
+            if (!isChasing(Rank.SPY))
+                actingRankChase <<= 1;
+            flags &= ~LESS;
+        }
+        return getActingRankChase();
+    }
+
 	public boolean isChasing(Rank rank)
 	{
 		return (actingRankChase & (1 << rank.ordinal())) != 0;

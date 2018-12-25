@@ -495,25 +495,25 @@ public class Board
 
     boolean isThreat(Piece fp, Piece tp)
     {
-            if (!fp.isKnown()
-                    && !fp.isSuspectedRank()) {
-                    if (isInvincibleDefender(tp))
-                            return false;
-                    return true;
-            }
+        if (!fp.isKnown()
+            && !fp.isSuspectedRank()) {
+            if (isInvincibleDefender(tp))
+                return false;
+            return true;
+        }
 
         // fp is known or suspected
 
-                Rank fprank = fp.getApparentRank();
+        Rank fprank = fp.getRank();
 		if ((fprank == Rank.BOMB
 			|| fprank == Rank.FLAG)
 			&& fp.isKnown())
 			return false;
 
-                int fpo = fprank.ordinal();
-		int tpo = tp.getApparentRank().ordinal();
+        int fpo = fprank.ordinal();
+		int tpo = tp.getRank().ordinal();
 
-                return fpo < tpo
+        return fpo < tpo
 
 		// A known expendable piece could be a threat
 		// to a suspected One, Two or Three if it does
@@ -525,22 +525,22 @@ public class Board
 			|| (!tp.isKnown()
 				&& tpo <= 3
 				&& fpo >= 6);
-        }
+    }
 
-	// return true if chaser piece could be protected
-	public boolean isProtected(Piece chaserPiece, Piece chasedPiece)
+	// return true if target piece could be protected
+	public boolean isProtected(Piece targetPiece, Piece attackPiece)
 	{
-		int chaser = chaserPiece.getIndex();
+		int target = targetPiece.getIndex();
 		for (int d : dir) {
-			int j = chaser + d;
+			int j = target + d;
 			if (!Grid.isValid(j))
 				continue;
 			Piece p = getPiece(j);
 			if (p == null
-				|| p.getColor() != chaserPiece.getColor())
+				|| p.getColor() != targetPiece.getColor())
 				continue;
 
-	// If both chaserPiece and protector are known,
+	// If both targetPiece and protector are known,
 	// then the protector has to be at least two ranks lower
 	// to be a protector.  For example,
 	// R3 R4 B?
@@ -549,12 +549,12 @@ public class Board
 	// is not lower than Red Four.
 
 			if (p.isKnown()
-				&& chaserPiece.isKnown()
+				&& targetPiece.isKnown()
 				&& p.getRank().ordinal()
-					> chaserPiece.getRank().ordinal()-2)
+					> targetPiece.getRank().ordinal()-2)
 				continue;
 
-			 if (isThreat(p, chasedPiece))
+			 if (isThreat(p, attackPiece))
 				return true;
 		}
 		return false;
@@ -1024,36 +1024,8 @@ public class Board
 		if (m.getPiece() != chased)
 			return;
 
-		Rank arank = chased.getActingRankChase();
+        Rank arank = chased.getActingRankChase();
 		Rank chaserRank = chaser.getApparentRank();
-
-		// Prior to Version 10.4, if an unknown piece had IS_LESS set
-		// (because it protected a piece) and then chased an AI piece,
-		// it always cleared IS_LESS
-		// (actual chases are better indicators of actual rank
-		// than protectors because of bluffing when an opponent
-		// piece is trapped.
-		//
-		// However, if the player wasn't bluffing, then information
-		// about a potential stronger piece is lost.  For example,
-		// An unknown Two protected a Four from attack.   Then
-		// the Two chased a Four.  Prior to Version 10.4, the AI
-		// would guess that the Two was a Three.   So Version 10.4
-		// retains the rank from IS_LESS if the rank is plausible.
-		//
-		// Note: Recall that direct and indirect chase ranks
-		// are assigned differently: If a piece protects
-		// another piece from a Three, it gains an indirect
-		// chase rank of One.   If a piece chases a Three,
-		// it gains a chase rank of Three.  Thus if a piece
-		// has a chase rank of One, the AI will not reset it
-		// if it chases a Three.  But if it chases a Four,
-		// then the AI assumes the piece was bluffing when
-		// it gains the chase rank of One.
-
-        if (chased.isRankLess()
-            && arank.ordinal() > chaserRank.ordinal() - 2)
-            return;
 
 		// Do not reset chase rank on a trapped piece
 		// that already has a chase rank
@@ -1078,8 +1050,9 @@ public class Board
 		// the red pieces is weaker, or perhaps its other pieces
 		// are trapped as well.
 
-		if (arank != Rank.NIL
-			&& wasTrapped(chased, m.getFrom()))
+		Move m2 = getLastMove(2);
+		if (Grid.isAdjacent(m2.getTo(), m.getFrom()) // was chased
+            || (arank != Rank.NIL && wasTrapped(chased, m.getFrom())))
 			return;
 
 		// Prior to version 9.6, if a chased piece had a
@@ -1147,7 +1120,65 @@ public class Board
 				return;
             }
         } // chaser is known
+
+        // Update chase rank
 		
+		// Recall that direct and indirect chase ranks
+		// are assigned differently: If a piece protects
+		// another piece from a Three, it gains an indirect
+		// chase rank of One.   (The LESS flag is set).
+        // If a piece chases a Three, it gains a chase rank of Three.
+
+        // One could argue that it would be simpler to have
+        // only one kind of chase rank.  The AI
+        // keeps these separate although uses just
+        // one variable to store the chase rank.  This is because
+        // information discovered by indirect and direct chases
+        // differs, although both are still difficult to use
+        // in the heuristic because of bluffing.
+
+        // Because direct chasing is voluntary, the chaser is obvious:
+        // usually one rank below the chased piece.  If the player is
+        // a bluffer, the chaser is usually an expendable piece.
+
+        // An indirect chase rank is bestowed when a piece is protected, and
+        // the player may have to resort to using a more superior
+        // piece than desired to protect the piece.   Often
+        // the player realizes that there is no way to protect
+        // the piece, forcing the player into an undesirable
+        // bluffing situation.
+
+        // Thus indirect chase rank is less reliable than
+        // direct rank.  However, there is one situation where
+        // it can be more reliable: a player who protects an unknown
+        // expendable piece with a stronger unknown protector.  This is because
+        // stronger players know how obvious it is to chase
+        // or protect known pieces, but think that the double
+        // unknown piece ruse is safer.   A skilled player will
+        // detect this playing style, not take the bait, but remember
+        // the ranking in subsequent attack plans.
+
+		// Prior to Version 10.4, if an unknown piece had LESS set
+		// (because it protected a piece) and then chased an AI piece,
+		// it always cleared LESS
+		// (actual chases are better indicators of actual rank
+		// than protectors because of bluffing when an opponent
+		// piece is trapped.
+
+		// However, if the player wasn't bluffing, then information
+		// about a potential stronger piece is lost.  For example,
+		// An unknown Two protected a Four from attack.   Then
+		// the Two chased a Four.  Prior to Version 10.4, the AI
+		// would guess that the Two was a Three.   So Version 10.4
+		// retains the rank from LESS if the rank is plausible.
+
+        // The LESS flag always has to be cleared when setting a
+        // direct chase rank.  But the chase rank needs to be
+        // converted into a comparable direct chase, because the
+        // chase rank variable is not cleared.
+
+        arank = chased.convertActingRankChaseLess();
+
 		// The AI believes that unknown pieces that chase AI
         // unknowns are probably high ranked pieces
         // and can be attacked by a Five or less.
@@ -1216,14 +1247,14 @@ public class Board
         //
         // Therefore, in Version 12.1 if the opponent
         // chases both an unknown or inferior and also a superior piece,
-        // blufferRisk is increased, and chase rank is set to UNKNOWN.
-        // This prevents assignment of any suspected rank.  It also allows the
-        // piece to continue its rampage, so if it continues, blufferRisk
-        // will continue to increase to the point where the AI knows it
+        // blufferRisk is increased and the chase rank is reset to the
+        // newly chased piece.  If the opponent continues in this fashion,
+        // blufferRisk will continue to increase to the point where the AI knows it
         // is playing a human and can adjust its tactics accordingly.
-        // Finally, if the piece has cornered a superior piece by chasing
-        // it past unknowns, the superior piece will strike back against
-        // a bluffing opponent.
+        // Finally, if the piece corners a superior AI piece by chasing
+        // it past unknowns, blufferRisk will quickly increase as
+        // it passes each unknown to the point that the AI will realize the opponent
+        // is bluffing, allowing the superior piece to strike back.
         //
         // Why is this important to know?  So that the AI can clobber
         // the bot faster.  Humans also invariably adjust their
@@ -1236,11 +1267,11 @@ public class Board
         // do next.  The chaser could be a Three, Four, or Five, and
         // if a Four or Five, may chase an unknown.
 
-        if (arank != Rank.NIL
-            & ((chaserRank.ordinal() >= 6 && arank.ordinal() <= 4)
-            || (chaserRank.ordinal() <= 4 && arank.ordinal() >= 6))) {
+        if (arank == Rank.SPY
+            || (arank != Rank.NIL
+                && ((chaserRank.ordinal() >= 6 && arank.ordinal() <= 4)
+                    || (chaserRank.ordinal() <= 4 && arank.ordinal() >= 6)))) {
                 chased.clearActingRankChase();
-                chased.setActingRankChase(Rank.UNKNOWN);
                 guess(false);
         }
 
@@ -1762,22 +1793,29 @@ public class Board
 					r = attackerRank - 1;
 			}
 
-		// Note: Note that prior assignment of chase rank
-		// consumes unassigned ranks, so when there
-		// are no more unassigned unknown lower ranks, the AI
-		// assumes that the protector is bluffing.  Otherwise,
-		// the opponent could continually protect its pieces
-		// through bluffing with unknown protectors.
-		// So now the AI initially believes the opponent, but
-		// after all plausible protectors have been consumed,
-		// the AI knows that the opponent is a bluffing opponent
-		// so the AI stops assigning chase rank in this manner.
-		// This can lead to material gain when the AI has a
-		// locally invincible piece based on a prior assignment
-		// of chase rank, and then attacks opponent unknowns
-		// protected by other unknowns.
+		// Prior to version 12.3, the AI relied on its guessing
+        // of suspected ranks in assignment of new suspected ranks.
+		// This was to prevent the opponent from continually
+        // protecting its pieces through bluffing with unknown protectors,
+        // because at some point, the limited pool of superior
+        // protectors would be exhausted, and the AI would know
+        // that the opponent is bluffing (which was never implemented).
 
-			while (r > 0 && unknownNotSuspectedRankAtLarge(chased.getColor(), r) == 0)
+        // The AI now relies on blufferRisk to change strategy
+        // when bluffing is excessive. So this code no longer looks
+        // at suspected rank in assigning new rank and thus prevents compounded errors
+        // in guessing suspected ranks.
+
+        // This means that the newly assignments are now less superior
+        // than the earlier code.  For example, if the opponent has a suspected Two
+        // and then an AI Three attacks an opponent Four and a protector steps in,
+        // the AI makes the protector a suspected Two instead of a One.
+        // Obviously both pieces cannot be Twos, and this creates less risk for the
+        // AI when one of them matures; there was more risk with the earlier
+        // code if the suspected One matured, making the AI think that its
+        // Two was invincible.
+
+			while (r > 0 && unknownRankAtLarge(chased.getColor(), r) == 0)
 				r--;
 
 		// known piece is protector
@@ -2312,10 +2350,20 @@ public class Board
                 || rank == Rank.NIL)
                 continue;
             else {
+
                 Rank suspRank;
-                if (!p.isRankLess())
+                if (!p.isRankLess())  {
+
+        // This is the version 12.3 equivalent of the 10.1 strategy
+        // where a piece that chased both a Five and an unknown
+        // is probably a Five rather than a Four.
+        // (see setDirectChaseRank())
+
+                    if (rank == Rank.FIVE && p.isChasing(Rank.UNKNOWN))
+                        rank = Rank.SIX;
+
                     suspRank = getChaseRank(rank);
-                else
+                } else
                     suspRank = chaseRank[rank.ordinal()];
 
 		// If the piece both chased and fled from the same rank,
@@ -3309,10 +3357,10 @@ public class Board
 	// However, a two squares ending can be predicted earlier if the
 	// player begins a possible two squares ending before the defender.
 	// For example,
-	// xx xx xx	xx xx xx	xx xx xx
-	// -- R3 R?	-- R3 R?	-- R3 R?
-	// -- -- --	-- -- B2	B2 -- --
-	// -- B2 --	-- -- --	-- -- --
+	// xx xx xx    xx xx xx     xx xx xx
+	// -- R3 R?    -- R3 R?     -- R3 R?
+	// -- -- --    -- -- B2     B2 -- --
+	// -- B2 --    -- -- --     -- -- --
 	//
 	// Blue Two has the move and approaches Red Three
 	// Positions 1 & 2 can lead to the two squares rule but
@@ -3515,6 +3563,7 @@ public class Board
 		// it might try to delay the capture.   This has happened in play.
 		//
 		// Note that the following check does not handle all cases.
+
 		if (!isThreat(oppmove1.getPiece(), fp))
 			return false;
 
@@ -3942,8 +3991,7 @@ public class Board
 
 	protected void revealRank(Piece p)
 	{
-        if (!p.isKnown())
-            guessRanks(p);
+        boolean known = p.isKnown();
 
         if (p.getColor() == Settings.bottomColor
                 && !p.isKnown()) {
@@ -3971,6 +4019,8 @@ public class Board
 
         }
         p.revealRank();
+        if (!known)
+            guessRanks(p);
     }
 
     protected void guessRanks(Piece reveal)
