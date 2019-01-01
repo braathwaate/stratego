@@ -1484,8 +1484,21 @@ public class Board
 			}
 		}
 
+        // If the chased piece moved, then check for open squares
+        // from where it moved  For example,
+        // xx -- -- xx xx -- --
+        // r? r? -- R3 B2 -- --
+        // r? RB B1 -- rB -- b9
+        // Red Three is chased by Blue Two and moves left.  Do
+        // not assign a chase rank to unknown Red because the
+        // move was forced.
+
+        int pos = i;
+        if (um1.getTo() == i)
+            pos = um1.getFrom();
+
 		for (int d : dir) {
-			int open_square = i + d;
+			int open_square = pos + d;
 			if (!Grid.isValid(open_square))
 				continue;
 			Piece p = getPiece(open_square);
@@ -2029,9 +2042,9 @@ public class Board
     // But this should not deter valuable ranks from attack.
     // So the AI subtracts a percentage (1/3) of
     // remainingUnmovedUnknownPieces in determining safety.
-    protected boolean hasFewWeakRanks(int color, int n)
+    protected int weakRanks(int color)
     {
-            return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3) <= n;
+            return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3);
     }
 
 	// The usual Stratego attack strategy is one rank lower.
@@ -2166,37 +2179,37 @@ public class Board
 		return false;
 	}
 
-        protected void genUnknownWeakRankAtLarge()
-        {
-                // The number of expendable ranks still at large
-                // determines the risk of discovery of low ranked pieces.
-                // If there are few expendable pieces remaining,
-                // the AI can be more aggressive with its unknown low ranked
-                // pieces.
-                for (int c = RED; c <= BLUE; c++) {
-                        nUnknownWeakRankAtLarge[c] = 0;
-                        for (int r = 5; r <= 9; r++)
-                                nUnknownWeakRankAtLarge[c] += unknownRankAtLarge(c, r);
-                }
+    protected void genUnknownWeakRankAtLarge()
+    {
+        // The number of expendable ranks still at large
+        // determines the risk of discovery of low ranked pieces.
+        // If there are few expendable pieces remaining,
+        // the AI can be more aggressive with its unknown low ranked
+        // pieces.
+        for (int c = RED; c <= BLUE; c++) {
+                nUnknownWeakRankAtLarge[c] = 0;
+                for (int r = 5; r <= 9; r++)
+                        nUnknownWeakRankAtLarge[c] += unknownRankAtLarge(c, r);
         }
+    }
 
-        // Morph a piece into a suspected bomb
+    // Morph a piece into a suspected bomb
 
-        // (Note: If AI allowed all the requested pieces to be bombs,
-        // then AI move generation could mistakenly allow the game to end
-        // if it calculated that there were no more movable pieces).
+    // (Note: If AI allowed all the requested pieces to be bombs,
+    // then AI move generation could mistakenly allow the game to end
+    // if it calculated that there were no more movable pieces).
 
-        private boolean suspectedBomb(Piece p)
-        {
-            assert p.getColor() == Settings.bottomColor;
-            if (unknownNotSuspectedRankAtLarge(p.getColor(), Rank.BOMB) == 0)
-                return false;
+    private boolean suspectedBomb(Piece p)
+    {
+        assert p.getColor() == Settings.bottomColor;
+        if (unknownNotSuspectedRankAtLarge(p.getColor(), Rank.BOMB) == 0)
+            return false;
 
-            p.setSuspectedRank(Rank.BOMB);
-            suspectedRank[p.getColor()][Rank.BOMB.ordinal()-1]++;
-            grid.clearMovable(p);
-            return true;
-        }
+        p.setSuspectedRank(Rank.BOMB);
+        suspectedRank[p.getColor()][Rank.BOMB.ordinal()-1]++;
+        grid.clearMovable(p);
+        return true;
+    }
 
 	private void setSuspectedRank(Piece p, Rank rank)
 	{
@@ -2314,7 +2327,7 @@ public class Board
     // and have started to guess the rank of unknown pieces.
 
             if (isInvincible(p)
-                || !hasFewWeakRanks(1-p.getColor(), 12))
+                || weakRanks(1-p.getColor()) > 12)
                 p.set(Piece.SAFE);
             else
                 p.clear(Piece.SAFE);
@@ -2621,7 +2634,7 @@ public class Board
 	{
         int [] lowrank = new int[2];
 
-        if (hasFewWeakRanks(1-color, 7)) {
+        if (weakRanks(1-color) <= 7) {
             forayLane[color] = 0;
             return;
         }
@@ -4084,7 +4097,7 @@ public class Board
 
         else {
             boolean surprise = (revealRank.ordinal() <= 3
-                && !hasFewWeakRanks(Settings.bottomColor, 4));
+                && weakRanks(Settings.bottomColor) > 4);
         switch (revealRank) {
             case ONE :
             case TWO :
