@@ -4750,13 +4750,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		// If an opponent piece flees from an AI piece,
 		// the opponent is signaling that the exchange
-		// would be in the favor of the AI.  So it might
-		// seem intuitive that the AI should pursue the exchange.
-
-		// But the opponent and the AI may differ on what
-		// they believe is a good exchange, so while
-		// a fleeing piece is a good sign of a decent exchange,
-		// it may or may not be in the best interest of the AI.
+		// would be in the favor of the AI.
 
 		// For example, known Red Eight has approached
 		// suspected Blue Three.   Blue Three does not attack
@@ -4764,13 +4758,34 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// not think attacking Red Eight is worthwhile,
 		// because it does not want to reveal its rank.
 
-		// But the AI has already guessed that the piece is
-		// a Three.  So to the AI, it is not worthwhile to
+        // Note that the evaluation must be consistent with WINS.
+        // R8xb3? and b3?xR8 must return the same value for
+        // cache consistency.
+
+		// But the opponent and the AI may differ on what
+		// they believe is a good exchange, so while
+		// a fleeing piece is a good sign of a decent exchange,
+		// it may or may not be in the best interest of the AI.
+
+		// The AI has already guessed that the piece is
+		// a Three.  So to the AI, it may not be worthwhile to
 		// attack the Three and confirm its stealth.
+
+        // On the other hand, the opponent may have been
+        // bluffing.  For example, unknown Blue Nine gained
+        // a suspected chase rank of Three by chasing Red Two.
+        // Now it is trapped by Red Eight.
+
+        // Making such assessments is beyond the scope of this AI,
+        // so for now, the AI is usually awarded a positive value
+        // in an encounter with a fleeing piece.  If the AI has a choice,
+        // it should try to use its least valuable piece for the attack.
+        // If Blue 5 was fleeing, R6xb5? should be positive.  Thus
+        // the portion of fpvalue subtracted must be minimal.
 
 						if (tp.hasMoved()
                             && tp.isFleeing(fprank))
-                            vm += stealthValue(tp) - fpvalue/2;
+                            vm += stealthValue(tp)/2 - fpvalue/6;
 
 		// The opponent is an unknown rank and the AI
         // piece thinks it loses, but it could
@@ -5153,8 +5168,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // fp X tp is positive for the AI even though fp WINS.
         // (See Deciphering isFleeing() in winFight())
 
+        // Note: evaluation must be consistent with LOSES.
+
                         if (fp.isFleeing(tprank))
-                            vm -= stealthValue(fp)/2;
+                            vm -= stealthValue(fp)/2 - tpvalue/6;
 
                         else {
         // opponent gains AI piece value
