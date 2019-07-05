@@ -22,6 +22,8 @@ public class TestPiece extends Piece
 {
         protected Piece orig;
         public int targetValue;
+        public int[][] plan = new int[2][121];
+        public boolean neededPiece;
 
 	public TestPiece(Piece p) 
 	{

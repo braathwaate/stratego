@@ -322,8 +322,7 @@ public class AI implements Runnable
 
 	void getScoutFarMoves(int n, ArrayList<Integer> moveList, int i) {
 		Piece fp = b.getPiece(i);
-		int [][] plana = b.getPlanA(fp);
-		int [][] planb = b.getPlanB(fp);
+		int [][] plan = b.getPlan(fp);
 
 		for (int d : dir ) {
 			int t = i + d ;
@@ -362,10 +361,8 @@ public class AI implements Runnable
 		// BF BB -- -- --
 
 				int v = 99;
-				if (plana != null && plana[1][t] != 0)
-					v = plana[0][t];
-				else if (planb != null && planb[1][t] != 0)
-					v = planb[0][t];
+				if (plan != null && plan[1][t] != 0)
+					v = plan[0][t];
 				if (v < vbest) {
 					tbest = t;
 					vbest = v;

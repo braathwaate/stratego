@@ -2652,7 +2652,8 @@ public class Board
                     if (!Grid.isValid(i))
                         continue;
                     Piece p = getPiece(i);
-                    if (p == null)
+                    if (p == null
+                        || p.isSuspectedRank()) // could be bluffing
                         continue;
 
                     lowrank[p.getColor()] = Math.min(
@@ -4115,29 +4116,32 @@ public class Board
                         || p.isKnown())
                         continue;
                     p.setActingRankFlee(revealRank);
+                }
 
-        // The AI also guesses that the opponent will be surprised by
-        // the discovery of an AI superior piece and will not have
-        // a defender with 2 squares.  This is rather aggressive, but
-        // it is better than waiting for an unknown attacker to show up
-        // later.
-                    if (surprise)
-                    for (int d2 : dir) {
-                        int k = j + d2;
-                        if (!Grid.isValid(k))
-                            continue;
-                        p = getPiece(k);
-                        if (p == null
-                            || p.getColor() != Settings.bottomColor
-                            || p.isKnown()
-                            || !p.hasMoved())
-                            continue;
-                        p.setActingRankFlee(revealRank);
-                    }
-                    break;
+        // The AI guesses that the opponent will not have mobilized
+        // its Spy, unknown One or Two into a forward position until the
+        // AI One, Two or Three has been discovered. (e.g. AI assumes that
+        // opponent is sheltering its strong pieces).
+
+                if (surprise
+                    && knownRank[Settings.topColor][revealRank.ordinal()-1] == 0) {
+                    final int lanes[] = {0, 1, 4, 5, 8, 9};
+                    for (int lane : lanes)
+                        for (int y = 0; y < 10; y++) {
+                            int k = Grid.getIndex(lane, y);
+                            Piece p = getPiece(k);
+                            if (p == null
+                                || p.getColor() != Settings.bottomColor)
+                                continue;
+                            if (!p.isKnown()) {
+                                p.setActingRankFlee(revealRank);
+                                break;
+                            }
+                        }
                 }
                 break;
-        }
-        }
-    }
-}
+            } // switch
+        } // top color
+    } // end of function
+
+} // end of file
