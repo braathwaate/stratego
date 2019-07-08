@@ -2615,9 +2615,9 @@ public class Board
                     || x == 7);
 	}
 
-    protected int bombedLane(int lane)
+    protected int bombedLane(int color, int lane)
     {
-        int i = Grid.getIndex(lane*4, 6);
+        int i = Grid.getIndex(lane*4, Grid.yside(color, 3));
         Piece p1 = getPiece(i);
         Piece p2 = getPiece(i+1);
         return (
@@ -2641,7 +2641,8 @@ public class Board
 
 		int maxPower = -99;
 		for (int lane = 0; lane < 3; lane++) {
-            if (bombedLane(lane) == 2)
+            if (bombedLane(color, lane) == 2
+                || bombedLane(1-color, lane) == 2)
                 continue;
             int power = 0;
             lowrank[0] = lowrank[1] = 99;
@@ -3054,13 +3055,19 @@ public class Board
 
 		for (int i = 0; i < maybe_count; i++) {
 
+        // ensure isBombedFlag is set correctly for AI
+
+            if (color == Settings.topColor
+                && maybe[i][0] == flag[Settings.topColor])
+                return i;
+
 		// Although the flag is most likely on the back row,
         // the AI attacks the front row patterns first,
         // which may be necessary to get at the back row pattern.
 
-                        int prob = 1;
-                        if (usualFlagLocation(color, maybe[i][0]))
-                            prob++;
+            int prob = 1;
+            if (usualFlagLocation(color, maybe[i][0]))
+                prob++;
 
 		// compute the number of bombs in the structure
 
@@ -3148,6 +3155,8 @@ public class Board
 		Piece flagp = getPiece(flagi);
 		int color = flagp.getColor();
 
+        assert maybe_count >= 1 : "markBombedFlag invalid maybe_count " + maybe_count;
+
 		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
 
 		// Eights begin to attack bomb structures as the
@@ -3217,16 +3226,15 @@ public class Board
 					&& maybe_count == 1) {
 					p.makeKnown();
 				}
+			} // color is AI
+		} // j
 
 		// If the AI setup is a ruse where the flag is outside
-		// of the last potential bomb structure,
-		// clear isBombedFlag
+		// of the last potential bomb structure, clear isBombedFlag.
 
-				if (flagi != flag[color]
-					&& maybe_count == 1)
-					isBombedFlag[color] = false;
-			}
-		} // j
+        if (color == Settings.topColor
+            && flagi != flag[color])
+            isBombedFlag[color] = false;
 	}
 	// ********* end of suspected ranks
 
