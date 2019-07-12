@@ -751,21 +751,21 @@ public class Board
     // Consider the following example:
     // -- -- -- --
     // xx -- -- xx
-    // xx R2 -- xx
-    // B? B3 B? --
-    // B? B? B? B?
+    // xx r2 -- xx
+    // b? B3 b? --
+    // b? b? b? b?
 
     // Unknown Red Two has trapped Blue Three and Red wants
-    // to play R2xB3 because it believes it has the element of
-    // surprise (so statistically, R2xB3 wins at least 2/3 of
+    // to play r2xB3 because it believes it has the element of
+    // surprise (so statistically, r2xB3 wins at least 2/3 of
     // the time because unknown Blue One could be in any of three
     // lanes.
 
     // But if unknown Blue to the right of Red Two moves up
-    // after R2xB3, then
+    // after r2xB3, then
     // Red Two becomes trapped if it thinks that any unknown
     // piece could be Blue One after the moment of surprise
-    // (i.e. R2xB3).
+    // (i.e. r2xB3).
 
     // There are perhaps various ways of solving this,
     // but the logical approach used by the AI is to assign
@@ -998,7 +998,7 @@ public class Board
 	// 5. It is protected.
 	//
 	// Case #3 occurs frequently.  For example,
-	// B? --
+	// b? --
 	// -- R3
 	// B4
 	// If Red Three forks unknown Blue and Blue Four, Blue Four
@@ -1017,7 +1017,7 @@ public class Board
 	void setDirectChaseRank(Piece chaser, Piece chased, int i)
 	{
 		if (chased.isKnown()
-                || chased.isFleeing(chaser.getRank()))        // ha ha
+            || chased.isFleeing(chaser.getRank()))        // ha ha
 		    return;
 
 		Move m = getLastMove();
@@ -1092,7 +1092,7 @@ public class Board
         // R1 --
         // b? b?
 
-            if (isInvincible(chaser))
+            if (isInvincible(chaser))   // caveat: excludes defacto invincible ranks
                 return;
 
             for (int d : dir) {
@@ -1102,11 +1102,11 @@ public class Board
                     || p.getColor() != chased.getColor())
                     continue;
 
-                Rank prank = p.getApparentRank();
+                Rank prank = p.getRank();   // known or suspected
 
-            // If the protector is unknown, then the AI should
-            // assign a chase rank to the chased piece.
-            // (Although the protector could be strong, the AI
+            // If the only protector is truly unknown, then the AI
+            // will assign a chase rank to the chased piece.
+            // (Although the protector *could* be strong, the AI
             // assumes that the chased piece is the strong piece.)
 
 			if (prank == Rank.UNKNOWN)
@@ -1278,6 +1278,64 @@ public class Board
         chased.setActingRankChaseEqual(chaserRank);
 	}
 
+
+    public int getOpenSquares(Piece chased, int i)
+    {
+		UndoMove um1 = getLastMove(1);
+        int open = 0;
+		for (int d : dir) {
+			int j = i + d;
+			if (!Grid.isValid(j))
+				continue;
+			Piece p = getPiece(j);
+
+		// If an adjacent square is open, assume that the chased piece
+		// is not cornered.  This assumption is usually valid,
+		// unless the move to the open square is prevented by
+		// the Two Squares rule or guarded by another enemy piece.
+
+			if (p == null) {
+				UndoMove um3 = getLastMove(3);
+
+		// If moving to the open square is prevented by
+		// Two Squares OR could possibly lead to Two Squares
+		// then the open square is not really an option.
+		// So if the chased player made some other move (um1)
+		// that left its chased piece open to attack,
+		// check the chased player prior move (um3).   If
+		// the chased piece just came from the open square, then
+		// perhaps it won't move back because it leads to a
+		// Two Squares ending.
+		//
+		// Note that if the chased piece sees that it is trapped
+		// in an area with no protection, the best bluff
+		// is to stop early, leaving an obvious open square.
+		// This indicates to the AI that it has protection.
+		// But if the piece, alternates between two open squares,
+		// the AI believes that the chased piece
+		// is trapped without any protection.
+
+				if (um3 != UndoMove.NullMove
+					&& j == um3.getFrom())
+					continue;
+
+		// check if the open square was occupied by some other
+		// piece that just moved to make a getaway square for
+		// the chased piece
+
+				if (j == um1.getFrom()
+					&& um1.getPiece() != chased)
+					continue;
+
+		// assume the move to the open square is a decent flee move
+
+				if (!isGuarded(chased, j))
+					open++;
+				continue;
+			} // open square
+        } // dir
+        return open;
+    }
 
 	// Return true if the chase piece is obviously protected.
 	//
@@ -1493,62 +1551,17 @@ public class Board
         // not assign a chase rank to unknown Red because the
         // move was forced.
 
-        int pos = i;
-        if (um1.getTo() == i)
-            pos = um1.getFrom();
+        if (um1.getTo() == i
+            && getOpenSquares(chased, um1.getFrom()) == 0)
+            return;
 
 		for (int d : dir) {
-			int open_square = pos + d;
-			if (!Grid.isValid(open_square))
+			int j = i + d;
+			if (!Grid.isValid(j))
 				continue;
-			Piece p = getPiece(open_square);
-
-		// If an adjacent square is open, assume that the chased piece
-		// is not cornered.  This assumption is usually valid,
-		// unless the move to the open square is prevented by
-		// the Two Squares rule or guarded by another enemy piece.
-
-			if (p == null) {
-				UndoMove um3 = getLastMove(3);
-
-		// If moving to the open square is prevented by
-		// Two Squares OR could possibly lead to Two Squares
-		// then the open square is not really an option.
-		// So if the chased player made some other move (um1)
-		// that left its chased piece open to attack,
-		// check the chased player prior move (um3).   If
-		// the chased piece just came from the open square, then
-		// perhaps it won't move back because it leads to a
-		// Two Squares ending.
-		//
-		// Note that if the chased piece sees that it is trapped
-		// in an area with no protection, the best bluff
-		// is to stop early, leaving an obvious open square.
-		// This indicates to the AI that it has protection.
-		// But if the piece, alternates between two open squares,
-		// the AI believes that the chased piece
-		// is trapped without any protection.
-
-				if (um3 != UndoMove.NullMove
-					&& open_square == um3.getFrom())
-					continue;
-
-		// check if the open square was occupied by some other
-		// piece that just moved to make a getaway square for
-		// the chased piece
-
-				if (open_square == um1.getFrom()
-					&& um1.getPiece() != chased)
-					continue;
-
-		// assume the move to the open square is a decent flee move
-
-				if (!isGuarded(chased, open_square))
-					open++;
-				continue;
-			}
-
-			if (p.getColor() == chaser.getColor())
+			Piece p = getPiece(j);
+			if (p == null
+                || p.getColor() == chaser.getColor())
 				continue;
 
 			if (p.isKnown()
@@ -1617,7 +1630,7 @@ public class Board
 		// same suspected rank as the attacker.   In this case the AI
 		// believes that the protector may actually be stronger.
 
-			if (open == 0
+			if (open == 0 && getOpenSquares(chased, i) == 0
                 && (chaserRank == Rank.UNKNOWN
                     || unknownProtector.getApparentRank() != chaserRank))
 				return;
@@ -2326,7 +2339,7 @@ public class Board
     // because the remaining pieces are stronger
     // and have started to guess the rank of unknown pieces.
 
-            if (isInvincible(p)
+            if (isInvincible(p) // caveat: excludes defacto invincible ranks 
                 || weakRanks(1-p.getColor()) > 12)
                 p.set(Piece.SAFE);
             else
@@ -2767,45 +2780,45 @@ public class Board
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
 
-		Piece flagp = getPiece(flag[c]);
-		if (flagp != null && flagp.isKnown())
-			continue;
+            Piece flagp = getPiece(flag[c]);
+            if (flagp != null && flagp.isKnown())
+                continue;
 
-		int [][] maybe = new int[31][];
-		maybe_count[c] = 0;
-		open_count[c] = 0;
+            int [][] maybe = new int[31][];
+            maybe_count[c] = 0;
+            open_count[c] = 0;
 
-		int lastbp = 0;
-                for ( int[] bp : bombPattern ) {
-			int[] b = new int[6];
-			for ( int i = 0; bp[i] != 0; i++)
-				b[i] = Grid.side(c, bp[i]);
-			flagp = getPiece(b[0]);
-			if (flagp != null
-				&& (!flagp.isKnown()
-				 	|| flagp.getRank() == Rank.FLAG)
-				&& !flagp.hasMoved()) {
-				boolean open = false;
-				int k;
-				for ( k = 1; b[k] != 0; k++ ) {
-					Piece p = getPiece(b[k]);
-					if (p == null
-						|| (p.isKnown() && p.getRank() != Rank.BOMB)
-						|| p.hasMoved()) {
-						if (getSetupRank(b[k]) == Rank.BOMB) {
-							open = true;
-							continue;
-						}
-						break;
-					}
-				} // k
+            int lastbp = 0;
+            for ( int[] bp : bombPattern ) {
+                int[] b = new int[6];
+                for ( int i = 0; bp[i] != 0; i++)
+                    b[i] = Grid.side(c, bp[i]);
+                flagp = getPiece(b[0]);
+                if (flagp != null
+                    && (!flagp.isKnown()
+                        || flagp.getRank() == Rank.FLAG)
+                    && !flagp.hasMoved()) {
+                    boolean open = false;
+                    int k;
+                    for ( k = 1; b[k] != 0; k++ ) {
+                        Piece p = getPiece(b[k]);
+                        if (p == null
+                            || (p.isKnown() && p.getRank() != Rank.BOMB)
+                            || p.hasMoved()) {
+                            if (getSetupRank(b[k]) == Rank.BOMB) {
+                                open = true;
+                                continue;
+                            }
+                            break;
+                        }
+                    } // k
 
-				// b[k] == 0 means possible flag structure
+                    // b[k] == 0 means possible flag structure
 
-				if (b[k] == 0) {
-					if (open)
-						open_count[c]++;
-					maybe[maybe_count[c]++]=b;
+                    if (b[k] == 0) {
+                        if (open)
+                            open_count[c]++;
+                        maybe[maybe_count[c]++]=b;
 
 		// Note: Adjacent bomb structures are considered to be
 		// only one structure, because it only takes one Miner
@@ -2848,7 +2861,6 @@ public class Board
 						open_count[c]++;
 					lastbp = bp[0];
 				}
-
 			} // possible flag
 		} // bombPattern
 
@@ -3002,7 +3014,7 @@ public class Board
 					for (int d : dir) {
 						Piece bp = getPiece(i+d);
 						if (bp == null
-							|| bp.getColor() == c - 1)
+							|| bp.getColor() == 1 - c)
 							continue;
 						if (!Grid.isValid(i+d))
 							count++;
@@ -3129,7 +3141,7 @@ public class Board
 				if (Grid.steps(maybe[i][0], j) == 2) {
 					Piece p = getSetupPiece(j);
 					if (p != null
-                                                && p.getColor() == color
+                        && p.getColor() == color
 						&& p.getRank() != Rank.BOMB) {
 						if (p.getRank().ordinal() <= 3)
 							guards += 2;
@@ -3627,10 +3639,13 @@ public class Board
 	// Returns true if both moves are between the same row
     // or column.
     // For example,
-    // -- --
-    // B1 R2
-    // If Red Two moves up and then Blue One moves up, this
-    // function returns true.  This is useful in examining
+    //   (a)        (b)
+    // -- -- --    B1 -- 
+    // B1 R2 --    R2 --
+    //             -- --
+    // In (a), If Red Two moves up and then Blue One moves up, this
+    // function returns true.  It also returns true if R2 moves right
+    // and B1 chases.  This is useful in examining
     // the potential for a Two Squares ending.
     public boolean isPossibleTwoSquaresChase()
     {
@@ -3641,9 +3656,13 @@ public class Board
 			return false;
 
 		return (m1.getFromX() == m2.getFromX()
-			&& m1.getToX() == m2.getToX())
+			&& m1.getToX() == m2.getToX()
+			&& (m1.getFromX() != m1.getToX()    // alternates
+                || m1.getFromY() -  m2.getFromY() == m1.getToY() - m2.getToY()))  // OR chases
 			|| (m1.getFromY() == m2.getFromY()
-			&& m1.getToY() == m2.getToY());
+			&& m1.getToY() == m2.getToY()
+			&& (m1.getFromY() != m1.getFromY()  // alternates
+                || m1.getFromX() -  m2.getFromX() == m1.getToX() - m2.getToX()));  // OR chases
     }
 
     // Returns the number of sequential chase moves

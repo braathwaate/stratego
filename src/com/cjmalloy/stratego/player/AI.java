@@ -379,8 +379,7 @@ public class AI implements Runnable
 				&& n > 1)
 				addMove(moveList, i, tbest);
 
-			if (p.getColor() == 1 - b.bturn
-				&& b.isNineTarget(p))
+			if (p.getColor() == 1 - b.bturn)
 				addMove(moveList, i, t);
 		} // dir
 	}
