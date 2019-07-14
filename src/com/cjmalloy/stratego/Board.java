@@ -74,7 +74,8 @@ public class Board
 	protected static final int BLUFFER_RANK_MAX = 5;
 	protected static final int BLUFFER_RANK_INIT = 3;
 	public int blufferRisk = BLUFFER_RANK_INIT;
-	protected int guessedRankCorrect = BLUFFER_RANK_MAX - BLUFFER_RANK_INIT;
+	protected int guessedRankCorrect = 0;
+	protected int guessedRankWrong = 0;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
@@ -194,6 +195,7 @@ public class Board
 		setup = b.setup.clone();
 		blufferRisk = b.blufferRisk;
 		guessedRankCorrect = b.guessedRankCorrect;
+		guessedRankWrong = b.guessedRankWrong;
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -2318,6 +2320,10 @@ public class Board
 					}
 					unknownRank[c] = r;
 				}
+
+            unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
+            remainingUnmovedUnknownPieces[c] =
+                40 - piecesInTray[c] - piecesMovableOrKnown[c]; // used by weakRanks()
         }
 
 		for (int r = 1; r < 15; r++)
@@ -2340,7 +2346,7 @@ public class Board
     // and have started to guess the rank of unknown pieces.
 
             if (isInvincible(p) // caveat: excludes defacto invincible ranks 
-                || weakRanks(1-p.getColor()) > 12)
+                || weakRanks(1-p.getColor()) > 6)
                 p.set(Piece.SAFE);
             else
                 p.clear(Piece.SAFE);
@@ -2417,8 +2423,6 @@ public class Board
 		// If all movable pieces have been accounted for,
 		// the rest must be bombs (or the flag)
 
-		unknownBombs[c] = unknownRankAtLarge(c, Rank.BOMB);
-		remainingUnmovedUnknownPieces[c] = 40 - piecesInTray[c] - piecesMovableOrKnown[c];
 		if (remainingUnmovedUnknownPieces[c] == unknownBombs[c] + 1) {
 			for (int i=12;i<=120;i++) {
 				if (!Grid.isValid(i))
@@ -4024,8 +4028,9 @@ public class Board
 		if (guessedRight)
 			guessedRankCorrect++;
 		else
-			guessedRankCorrect--;
-		blufferRisk = BLUFFER_RANK_MAX - guessedRankCorrect;
+			guessedRankWrong++;
+
+		blufferRisk = BLUFFER_RANK_INIT - guessedRankCorrect/2 + guessedRankWrong;
 		blufferRisk = Math.max(blufferRisk, BLUFFER_RANK_MIN);
 		blufferRisk = Math.min(blufferRisk, BLUFFER_RANK_MAX);
 	}

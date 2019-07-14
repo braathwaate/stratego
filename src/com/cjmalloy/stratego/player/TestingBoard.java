@@ -6856,7 +6856,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             // the target has chased superior pieces, if the opponent
             // has been paying attention.
 
-			risk = Math.max(risk, (9 - tp.getActingRankChase().ordinal()*10));
+			risk = Math.max(risk, (9 - tp.getActingRankChase().ordinal())*10);
 
 			return risk;
 		}
