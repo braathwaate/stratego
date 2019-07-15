@@ -405,20 +405,20 @@ public class Grid
 		int from1 = Move.unpackFrom(m1);
 		int to1 = Move.unpackTo(m1);
 
-                // Opponent and player pieces not alternating
-                // in the same column or row?
-                int xdiff = Grid.getX(to1) - Grid.getX(from1);
-                int ydiff = Grid.getY(to1) - Grid.getY(from1);
-                if (xdiff != 0) {
-                        if (m2.getFromX() != Grid.getX(to1)
-                                || m2.getToX() != Grid.getX(from1))
-                                return false;
-                }
-                if (ydiff != 0) {
-                        if (m2.getFromY() != Grid.getY(to1)
-                                || m2.getToY() != Grid.getY(from1))
-                                return false;
-                }
+        // Opponent and player pieces not alternating
+        // in the same column or row?
+        int xdiff = Grid.getX(to1) - Grid.getX(from1);
+        int ydiff = Grid.getY(to1) - Grid.getY(from1);
+        if (xdiff != 0) {
+            if (m2.getFromX() != Grid.getX(to1)
+                || m2.getToX() != Grid.getX(from1))
+                return false;
+        }
+        if (ydiff != 0) {
+            if (m2.getFromY() != Grid.getY(to1)
+                || m2.getToY() != Grid.getY(from1))
+                return false;
+        }
 
 		return true;
 	}

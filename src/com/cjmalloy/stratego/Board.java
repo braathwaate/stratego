@@ -3653,11 +3653,24 @@ public class Board
     // the potential for a Two Squares ending.
     public boolean isPossibleTwoSquaresChase()
     {
-        Move m1 = getLastMove(1);
-		Move m2 = getLastMove(2);
+        UndoMove m1 = getLastMove(1);
+		UndoMove m2 = getLastMove(2);
 		if (m1 == UndoMove.NullMove
             || m2 == UndoMove.NullMove)
 			return false;
+
+        // If the chase piece is attacked enroute, it remains "safe".
+        // For example,
+        // -- -- b2 -- -- --
+        // -- r? xx xx -- --
+        // -- R3 xx xx -- --
+        // r? r? --
+        // Unknown Blue Two should approach unknown Red.  After r?xb2
+        // Blue Two is known, but it is still safe, and can continue
+        // a two squares attach on Red Three.
+
+        if (m2.tp == m1.getPiece())
+            return true;
 
 		return (m1.getFromX() == m2.getFromX()
 			&& m1.getToX() == m2.getToX()
@@ -3669,7 +3682,86 @@ public class Board
                 || m1.getFromX() -  m2.getFromX() == m1.getToX() - m2.getToX()));  // OR chases
     }
 
-    // Returns the number of sequential chase moves
+    // Returns true if a piece moves back and forth between two squares,
+    // and the opponent move is alternating.
+
+    // For example,
+    //   (a)     (b)    (c)     (d)
+    // -- r2    r2 --   -- B3   B3 --
+    // B3 --    -- B3   r2 --   -- r2
+    // In position (a), if unknown Red Two moves left and Blue Three moves right,
+    // it results in position b.  Next, if Red Two moves right, it would
+    // allow Blue Three to reach its original square.  This is a pointless chase,
+    // detectable in just 3 ply.
+
+    // Note that if Red Two moves down in example (b) and reaches position (c),
+    // the chase might not be pointless if the original Red Two square is guarded
+    // or Red Two could fork another piece.
+    // These kinds of worthwhile situations are difficult to predict positionally.
+    // For example,
+    // -- R1 --
+    // -- r2 xx
+    // B3 -- xx
+    // B4 -- --
+
+    // Note that if Red Two moves to the right in position (c), it would create
+    // position (d).   The circular sequence of moves (a,b,c,d) is pointless because
+    // (d) can be reached directly from (a).  This is detectable in 5 ply.
+
+    // Pointless chases must be eliminated because of the horizon effect.
+    // For example, there may be an eventual AI loss of a piece on the board, but
+    // the AI will use successive chase moves to push it out past the horizon.
+    // often to its detriment.  In the example above, the chase results in
+    // the loss of stealth by unknown Red Two.
+
+    // Note that QS eliminates the horizon effect from an *imminent* loss of a
+    // piece, because QS evaluates all adjacent captures.  But QS does not evaluate
+    // these chase sequences (TBD: although it could).
+
+    // Note that isRepeatedPosition() also detect a pointless chase, but at
+    // 5 ply.  It detects any repeated position, including non-chase moves.
+
+    // Note that the alternateSquares algorithm also dissuades chase moves
+    // occurring on the board (but not in the search tree) regardless of intervening moves.
+
+    // Note that isAlternatingMove() ignores intervening pieces or lakes for speed,
+    // which does not seem to matter, because almost all back and forth moves are pointless
+    // anyway.   (Yet there are a some non-alternating back and forth moves
+    // that are not pointless but it is difficult to positionally determine these.)
+    // For example,
+    // -- -- R1 --
+    // -- xx xx --
+    // -- xx xx --
+    // -- B2 -- --
+    // Red One moves left and Blue Two moves right, it is pointless for Red One to move
+    // back because Blue Two can move back.  Note that if Red does not want to
+    // be blocked from moving back, it should not make the left move in the first place!
+
+    // So while isPointlessChase() reduces the number of ply to detect pointless moves,
+    // it still requires several ply to detect a circular chase and only has impact
+    // given adequate search depth.
+
+    public boolean isPointlessChase(int m)
+    {
+        Move m1 = getLastMove(1);   // opp
+		Move m2 = getLastMove(2);   // ai
+		if (m1 == UndoMove.NullMove
+            || m2 == UndoMove.NullMove)
+			return false;
+
+        // if a piece moves back and forth between two squares
+        // and the opponent move is alternating,
+        // the move is pointless
+
+        if (Move.unpackTo(m) == m2.getFrom()
+            && Move.unpackFrom(m) == m2.getTo()
+            && Grid.isAlternatingMove(m1.getMove(), m2))
+            return true;
+
+        return false;
+    }
+
+    // Reoturns the number of sequential chase moves
     // (for use in the transposition table)
     public int twoSquaresChases()
     {
@@ -3721,7 +3813,7 @@ public class Board
 	// -- -- xx
 	// -- BS xx
 	// Red Four moves right.  Blue Spy moves left.  Red Nine
-	// can eventually capture Blue Spy by moving to the right.
+	// can eventually capture Blue Spy by moving to the left.
 
 	public boolean isTwoSquaresChase()
 	{

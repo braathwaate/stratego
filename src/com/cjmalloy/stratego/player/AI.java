@@ -85,6 +85,7 @@ public class AI implements Runnable
 	enum MoveResult {
 		TWO_SQUARES,
 		POSS_TWO_SQUARES,
+		POINTLESS_CHASE,
 		CHASER,
 		REPEATED,
 		IMMOBILE,
@@ -991,7 +992,7 @@ public class AI implements Runnable
 			log(">>> singular extension");
 
 			logMove(n+2, bestMovePly, b.getValue(), MoveType.SGE);
-			MoveResult mt = makeMove(n, bestMovePly);
+			MoveResult mt = makeMove(bestMovePly);
 			vm = -negamax(n+1, -22222, 22222, killerMove, returnMove); 
 			b.undo();
 			log(DETAIL, " " + b.boardValue(vm));
@@ -1662,7 +1663,7 @@ public class AI implements Runnable
 			// assert isValidMove(ttMove) : n + ":" + ttMove + " bad tt entry";
 
 			logMove(n, ttMove, b.getValue(), MoveType.TE);
-			MoveResult mt = makeMove(n, ttMove);
+			MoveResult mt = makeMove(ttMove);
 			if (mt == MoveResult.OK) {
 
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove);
@@ -1703,7 +1704,7 @@ public class AI implements Runnable
 			&& km != ttMove
 			&& isValidMove(unpruned, km)) {
 			logMove(n, km, b.getValue(), MoveType.KM);
-			MoveResult mt = makeMove(n, km);
+			MoveResult mt = makeMove(km);
 			if (mt == MoveResult.OK) {
 				int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove);
 				b.undo();
@@ -1792,7 +1793,7 @@ public class AI implements Runnable
 			for (int mo = 0; mo <= INACTIVE; mo++)
 			for (int move : moveList[mo]) {
 				logMove(2, move, 0, MoveType.PR);
-				MoveResult mt = makeMove(n, move);
+				MoveResult mt = makeMove(move);
 				if (mt == MoveResult.OK) {
 
 		// Note: negamax(0) isn't deep enough because scout far moves
@@ -1819,7 +1820,7 @@ public class AI implements Runnable
 			if (bestPrunedMove != -1) {
 
 			logMove(n, bestPrunedMove, b.getValue(), MoveType.PR);
-			MoveResult mt = makeMove(n, bestPrunedMove);
+			MoveResult mt = makeMove(bestPrunedMove);
 			assert mt == MoveResult.OK : "Pruned move tested OK above?";
 
 			int vm = -negamax(n-1, -beta, -alpha, kmove, returnMove);
@@ -1915,7 +1916,7 @@ public class AI implements Runnable
 					continue;
 
 				logMove(n, max, b.getValue(), MoveType.GE);
-				MoveResult mt = makeMove(n, max);
+				MoveResult mt = makeMove(max);
 				if (!(mt == MoveResult.OK)) {
 					log(DETAIL, " " + mt);
 					continue;
@@ -1972,7 +1973,7 @@ public class AI implements Runnable
 		return bestValue;
 	}
 
-	private MoveResult makeMove(int n, int tryMove)
+	private MoveResult makeMove(int tryMove)
 	{
 		// NOTE: FORWARD TREE PRUNING (minor)
 		// isRepeatedPosition() discards repetitive moves.
@@ -2020,6 +2021,8 @@ public class AI implements Runnable
 			if (b.isChased(Move.unpackFrom(tryMove)))
 				b.move(tryMove);
 			else {
+                if (b.depth > 1 && b.isPointlessChase(tryMove))
+                    return MoveResult.POINTLESS_CHASE;
 				if (b.bturn == Settings.topColor) {
 
 	// Because isRepeatedPosition() is more restrictive
