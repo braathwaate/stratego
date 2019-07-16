@@ -249,7 +249,8 @@ public class TestingBoard extends Board
 	private static final int LOSES = 2;
 	private static final int EVEN = 3;
 
-    protected int randomBluff = rnd.nextInt(15);    // unpredictable bluffing
+    // protected int randomBluff = rnd.nextInt(15);    // unpredictable bluffing
+    protected int randomBluff = 1;    // unpredictable bluffing
 
 	// cache the winFight values for faster evaluation
 	protected static int[][] winRank = new int[15][15]; // winfight cache
@@ -1830,8 +1831,8 @@ public class TestingBoard extends Board
 		// then wham! the player's lowest rank can make the capture.
 
 		int priority = lowRankChasePriority(p);
-		chaseWithUnknown(0, p, tmp, priority);
-		chaseWithUnknown(1, p, tmp, priority);
+		chaseWithUnknown(PLANA, p, tmp, priority);
+		chaseWithUnknown(PLANB, p, tmp, priority);
 	}
 
     Piece chaseNear(Piece p, Piece first)
@@ -2151,20 +2152,20 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 || rankAtLarge(1-p.getColor(),j) == 0)
 				continue;
 
-		// If the opponent has an invincible piece,
-		// the AI must chase it to attempt an even exchange.
+		// If the opponent has a known invincible piece,
+		// the AI should chase it to attempt an even exchange.
 		// While this just leads to another opponent rank becoming
 		// invincible, it is the only way to end the game,
 		// because otherwise the invincible piece just runs amok.
 		// Eventually, if the AI is indeed winning, the
-		// opponent will run out of invincible pieces.
-		// (See EVEN).
+		// opponent will run out of invincible pieces.  (See EVEN).
 
 		// Only go for an even exchange of invincible pieces
 		// if the player is winning.
 
 			if (j == chasedRank
 				&& (isWinning(1-p.getColor()) < 0
+					|| knownRankAtLarge(p.getColor(),j) == 0
 					|| knownRankAtLarge(1-p.getColor(),j) == 0
 					|| chasedRank == 1 && hasSpy(1-p.getColor())))
 				continue;
@@ -2174,6 +2175,14 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 continue;
 
 			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, pp);
+
+        // The AI chooses to chase with it is invincible piece when:
+        // 1. the invincible piece is known
+        // 2. the invincible piece is unknown but the value of unknown pieces
+        //    is greater than the loss of stealth
+        // 3. TBD: A single invincible rank not needed for defense should go on the offensive.
+        //    For example, Ones are gone, Red Two is known, Blue Two is unknown.  A
+        //    single Blue Three should go on a rampage.
 
 			if (knownRankAtLarge(1-p.getColor(),j) != 0
 				|| stealthValue(1-p.getColor(), j) <= values[p.getColor()][unknownRank[p.getColor()]]) {
@@ -3366,9 +3375,13 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             setPlan(neededNear, p, desttmp, color, rank, priority);
 	}
 
+    // If an AI piece p moves itself where it is attacked
+    // attacked, does it divulge an adjacent protector?
+
 	protected int setProtector(Piece p, int to)
 	{
         int color = p.getColor();
+        assert color == Settings.topColor :  "setProtector() for AI pieces only";
 		if (!grid.hasAttack(color, to))
 			return 0;
 
@@ -3428,21 +3441,28 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		return vm;
 	}
 
+    // If an opponent piece "p" attacked some AI piece
+    // does the AI piece have a protector that loses its stealth?
+
 	protected int setAdjacentProtector(Piece p)
 	{
-        int color = p.getColor();
+        int color = p.getColor(); // opp color
+        assert color == Settings.bottomColor : "setAdjacentProtector() for AI pieces only";
+
         int i = p.getIndex();
 		if (!grid.hasAttack(color, i))
 			return 0;
 
-        // find an adjacent piece of the same color
-        // that piece "p" might be protecting
+        // Find an AI piece that that opp piece "p" is attacking
+        // and see if it has a protector.
+
+        // Note that the AI piece could even be unknown,
+        // if the opponent suspects that the piece is weak
 
 		for (int d : dir) {
 			Piece tp = getPiece(i + d);
 			if (tp == null
-                || tp.getColor() != 1 - color
-                || !tp.isKnown())
+                || tp.getColor() != 1 - color)
 				continue;
             int vm = setProtector(tp, i+d);
             if (vm != 0)
@@ -5485,7 +5505,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         assert (fpcolor == 1- bturn);
                         fp.makeKnown();
                         setPiece(fp, to);
-                        ghostPiece = getPiece(to);
+                        if (!fp.is(Piece.SAFE))
+                            ghostPiece = getPiece(to);
                     }
 
 				} else {
@@ -6059,10 +6080,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			&& prev2.getPiece() == tp);
     }
 
-	public boolean isEffectiveBluffLoses(Piece fp, Piece tp)
+	public boolean isEffectiveBluffLoses(Piece ai, Piece opp)
 	{
-        if (isInvincibleDefender(tp)
-            || !isEffectiveBluff(fp, tp))
+        if (isInvincibleDefender(opp)
+            || !isEffectiveBluff(ai, opp))
             return false;
 
         // Bluffing is effective only if the opponent piece approached
@@ -6075,7 +6096,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		UndoMove prev2 = getLastMove(2);
 		return (prev2 != UndoMove.NullMove
-			&& prev2.getPiece() == tp);
+			&& prev2.getPiece() == opp);
     }
 
 	// It is always risky to bluff by pushing an unknown piece
@@ -6251,7 +6272,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// by the Spy, but this is of course a risk that could
 		// lose the game).
 
-        // But if the One is trapped, approaching the One with
+        // But if the One is trapped, approaching the One
         // is a bad bluff (unless the adjacent unknown Red piece
         // IS the Spy), because the One will likely attack.
         // For example:
@@ -6276,9 +6297,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				&& tp.isKnown()
 				&& !tp.isSuspectedRank()
 				&& !fp.isKnown()
-				&& !prev2.tp.isKnown()
-                                && grid.moveCount(tp.getColor(), prev2.getFrom()) == 0)
+				&& !prev2.tp.isKnown()) {
+                if (grid.moveCount(tp.getColor(), prev2.getFrom()) == 0)
+                    return 0;
 				return v;
+            }
 
 		// If the attacker is suspected, the AI is only guessing
 		// that the attacker is stronger.  This is a situation

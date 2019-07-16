@@ -918,12 +918,13 @@ public class Board
 				alternateSquares[um2.fpcopy.getIndex()][1] = fp; //chased
 			} else {
 
-		// clear all alternateSquares when a chased piece moves
-		// without a chaser
+		// clear all alternateSquares when a chased piece is attacked
+        // or moves without a chaser
 
 				for (int i=12; i <= 120; i++)
-					if (alternateSquares[i][1] == fp
-						&& alternateSquares[i][0] != um2.getPiece()) {
+					if (alternateSquares[i][1] == tp
+					    || (alternateSquares[i][1] == fp
+                            && alternateSquares[i][0] != um2.getPiece())) {
 						alternateSquares[i][0] = null;
 						alternateSquares[i][1] = null;
 					}
@@ -2688,8 +2689,14 @@ public class Board
                 }  // x
 			} // y
 
-            if (lowrank[1-color] <= lowrank[color])
+        // Once a stronger opponent piece appears, its time to change
+        // the foray lane
+
+            if (lowrank[1-color] <= lowrank[color]) {
+                if (forayLane[color] == lane + 1)
+                    forayLane[color] = 0;
                 continue;
+            }
             power -= lowrank[color];
 
         // Discourage forays in the center lane because they are much more
@@ -2701,7 +2708,8 @@ public class Board
 
 			if (power < maxPower)
 				continue;
-            forayLane[color] = lane+1;
+            if (forayLane[color] == 0)
+                forayLane[color] = lane+1;
             setForaySquares();
 			maxPower = power;
 
