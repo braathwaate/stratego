@@ -2948,7 +2948,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                     int j = flag[c] + d;
                     if (!Grid.isValid(j))
                         continue;
-                    TestPiece p = (TestPiece)getPiece(j);
+                    TestPiece p = (TestPiece)getFlagBomb(getPiece(j));
                     p.setFlagBomb(true);
                     p.targetValue = aiBombValue(p);
                 }
@@ -3375,8 +3375,19 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             setPlan(neededNear, p, desttmp, color, rank, priority);
 	}
 
-    // If an AI piece p moves itself where it is attacked
-    // attacked, does it divulge an adjacent protector?
+    // If an AI piece p moves itself to where it is attacked,
+    // does it divulge the rank of an adjacent unknown protector?
+
+    // Note: this is true even if piece "p" is trapped
+    // (and it is very difficult to correctly determine
+    // if the piece is trapped anyway).  For example,
+    // xxxxxxxxxx
+    // x -- r1 --
+    // x R3 rb --
+    // x b? -- --
+    // Red Three moves up to escape unknown Blue.  Blue moves up
+    // and now R3 is trapped. Now any piece that Red moves loses stealth
+    // of Red One, unless Red One moves away, which would lose Red Three.
 
 	protected int setProtector(Piece p, int to)
 	{
@@ -3389,17 +3400,14 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		Piece attackPiece = null;
 		Piece unk = null;
-        boolean trapped = true;
 		Rank minDefendKnownRank = Rank.NIL;
 		for (int d : dir) {
             int j = to + d;
             if (!Grid.isValid(j))
                 continue;
 			Piece tp = getPiece(j);
-			if (tp == null) {
-                trapped = false;
+			if (tp == null)
 				continue;
-            }
 
             Rank tprank = tp.getRank();
             if (tp.getColor() == color) {
@@ -3430,10 +3438,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		}
 
         if (unk == null
-            || trapped == true
             || attackPiece == null
             || (attackPiece.isKnown()
-                && minDefendKnownRank.ordinal() < attackPiece.getRank().ordinal())
+                && winFight(minDefendKnownRank, attackPiece.getRank()) == WINS)
             || unk.getActingRankChase().ordinal() < attackPiece.getRank().ordinal())
             return 0;
 
@@ -3444,16 +3451,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // If an opponent piece "p" attacked some AI piece
     // does the AI piece have a protector that loses its stealth?
 
-	protected int setAdjacentProtector(Piece p)
+	protected int setAdjacentProtector(int i)
 	{
-        int color = p.getColor(); // opp color
-        assert color == Settings.bottomColor : "setAdjacentProtector() for AI pieces only";
-
-        int i = p.getIndex();
-		if (!grid.hasAttack(color, i))
+		if (!grid.hasAttack(Settings.bottomColor, i))
 			return 0;
 
-        // Find an AI piece that that opp piece "p" is attacking
+        // Find an AI piece that that opp piece on "i" is attacking
         // and see if it has a protector.
 
         // Note that the AI piece could even be unknown,
@@ -3462,7 +3465,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		for (int d : dir) {
 			Piece tp = getPiece(i + d);
 			if (tp == null
-                || tp.getColor() != 1 - color)
+                || tp.getColor() != 1 - Settings.bottomColor)
 				continue;
             int vm = setProtector(tp, i+d);
             if (vm != 0)
@@ -4291,8 +4294,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         if (fpcolor == Settings.topColor) {
 			if (fp.isKnown())
                 vm -= setProtector(fp, to);
-            if (m2 != UndoMove.NullMove)
-                vm -= setAdjacentProtector(m2.getPiece());
+            if (m2 != UndoMove.NullMove) {
+                vm -= setAdjacentProtector(m2.getTo());
+            // in case one protector left another unknown protector
+            // holding the bag ...
+                vm -= setAdjacentProtector(from);
+            }
 
             // same as board.updateSafe()
             if (fp.isKnown()
@@ -6086,17 +6093,28 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             || !isEffectiveBluff(ai, opp))
             return false;
 
-        // Bluffing is effective only if the opponent piece approached
-        // on the last move.  If the opponent lingers, then
-        // it is obvious that the opponent called the bluff
+        // Bluffing is effective only if the AI piece or the
+        // opponent piece approached on the last move.
+        // Otherwise the bluff is stale and
+        // obvious that the opponent called the bluff
+        // (TBD: unless the opponent attacked a superior piece
+        // on the last move).
 
 		// (note that getLastMove(2) is called to get the prior
 		// move, because the current move is already on the
 		// stack when isEffectiveBluffLoses() is called)
 
 		UndoMove prev2 = getLastMove(2);
-		return (prev2 != UndoMove.NullMove
-			&& prev2.getPiece() == opp);
+		if (prev2 != UndoMove.NullMove
+			&& prev2.getPiece() == opp) // opp piece approached
+            return true;
+
+		UndoMove prev3 = getLastMove(3);
+		if (prev3 != UndoMove.NullMove
+			&& prev3.getPiece() == ai)  // ai piece approached
+            return true;
+
+        return false;
     }
 
 	// It is always risky to bluff by pushing an unknown piece
@@ -6539,7 +6557,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // | r6 r4 rb r8
     // | -- R2 -- r9
     // | B1 -- xx xx
-    // Blue One moves right to attack Red Two.  Red Two should
+    // Blue One moves right to attack AI Red Two.  Red Two should
     // move to the left to nullify the attack by the Two Squares rule.
     // But instead the AI moves right.  Why?   It thinks that
     // Blue One will not move up to attack Red Two because r4xB1
@@ -6646,7 +6664,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // Note that B7xr? followed by R3xB7 is positive.
 
             int vu = stealthValue(p.getColor(), unknownRank[p.getColor()]);
-            int vf = stealthValue(p.getColor(), Rank.FOUR);
+            int vf = stealthValue(p.getColor(), lowestUnknownNotSuspectedRank)/2;
             int v = vf - vu;
             if (v < 0)
                 return vu;

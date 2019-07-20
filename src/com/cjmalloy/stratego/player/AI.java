@@ -2234,7 +2234,8 @@ public class AI implements Runnable
 
 					Piece tp = b.getPiece(ti);
 
-				if (tp.getRank() == Rank.UNKNOWN
+				if ((tp.getRank() == Rank.UNKNOWN
+                    && !tp.hasMoved())
 					|| tp.getRank() == Rank.BOMB
 					|| tp.getRank() == Rank.FLAG)
 					continue;

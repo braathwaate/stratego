@@ -2365,25 +2365,25 @@ public class Board
 
 			p.setMaybeEight(unknownRankAtLarge(Settings.bottomColor, Rank.EIGHT) != 0);
 
-        // If the opponent is a bluffer, then
-        // the AI does not assign any suspected ranks
-        // Otherwise, a bluffer could use any piece to thwart
-        // an AI attack.
-        // (except for Spy, see isPossibleUnknownSpyXOne() which assumes that
-        // if a piece has a chase rank, it probably is not the Spy.  Thus
-        // the opponent can use any piece as protection to bluff the AI
-        // and thwart an attack by the One.  The AI has to keep on
-        // attacking suspected Spies as they appear.)
+        // If the opponent is a bluffer, then the AI does not assign any suspected ranks
+        // Otherwise, a bluffer could use any piece to thwart an AI attack.
+        // When a bluffer is identified, the AI needs to rely on guessing piece setups
+        // and not assume chasers or protectors are what they portend to be.
+
+        // Prior to version 13, the AI believed the bluffer in the case of the Spy.
+        // But this is silly because the opponent could use any handy unknown piece
+        // as protection to thwart the AI.  It also can lead to horizon impacts when
+        // a Spy/unknown piece combo corners the AI One.
 
             Rank rank = p.getActingRankChase();
+			if (blufferRisk == 5
+                || rank == Rank.NIL)
+                continue;
+
 			if (rank == Rank.SPY) {
 				if (hasSpy(p.getColor()))
 					setSuspectedRank(p, Rank.SPY);
-			} else if (blufferRisk == 5
-                || rank == Rank.NIL)
-                continue;
-            else {
-
+            } else {
                 Rank suspRank;
                 if (!p.isRankLess())  {
 
@@ -2616,21 +2616,20 @@ public class Board
 	}
 
 	// Usual flag locations are on the back row, and usually
-	// in the corners or beneath the lakes.  However,
-    // compound bomb structures may require the AI to attack
-    // side structures to get at the back row.
+	// in the corners or beneath the lakes.
 	// F -- F F -- -- F F -- F
+
 	protected boolean usualFlagLocation(int color, int i)
 	{
 		int x = Grid.getX(i);
-                if (x == 0 || x == 9)
-                    return true;
 		if (Grid.getY(i) != Grid.yside(color, 0))
 			return false;
-		return (x == 2
-                    || x == 3
-                    || x == 6
-                    || x == 7);
+		return (x == 0
+            || x == 2
+            || x == 3
+            || x == 6
+            || x == 7
+            || x == 9);
 	}
 
     protected int bombedLane(int color, int lane)
@@ -2652,7 +2651,7 @@ public class Board
 	{
         int [] lowrank = new int[2];
 
-        if (weakRanks(1-color) <= 7) {
+        if (weakRanks(1-color) <= 6) {
             forayLane[color] = 0;
             return;
         }
@@ -3079,19 +3078,13 @@ public class Board
 
 		for (int i = 0; i < maybe_count; i++) {
 
+            int prob = 1;
+
         // ensure isBombedFlag is set correctly for AI
 
             if (color == Settings.topColor
                 && maybe[i][0] == flag[Settings.topColor])
                 return i;
-
-		// Although the flag is most likely on the back row,
-        // the AI attacks the front row patterns first,
-        // which may be necessary to get at the back row pattern.
-
-            int prob = 1;
-            if (usualFlagLocation(color, maybe[i][0]))
-                prob++;
 
 		// compute the number of bombs in the structure
 
@@ -3148,21 +3141,28 @@ public class Board
 		// no matter how convincing, because bluffers can
 		// be very convincing.
 
-			int guards = 1;
-			for (int j = 12; j <= 120; j++)
-				if (Grid.steps(maybe[i][0], j) == 2) {
-					Piece p = getSetupPiece(j);
-					if (p != null
-                        && p.getColor() == color
-						&& p.getRank() != Rank.BOMB) {
-						if (p.getRank().ordinal() <= 3)
-							guards += 2;
-						else if (p.getRank() != Rank.NINE)
-							guards++;
-					}
-				}
+		// Although the flag is most likely on the back row,
+        // the AI attacks the front row patterns first,
+        // which may be necessary to get at the back row pattern.
 
-			prob = prob * guards;
+            if (usualFlagLocation(color, maybe[i][0])) {
+                int guards = 1;
+                for (int j = 12; j <= 120; j++)
+                    if (Grid.steps(maybe[i][0], j) == 2) {
+                        Piece p = getSetupPiece(j);
+                        if (p != null
+                            && p.getColor() == color
+                            && p.getRank() != Rank.BOMB) {
+                            if (p.getRank().ordinal() <= 3)
+                                guards += 2;
+                            else if (p.getRank() != Rank.NINE)
+                                guards++;
+                        }
+                    }
+
+                prob = prob * guards;
+            }
+
 			if (bestGuess == 99
 				|| prob > bestProb) {
 				bestGuess = i;
@@ -3172,6 +3172,34 @@ public class Board
 		} // i
 		return bestGuess;
 	}
+
+    // Search for the most accessible possible bomb in a compound bomb structure
+
+    protected boolean isPieceLocked(Piece lp)
+    {
+        for (int d : dir) {
+            int i = lp.getIndex() + d;
+			if (!Grid.isValid(i))
+				continue;
+            Piece p = getPiece(i);
+            if (p == null
+                || p.hasMoved()
+                || p.getColor() != lp.getColor()
+                || p.isKnown() && p.getRank() != Rank.BOMB)
+                return false;
+        }
+        return true;
+    }
+
+    protected Piece getFlagBomb(Piece p)
+    {
+        int color = p.getColor();
+        int index = p.getIndex();
+        int dir = (color == Settings.topColor ? 11 : -11);
+        if (isPieceLocked(p))
+            return getFlagBomb(getPiece(index + dir));
+        return p;
+    }
 
 	private void markBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
 	{
@@ -3220,15 +3248,17 @@ public class Board
 		// they offer no protective value to pieces that
 		// bluff against lower ranked pieces. 
 
+                    Piece b = getFlagBomb(p);
+
 					if (maybe_count == 1) {
-						if (suspectedBomb(p))
-                            p.setKnown(true);
+						if (suspectedBomb(b))
+                            b.setKnown(true);
 
 		// If the piece already has a suspected rank, keep it,
 		// otherwise make it a suspected bomb
 
-					} else if (p.getRank() == Rank.UNKNOWN) {
-						suspectedBomb(p);
+					} else if (b.getRank() == Rank.UNKNOWN) {
+						suspectedBomb(b);
                     }
 				}
 			} else {
@@ -3766,6 +3796,25 @@ public class Board
             && Grid.isAlternatingMove(m1.getMove(), m2))
             return true;
 
+        // if the same piece chases after alternating twice,
+        // the move is pointless
+
+        if (getPiece(Move.unpackFrom(m)) == m2.getPiece()
+            && Move.unpackTo(m) == m1.getFrom()) {   // chase
+            Move m3 = getLastMove(3);   // opp
+            if (m3 == UndoMove.NullMove)
+                return false;
+            if (m1.getPiece() == m3.getPiece()
+                && Grid.isAlternatingMove(m3.getMove(), m2)) {
+                Move m4 = getLastMove(4);   // ai
+                if (m4 == UndoMove.NullMove)
+                    return false;
+                if (m2.getPiece() == m4.getPiece()
+                    && Grid.isAlternatingMove(m4.getMove(), m3))
+                    return true;
+            }
+        }
+
         return false;
     }
 
@@ -4265,10 +4314,9 @@ public class Board
                             if (p == null
                                 || p.getColor() != Settings.bottomColor)
                                 continue;
-                            if (!p.isKnown()) {
+                            if (!p.isKnown())
                                 p.setActingRankFlee(revealRank);
-                                break;
-                            }
+                            break;
                         }
                 }
                 break;
