@@ -62,20 +62,6 @@ public class Grid
 		for (int i = 121; i < 133; i++)
 			setWater(i);
 
-		for (int n = 0; n < NEIGHBORS; n++)
-		for (int f = 12; f <= 120; f++) {
-			if (!isValid(f))
-				continue;
-			neighbor[n][f] = new BitGrid();
-			for (int t = 12; t <= 120; t++) {
-				if (!isValid(t) || f == t)
-					continue;
-				if (steps(f,t) > n + 1)
-					continue;
-				neighbor[n][f].setBit(t);
-			}
-		}
-
     // steps between squares
 
         ArrayList<Integer> queue = new ArrayList<Integer>();
@@ -105,6 +91,20 @@ public class Grid
                 } // d
             }
         }
+
+		for (int n = 0; n < NEIGHBORS; n++)
+		for (int f = 12; f <= 120; f++) {
+			if (!isValid(f))
+				continue;
+			neighbor[n][f] = new BitGrid();
+			for (int t = 12; t <= 120; t++) {
+				if (!isValid(t) || f == t)
+					continue;
+				if (steps(f,t) > n + 1)  // depends on steps[]
+					continue;
+				neighbor[n][f].setBit(t);
+			}
+		}
     }
 
 	public static class UniqueID

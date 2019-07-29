@@ -54,7 +54,7 @@ public class Piece implements Comparable<Piece>
 		color = c;
 		actualRank = r;
 		rank = r;
-		clearActingRankFlee();
+		clearActingRank();
 	}
 
 	public Piece(Piece p) 
@@ -78,8 +78,7 @@ public class Piece implements Comparable<Piece>
 	public void clear()
 	{
 		moves = 0;
-		actingRankChase = 0;
-		clearActingRankFlee();
+		clearActingRank();
 		flags = 0;
 		index = 0;
 	}
@@ -157,7 +156,7 @@ public class Piece implements Comparable<Piece>
 	{
 		flags |= KNOWN;
 		flags &= ~(SUSPECTED | LESS | MAYBE_EIGHT | LIKELY_SPY);
-		clearActingRankFlee();
+		clearActingRank();
 	}
 
 	public int getColor() 
@@ -345,8 +344,9 @@ public class Piece implements Comparable<Piece>
 		actingRankFlee |= (1 << r.ordinal());
 	}
 
-	public void clearActingRankFlee()
+	public void clearActingRank()
 	{
+		actingRankChase = 0;
 		actingRankFlee = 0;
 	}
 

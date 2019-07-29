@@ -55,7 +55,7 @@ public class Board
 	// correllating against all setups in the database
 	protected Piece[] setup = new Piece[121];
 	protected static final int[] dir = { -11, -1,  1, 11 };
-    protected static long[][][][] boardHash = new long[8][2][82][121];
+    protected static long[][][][][] boardHash = new long[15][8][2][82][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
 	protected static BoardHistory[] boardHistory = new BoardHistory[2];
 	protected static Piece[][] alternateSquares = new Piece[121][2];
@@ -122,11 +122,12 @@ public class Board
 
 		Random rnd = new Random();
 
+		for ( int r = 0; r < 15; r++)
 		for ( int k = 0; k < 8; k++)
 		for ( int m = 0; m < 2; m++)
 		for ( int id = 0; id < 82; id++)
 		for ( int i = 12; i <= 120; i++)
-			boardHash[k][m][id][i] = Math.abs(rnd.nextLong());
+			boardHash[r][k][m][id][i] = Math.abs(rnd.nextLong());
 
 		for ( int i = 0; i < depthHash.length; i++)
 			depthHash[i] = Math.abs(rnd.nextLong());
@@ -464,6 +465,7 @@ public class Board
 	static public long hashPiece(int turn, Piece p, int i)
 	{
         return boardHash
+            [p.isKnown() ? Rank.NIL.ordinal() : p.getActingRankChase().ordinal()]
             [p.getStateFlags()]
             [p.hasMoved() ? 1 : 0]
             [p.getID()]
@@ -537,26 +539,26 @@ public class Board
 			int j = target + d;
 			if (!Grid.isValid(j))
 				continue;
-			Piece p = getPiece(j);
-			if (p == null
-				|| p.getColor() != targetPiece.getColor())
+			Piece prot = getPiece(j);
+			if (prot == null
+				|| prot.getColor() != targetPiece.getColor())
 				continue;
 
 	// If both targetPiece and protector are known,
 	// then the protector has to be at least two ranks lower
-	// to be a protector.  For example,
-	// R3 R4 B?
+    // that the target piece to be a protector.  For example,
+	// R3 R4 b?
 	// Red Three is not a protector.  If unknown Blue does not
 	// attack Red Four and moves some other piece, unknown Blue
-	// is not lower than Red Four.
+	// is not lower than Red Four and flee rank will be set.
 
-			if (p.isKnown()
+			if (prot.isKnown()
 				&& targetPiece.isKnown()
-				&& p.getRank().ordinal()
-					> targetPiece.getRank().ordinal()-2)
+				&& prot.getRank().ordinal()
+					>= targetPiece.getRank().ordinal()-2)
 				continue;
 
-			 if (isThreat(p, attackPiece))
+			 if (isThreat(prot, attackPiece))
 				return true;
 		}
 		return false;
@@ -2649,6 +2651,7 @@ public class Board
 
 	void selectForayLane(int color)
 	{
+        final int attacklanes[][] = { { 0, 1, 2}, { 3, 4, 5, 6}, {7, 8, 9} };
         int [] lowrank = new int[2];
 
         if (weakRanks(1-color) <= 6) {
@@ -2657,6 +2660,7 @@ public class Board
         }
 
 		int maxPower = -99;
+        int newlane = 0;
 		for (int lane = 0; lane < 3; lane++) {
             if (bombedLane(color, lane) == 2
                 || bombedLane(1-color, lane) == 2)
@@ -2665,8 +2669,8 @@ public class Board
             lowrank[0] = lowrank[1] = 99;
             
             for (int y = 0; y < 10; y++) {
-                for (int x = 0; x < 2; x++) {
-                    int i = Grid.getIndex(x + lane*4, y);
+                for (int x : attacklanes[lane]) {
+                    int i = Grid.getIndex(x, y);
                     if (!Grid.isValid(i))
                         continue;
                     Piece p = getPiece(i);
@@ -2685,13 +2689,21 @@ public class Board
                     if (!p.isKnown()
                         && p.getRank() == Rank.BOMB)
                         power-= Grid.yside(color,y);
+
+        // Don't foray on the flag side because the inevitable
+        // loss of pieces compromise the defense
+
+                    if (p.getRank() == Rank.FLAG)
+                        power -= 3;
+
                 }  // x
 			} // y
 
         // Once a stronger opponent piece appears, its time to change
-        // the foray lane
+        // the foray lane (tbd: although this could be an indication of
+        // a bomb structure)
 
-            if (lowrank[1-color] <= lowrank[color]) {
+            if (lowrank[1-color] < lowrank[color]) {
                 if (forayLane[color] == lane + 1)
                     forayLane[color] = 0;
                 continue;
@@ -2707,12 +2719,14 @@ public class Board
 
 			if (power < maxPower)
 				continue;
-            if (forayLane[color] == 0)
-                forayLane[color] = lane+1;
+            newlane = lane+1;
             setForaySquares();
 			maxPower = power;
 
 		} // lane
+
+        if (forayLane[color] == 0)
+            forayLane[color] = newlane;
 	}
 
     protected boolean isForayAttack(int color, int i)
@@ -4297,28 +4311,21 @@ public class Board
                         || p.isKnown())
                         continue;
                     p.setActingRankFlee(revealRank);
+
+                    for (int d2 : dir) {
+                        int k = j + d2;
+                        if (!Grid.isValid(k))
+                            continue;
+                        p = getPiece(k);
+                        if (p == null
+                            || p.getColor() != Settings.bottomColor
+                            || p.isKnown()
+                            || !p.is(Piece.WEAK))
+                            continue;
+                        p.setActingRankFlee(revealRank);
+                    }
                 }
 
-        // The AI guesses that the opponent will not have mobilized
-        // its Spy, unknown One or Two into a forward position until the
-        // AI One, Two or Three has been discovered. (e.g. AI assumes that
-        // opponent is sheltering its strong pieces).
-
-                if (surprise
-                    && knownRank[Settings.topColor][revealRank.ordinal()-1] == 0) {
-                    final int lanes[] = {0, 1, 4, 5, 8, 9};
-                    for (int lane : lanes)
-                        for (int y = 0; y < 10; y++) {
-                            int k = Grid.getIndex(lane, y);
-                            Piece p = getPiece(k);
-                            if (p == null
-                                || p.getColor() != Settings.bottomColor)
-                                continue;
-                            if (!p.isKnown())
-                                p.setActingRankFlee(revealRank);
-                            break;
-                        }
-                }
                 break;
             } // switch
         } // top color

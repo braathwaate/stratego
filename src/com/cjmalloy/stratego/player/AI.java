@@ -829,10 +829,12 @@ public class AI implements Runnable
 				getScoutFarMoves(n, moveList, i);
 
 		// Any unknown piece could be a Scout.
-		// But if the piece has chased an Unknown, it is much less
+        // But if the piece has a suspected rank
+		// or if it chased an Unknown, it is much less
 		// likely that the piece is a Scout. 
 
-			else if (fprank == Rank.UNKNOWN
+			else if (!fp.isKnown()
+                && !fp.isSuspectedRank()
 				&& fp.getActingRankChase() != Rank.UNKNOWN)
 				getAttackingScoutFarMoves(moveList, i);
 		}
