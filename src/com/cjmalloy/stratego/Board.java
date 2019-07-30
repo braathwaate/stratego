@@ -58,7 +58,6 @@ public class Board
     protected static long[][][][][] boardHash = new long[15][8][2][82][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
 	protected static BoardHistory[] boardHistory = new BoardHistory[2];
-	protected static Piece[][] alternateSquares = new Piece[121][2];
     protected int[][] knownRank = new int[2][12];   // discovered ranks
     protected int[][] allRank = new int[2][12];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][12];	// guessed ranks
@@ -348,11 +347,6 @@ public class Board
 		bturn = 0;
 		boardHistory[0].clear();
 		boardHistory[1].clear();
-
-		for (int i = 12; i <= 120; i++) {
-			alternateSquares[i][0] = null;
-			alternateSquares[i][1] = null;
-		}
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -872,67 +866,6 @@ public class Board
 
 		// save the hash to detect board repetitions
 		boardHistory[bturn].add();
-
-		// mark alternating squares to detect pointless moves
-
-		// Algorithm:
-		// Mark the from square of the prior opponent move
-		// with the opponent and player pieces when the player
-		// makes an alternating move and the player did not initiate
-		// the move sequence.  Thus future moves to these squares can be
-		// detected and debited (or possibly discarded) if they occur
-		// during tree search because they have been played before.
-		//
-		// Note that the pieces do not need to be adjacent, such as
-		// in this example:
-		// R? R? R? |
-		// R? R4 -- |
-		// xx -- -- |
-		// xx -- -- |
-		// -- -- B3 |
-		// Blue Three moves left and Red Four moves right.  Blue's from-square
-		// gets marked, dissuading it from ever moving back again
-		// (until Red Four moves again).
-		//
-		// TBD: Ideally, perhaps the AI should detect the potential for
-		// pointless moves before actually playing them, such as a human can.
-		// But I found this to be easier said than done and I removed the code
-		// and ended up with this alternate squares algorithm based on
-		// the moves having been actually played.  Problems with the
-		// earlier code:
-		//	1. isAlternatingMove() ignores intervening pieces or lakes (for speed)
-		//	2. transposition table equivalency ignores move order
-		//	3. slower
-		//	4. impossible to predict what the opponent will actually do,
-		//		especially opponent bots that move inconsistently.
-		//
-		// Thus playing a pointless move can be a win if the opponent
-		// does not respond predictably.  In the example above, perhaps Red
-		// Four does not see the impending attack and Red moves some other piece,
-		// allowing Blue Three to move forward and win Red Four.
-
-		UndoMove um2 = getLastMove(2);
-		UndoMove um3 = getLastMove(3);
-		if ( um3 != UndoMove.NullMove) {
-			if (um3.getPiece() == fp
-				&& Grid.isAlternatingMove(m, um2)) {
-				alternateSquares[um2.fpcopy.getIndex()][0] = um2.getPiece(); // chaser
-				alternateSquares[um2.fpcopy.getIndex()][1] = fp; //chased
-			} else {
-
-		// clear all alternateSquares when a chased piece is attacked
-        // or moves without a chaser
-
-				for (int i=12; i <= 120; i++)
-					if (alternateSquares[i][1] == tp
-					    || (alternateSquares[i][1] == fp
-                            && alternateSquares[i][0] != um2.getPiece())) {
-						alternateSquares[i][0] = null;
-						alternateSquares[i][1] = null;
-					}
-			}
-		}
-
 		bturn = 1 - bturn;
 
 	}
@@ -3772,9 +3705,6 @@ public class Board
 
     // Note that isRepeatedPosition() also detect a pointless chase, but at
     // 5 ply.  It detects any repeated position, including non-chase moves.
-
-    // Note that the alternateSquares algorithm also dissuades chase moves
-    // occurring on the board (but not in the search tree) regardless of intervening moves.
 
     // Note that isAlternatingMove() ignores intervening pieces or lakes for speed,
     // which does not seem to matter, because almost all back and forth moves are pointless

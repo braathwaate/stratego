@@ -1279,28 +1279,69 @@ public class TestingBoard extends Board
 			int[] lowRank = new int[2];
 			lowRank[Settings.bottomColor] = lowestUnknownExpendableRank + 1;
 			lowRank[Settings.topColor] = 99;
-			Piece aiInvinciblePiece = null;
-            int aiPieceCount=0;
+			TestPiece aiInvinciblePiece = null;
+            TestPiece lowPiece = null;
+            TestPiece highPiece = null;
 
+            ArrayList<Piece> queue = new ArrayList<Piece>();
 			for (int i : attacklanes[lane])
 			for (int y = 0; y < 5; y++) {
                 int j = i - y * 11;
-				Piece p = getPiece(j);
+				TestPiece p = (TestPiece)getPiece(j);
 				if (p == null)
 					continue;
                 Rank rank = p.getRank();
 				if (rank.ordinal() < lowRank[p.getColor()])
 					lowRank[p.getColor()] = rank.ordinal();
 
-		// Try to keep more than two non-invincible pieces
-		// out of the lanes.  This reduces the risk of forks
-        // stacking, and help to push the defenders into
+				if (p.getColor() == Settings.bottomColor)
+					continue;
+
+				if (isInvincible(p)
+                    && (aiInvinciblePiece == null
+                        || rank.ordinal() < aiInvinciblePiece.getRank().ordinal()))
+                    aiInvinciblePiece = p;
+
+		// Actively chased higher ranked pieces flee the lane rearward
+		// (unless there is only one lower opponent rank).
+        // to discourage the piece from moving
+        // forward in the lane, thus allowing two opponent pieces
+        // to easily trap it.
+
+        // (Until Version 12, the AI piece preemptively evacuated.
+        // This was a waste of moves and more importantly
+        // removed a deterrent to higher ranked opponent pieces.)
+
+        // TBD: this, like the rest of attackLanes, needs to be
+        // replaced by localized minimax, which can predict what
+            // could happen in the lanes.
+
+                if (y < 3
+                    && isChased(j)
+                    && lowerRankCount[Settings.bottomColor][rank.ordinal()-1] > 1) {
+                    setPlan(false, p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+                    continue;
+                }
+
+                if (lowPiece == null || rank.ordinal() < lowPiece.getRank().ordinal())
+                    lowPiece = p;
+                if (highPiece == null || rank.ordinal() > highPiece.getRank().ordinal())
+                    highPiece = p;
+
+                queue.add(p);
+			} // y
+
+		// Try to keep multiple middle ranked AI pieces out of the lane
+		// out of the lanes.  This reduces the risk of forks,
+        // stacking, and helps to push the excess pieces into
 		// other lanes.
 
-        // TBD: We really want the *right* pieces in the lanes
+        // We really want the *right* pieces in the lanes
         // For example, 2 known Fours is not good, but an
         // unknown Four clearing the way for an unknown Miner
-        // might be a good combination.
+        // might be a good combination.  This code will push one of the Fours
+        // back, but will allow the Four and the Miner to proceed.
+        // TBD: this needs more work
 
 		// The goal of fleeing in attacklanes()
 		// is to keep the higher ranked piece out of the lane.
@@ -1322,38 +1363,13 @@ public class TestingBoard extends Board
 		// TBD: this effect likely occurs with other priority differences
 		// as well.
 
-
-				if (p.getColor() == Settings.bottomColor)
-					continue;
-
-				if (!isInvincible(p)) {
-                    if (aiPieceCount++ >= 2)
-                        setPlan((TestPiece)p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
-				} else if (aiInvinciblePiece == null
-					|| rank.ordinal() < aiInvinciblePiece.getRank().ordinal())
-					aiInvinciblePiece = p;
-
-		// Actively chased higher ranked pieces flee the lane rearward
-		// (unless there is only one lower opponent rank).
-        // to discourage the piece from moving
-        // forward in the lane, thus allowing two opponent pieces
-        // to easily trap it.
-
-        // (Until Version 12, the AI piece preemptively evacuated.
-        // This was a waste of moves and more importantly
-        // removed a deterrent to higher ranked opponent pieces.)
-
-        // TBD: this, like the rest of attackLanes, needs to be
-        // replaced by localized minimax, which can predict what
-            // could happen in the lanes.
-
-                    if (y < 3
-                            && isChased(j)
-                            && lowerRankCount[Settings.bottomColor][rank.ordinal()-1] > 1) {
-                    genPlanAll(fleetmp[Settings.topColor], Settings.topColor, rank.ordinal(), DEST_PRIORITY_LANE);
-				}
-
-			} // y
+            int count = 0;
+            while (count < queue.size()) {
+                Piece p = queue.get(count++);
+                if (p != lowPiece
+                    && p != highPiece)
+                        setPlan(false, (TestPiece)p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+            }
 
 		// Stealthy pieces preemptively evacuate the lane because
         // of the ease of cornering by an opponent expendable piece,
@@ -4307,11 +4323,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 					|| m2.getPiece().getRank().ordinal() > fprank.ordinal()))
 					vm += pieceValue(m2.getPiece())/2;
 */
-
-		// Take the wind out of the sails of alternating moves
-
-			if (alternateSquares[to][0] == fp.boardPiece())
-				vm -= DEST_PRIORITY_DEFEND_FLAG / 2;
 
             fp.setMoved();
 			setPiece(fp, to);
