@@ -217,7 +217,7 @@ public class TestingBoard extends Board
 	protected int value;	// value of board
 	protected int[] unmovedValue = new int[121];    // unmoved value
 	protected int[][] valueStealth = new int[2][15];
-	protected long[] hashTest = new long [2];
+	protected long hashTest = 0;
 
     // lowestUnknownNotSuspectedRank is the lowest opponent rank
     // that is not known or *matured* suspected.   Note that an opponent
@@ -290,8 +290,7 @@ public class TestingBoard extends Board
 		markWeakPieces();
 
 		value = 0;
-		hashTest[0] = boardHistory[0].hash;	// for debugging (see move)
-		hashTest[1] = boardHistory[1].hash;	// for debugging (see move)
+		hashTest = boardHistory.hash;	// for debugging (see move)
 
 		for (int c = RED; c <= BLUE; c++) {
 			for (int j=0;j<15;j++) {
@@ -1283,7 +1282,6 @@ public class TestingBoard extends Board
             TestPiece lowPiece = null;
             TestPiece highPiece = null;
 
-            ArrayList<Piece> queue = new ArrayList<Piece>();
 			for (int i : attacklanes[lane])
 			for (int y = 0; y < 5; y++) {
                 int j = i - y * 11;
@@ -1328,7 +1326,6 @@ public class TestingBoard extends Board
                 if (highPiece == null || rank.ordinal() > highPiece.getRank().ordinal())
                     highPiece = p;
 
-                queue.add(p);
 			} // y
 
 		// Try to keep multiple middle ranked AI pieces out of the lane
@@ -1363,13 +1360,14 @@ public class TestingBoard extends Board
 		// TBD: this effect likely occurs with other priority differences
 		// as well.
 
-            int count = 0;
-            while (count < queue.size()) {
-                Piece p = queue.get(count++);
-                if (p != lowPiece
-                    && p != highPiece)
-                        setPlan(false, (TestPiece)p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
-            }
+            if (lowPiece != null
+                && highPiece != null)
+                for (int rank = lowPiece.getRank().ordinal(); rank <= highPiece.getRank().ordinal(); rank++) {
+                    for (TestPiece pp : planPiece[Settings.topColor][rank-1])
+                            if (pp != null && pp != lowPiece && pp != highPiece)
+                                setPlan(pp, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+
+                }
 
 		// Stealthy pieces preemptively evacuate the lane because
         // of the ease of cornering by an opponent expendable piece,
@@ -1574,6 +1572,7 @@ public class TestingBoard extends Board
                 || p.isKnown())
 				continue;
             int color = p.getColor();
+            Rank rank = p.getRank();
 
             if (color != Settings.topColor) {
                 unmovedValue[i] += Math.min(
@@ -1587,13 +1586,14 @@ public class TestingBoard extends Board
             // Following code is AI only
 
             if (isNeededPiece(p)
-                && !(isExpendable(p)
-                    && !isInvincible(p)
-                    && p.getRank() != Rank.EIGHT
-                    && movedExpendableCount < 3)
-
-                && !(p.getRank() == Rank.EIGHT
-                    && movedMinerCount < 2))
+                && (isInvincible(p)
+                    || (!isExpendable(p)
+                        && p.getRank() != Rank.EIGHT)
+                    || (isExpendable(p)
+                        && p.getRank() != Rank.EIGHT
+                        && movedExpendableCount < 3)
+                    || (p.getRank() == Rank.EIGHT
+                        && movedMinerCount < 2)))
                 unmovedValue[i] = 0;
             else {
 
@@ -1606,9 +1606,8 @@ public class TestingBoard extends Board
 		// intact to prevent the opponent from guessing the
 		// real structure.
 
-				int rank = p.getRank().ordinal();
 				unmovedValue[i] += VALUE_MOVED
-                    + values[color][rank]/(VALUE_MOVED * 10);
+                    + values[color][rank.ordinal()]/VALUE_NINE;
 			}
 
         // Encourage the unmoved pieces in the foray lane to move
@@ -1640,13 +1639,14 @@ public class TestingBoard extends Board
 		// to attack other opponent pieces.  But only if
 		// the AI has a fighting chance.
 
-            if ((p.getRank() != Rank.BOMB
-                && p.getRank() != Rank.FLAG
+            if ((rank != Rank.BOMB
+                && rank != Rank.FLAG
                 && isRiskyToMove(p)
-                && (lowerKnownOrSuspectedRankCount[1-p.getColor()][p.getRank().ordinal()-1] >= 2
+                && (lowerKnownOrSuspectedRankCount[1-p.getColor()][rank.ordinal()-1] >= 2
                     || atRiskCount >= 1
                     || rnd.nextInt(10) != 0)))
-                unmovedValue[i] += VALUE_MOVED*2;
+                unmovedValue[i] += VALUE_MOVED
+                    + values[color][rank.ordinal()]/VALUE_NINE * 10;
 		} // i
 
 		// Call genUnknownRank again because setUnmovedValues()
@@ -3971,6 +3971,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// repetitive moves are OK
         // (until Two Squares Rule kicks in)
 
+        if (depth == 0)
+            depth = depth;
+
 		if (isTwoSquaresChase())
 			value++;
 		else if (isRepeatedPosition())
@@ -3996,8 +3999,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		moveHistory(fp, tp, m);
 
 		if (depth == 0) {
-			assert boardHistory[0].hash == hashTest[0] : "bug: hash changed before move "  + from + " to " + to;
-			assert boardHistory[1].hash == hashTest[1] : "bug: hash changed before move "  + from + " to " + to;
+			assert boardHistory.hash == hashTest : "bug: hash changed before move "  + from + " to " + to;
 		}
 
 		clearPiece(from);
@@ -5973,7 +5975,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         ghostPieceStack.add(ghostPiece);
         ghostPiece = null;
 
-        undoList.add(new UndoMove(fp, tp, m, boardHistory[bturn].hash, boardHistory[1-bturn].hash, value));
+        undoList.add(new UndoMove(fp, tp, m, boardHistory.hash, value));
         bturn = 1 - bturn;
         depth++;
     }
@@ -6003,8 +6005,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				grid.setPiece(um.getTo(), tp);
 			}
 
-			boardHistory[bturn].hash = um.hash;
-			boardHistory[1-bturn].hash = um.hash2;
+			boardHistory.hash = um.hash;
 		}
 
         // place ghost piece
@@ -6023,20 +6024,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
         undoList.add(UndoMove.NullMove);
         bturn = 1 - bturn;
-		depth++;
-	}
-
-	public void pushFleeMove(Piece fp)
-	{
-        if (ghostPiece != null)
-            clearPiece(ghostPiece.getIndex());
-        ghostPieceStack.add(ghostPiece);
-        ghostPiece = null;
-
-		int i = fp.getIndex();
-        undoList.add(new UndoMove(fp, null, Move.packMove(i, i), boardHistory[bturn].hash, boardHistory[1-bturn].hash, value));
-		grid.clearPiece(i);
-		bturn = 1 - bturn;
 		depth++;
 	}
 
@@ -8869,6 +8856,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         }
 
         s += "Lotto: " + lotto + "\n";
+        s += "hash: " + boardHistory.hash + "\n";
+        s += "hash1: " + boardHistory.hash1 + "\n";
+        s += "hash2: " + boardHistory.hash2 + "\n";
         s += "lowestUnknownNotSuspectedRank: " + lowestUnknownNotSuspectedRank + "\n";
         s += "lowestUnknownExpendableRank: " + lowestUnknownExpendableRank + "\n";
 

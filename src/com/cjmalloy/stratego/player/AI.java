@@ -1170,6 +1170,8 @@ public class AI implements Runnable
 		if (bg.get(0) == 0 && bg.get(1) == 0)
 			return best;
 
+        ArrayList<Integer> queue = new ArrayList<Integer>();
+
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
 			if (bi == 0)
@@ -1184,7 +1186,6 @@ public class AI implements Runnable
 
 				Piece fp = b.getPiece(i);
 				Rank fprank = fp.getRank();
-				int enemies = b.grid.enemyCount(fp);
 
 		// TBD: Far attacks by nines or unknown pieces
 		// are not handled.  This would improve the
@@ -1208,37 +1209,30 @@ public class AI implements Runnable
 		// all end nodes are now active moves and always affect
 		// the qs result from move to move.
 
-			boolean isBombOrFlag = (fprank == Rank.BOMB
-				|| fprank == Rank.FLAG);
-            if (isBombOrFlag
-                && fp.isKnown())
-                continue;
+                boolean isBombOrFlag = (fprank == Rank.BOMB
+                    || fprank == Rank.FLAG);
+                if (isBombOrFlag
+                    && fp.isKnown())
+                    continue;
 
-            boolean noFlee = isBombOrFlag;
-			for (int d : dir ) {
-				int t = i + d;	
+                int enemies = b.grid.enemyCount(fp);
+                for (int d : dir ) {
+                    int t = i + d;	
 
-				Piece tp = b.getPiece(t); // defender
-                int move = Move.packMove(i, t);
+                    Piece tp = b.getPiece(t); // defender
+                    if (tp == null
+                        || tp.getColor() != 1 - b.bturn
+                        || (isBombOrFlag
+                                && !b.isEffectiveBombBluff(fp,tp)))
+                        continue;
 
-				if (tp == null) {
-					if (noFlee
-						|| b.isPossibleTwoSquares(move))
-						continue;
+                    int move = Move.packMove(i, t);
+
+                    boolean wasKnown = tp.isKnown();
+                    int bvalue = b.boardValue(b.getValue());
                     // log(DETAIL, "\n   qs(" + n + "x.):" + logMove(b, n, move) + " " + b.getValue());
-					b.pushFleeMove(fp);
-					noFlee = true;
-
-				} else if (tp.getColor() != 1 - b.bturn
-                    || (isBombOrFlag
-                            && !b.isEffectiveBombBluff(fp,tp)))
-					continue;
-				else {
-					boolean wasKnown = tp.isKnown();
-					int bvalue = b.boardValue(b.getValue());
-                    // log(DETAIL, "\n   qs(" + n + "x.):" + logMove(b, n, move) + " " + b.getValue());
-					b.move(move);
-					int v = -b.boardValue(b.getValue()) - bvalue;
+                    b.move(move);
+                    int v = -b.boardValue(b.getValue()) - bvalue;
 
 		// It is tempting to skip losing captures to save time
 		// (such as attacking a known lower ranked piece).
@@ -1314,39 +1308,115 @@ public class AI implements Runnable
 		// was unknown and unmoved to support foray mining where an expendable
 		// piece attacks while a power piece sits in wait.
 
-                        if ((wasKnown || tp.hasMoved())
-                            && v < 0
-                            && tp == b.getPiece(t)	// lost the attack
-                            && enemies < 2) {
-                                b.undo();
-                                continue;
-                        }
+                    if ((wasKnown || tp.hasMoved())
+                        && v < 0
+                        && tp == b.getPiece(t)	// lost the attack
+                        && enemies < 2) {
+                            b.undo();
+                            continue;   // do not bother to evaluate move
                     }
-            
-                    int vm = -qs(n-1, -beta, -alpha);
-
                     b.undo();
 
-                    // log(DETAIL, " " + b.boardValue(vm));
+                    queue.add(move);
+                }   // dir
+            } // data
+        } // bi
+
+        int minvm = -22222;
+        int maxvm = best;   // attacks are optional
+
+        // Version 13 redefines qs so that a player is not rewarded for chasing
+        // a opponent piece when another player piece is under immediate attack.  This eliminates
+        // chases that are delaying moves for imminent loss.
+
+        // For example,
+        // -- -- xx xx -- -- xx xx r? --
+        // -- -- -- -- -- -- -- -- -- b8
+        // -- -- r? -- -- -- -- rB -- r?
+        // -- RB -- B4 -- -- -- -- -- --
+        // Blue Eight is under attack and there is nothing that Blue can do about it.
+        // If Blue Four chases unknown Red on the left side of the board,
+        // Version 12 qs rewarded Blue, because qs would
+        // evaluate r?xb8 and then allow B4xr?.  But Blue will simply move unknown Red after
+        // each chase until the cows come home and then attack Blue Eight.
+
+        // If there is only one attack and the defender can move,
+        // opponent will move it, so qs does not change.  This was the same in Version 12.
+
+        // However, in Version 13, if there are multiple pieces attacked that can move,
+        // then qs is minimum of the attacks, because opponent
+        // will move the most valuable piece.  In the example, Blue qs is the minimum of B4xr?
+        // and B8xr?.  B8xr? is negative, so Blue would choose the null move option instead.
+        // Red qs will then be r?xb8, because Blue chose the null move option.
+
+        // Note that this still does nothing to stop chases that delay eventual loss.
+
+        int count = 0;
+        Move m = b.getLastMove();
+        while (count < queue.size()) {
+            int move = queue.get(count++);
+            int from = Move.unpackFrom(move);
+            int to = Move.unpackTo(move);
+            Piece fp = b.getPiece(from);
+            Piece tp = b.getPiece(to);
+
+            boolean canflee = false;
+            if (m == UndoMove.NullMove || m.getPiece() != tp)
+                for (int d : dir ) {
+                    int t = to + d;	// flee square
+                    if (!Grid.isValid(t))
+                        continue;
+                    Piece fleetp = b.getPiece(t);
+
+            // can the piece can flee safely?
+
+                    if ((fleetp == null
+                        && !b.isPossibleTwoSquares(move)
+                        && !b.isGuarded(tp, t))
+                        || (fleetp != null
+                            && fleetp.getColor() != tp.getColor()
+                            && fleetp.getRank() != Rank.BOMB)) {
+                        canflee = true;
+                        break;
+                    }
+                } // dir
+
+        // if the piece cannot flee or there are 2 or more attacks
+        // to consider, evaluate the attack move
+
+            if (!canflee || queue.size() >= 2) {
+                b.move(move);
+                int vm = -qs(n-1, -beta, -alpha);
+                b.undo();
+
+                if (!canflee)
+                    maxvm = Math.max(maxvm, vm);
+                else if (minvm == -22222)
+                    minvm = vm;
+                else
+                    minvm = Math.min(minvm, vm);
+
+            } // evaluate attack
+
+        } // while moves
+
+        int vm = Math.max(maxvm, minvm);
 
         // Save worthwhile attack (vm > best)
         // (if vm < best, the player will play
         // some other move)
 
-                    if (vm > best)
-                        best = vm;
+        if (vm > best)
+            best = vm;
 
-                    alpha = Math.max(alpha, vm);
+        alpha = Math.max(alpha, vm);
 
-                    if (alpha >= beta)
-                        return vm;
-                } // dir
-            } // data
-		} // bi
+        if (alpha >= beta)
+            return vm;
 
 		return best;
-	}
-
+    }
+    
 	boolean endOfSearch()
 	{
 		if (b.depth == -1)

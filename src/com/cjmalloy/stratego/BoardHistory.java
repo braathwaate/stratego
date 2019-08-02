@@ -24,9 +24,11 @@ import java.util.HashSet;
 public class BoardHistory
 {
 	public long hash;
+	public long hash1;
+	public long hash2;
 	protected HashSet<Long>  hashset = new HashSet<Long>();
 	public void clear() { hashset.clear(); hash = 0; }
-	public void add() { hashset.add(hash); }
+	public void add() { hash2=hash1; hash1=hash; hashset.add(hash); }
 	public boolean get() { return hashset.contains(hash); }
 	public void remove() { hashset.remove(hash); }
 }

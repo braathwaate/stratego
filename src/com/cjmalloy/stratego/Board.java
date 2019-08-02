@@ -57,7 +57,7 @@ public class Board
 	protected static final int[] dir = { -11, -1,  1, 11 };
     protected static long[][][][][] boardHash = new long[15][8][2][82][121];
 	protected static long[] depthHash = new long[40];	// MAX_DEPTH + QSMAX
-	protected static BoardHistory[] boardHistory = new BoardHistory[2];
+	protected static BoardHistory boardHistory = new BoardHistory();
     protected int[][] knownRank = new int[2][12];   // discovered ranks
     protected int[][] allRank = new int[2][12];    // ranks in trays
 	protected int[][] suspectedRank = new int[2][12];	// guessed ranks
@@ -182,8 +182,7 @@ public class Board
 		tray.addAll(blue);
 
 		Collections.sort(tray);
-		boardHistory[0] = new BoardHistory();
-		boardHistory[1] = new BoardHistory();
+		boardHistory = new BoardHistory();
 	}
 
 	public Board(Board b)
@@ -345,8 +344,7 @@ public class Board
 			setup[i] = null;
 
 		bturn = 0;
-		boardHistory[0].clear();
-		boardHistory[1].clear();
+		boardHistory.clear();
 	}
 	
 	public Piece getPiece(int x, int y)
@@ -456,7 +454,7 @@ public class Board
 	// worth distinguishing is an unknown AI Nine moving more than one
 	// square.
 
-	static public long hashPiece(int turn, Piece p, int i)
+	static public long hashPiece(Piece p, int i)
 	{
         return boardHash
             [p.isKnown() ? Rank.NIL.ordinal() : p.getActingRankChase().ordinal()]
@@ -468,14 +466,12 @@ public class Board
 
 	public void rehash(Piece p, int i)
 	{
-		boardHistory[Settings.topColor].hash ^= hashPiece(Settings.topColor, p, i);
-		boardHistory[Settings.bottomColor].hash ^= hashPiece(Settings.bottomColor, p, i);
+		boardHistory.hash ^= hashPiece(p, i);
 	}
 
 	public void hashDepth(int depth)
 	{
-		boardHistory[Settings.topColor].hash ^= depthHash[depth];
-		boardHistory[Settings.bottomColor].hash ^= depthHash[depth];
+		boardHistory.hash ^= depthHash[depth];
 	}	
 
 	public UndoMove getLastMove()
@@ -860,12 +856,11 @@ public class Board
 	// the hash is the position prior to the move
 	protected void moveHistory(Piece fp, Piece tp, int m)
 	{
-		UndoMove um = new UndoMove(fp, tp, m, boardHistory[bturn].hash,
-            boardHistory[1-bturn].hash,  0);
+		UndoMove um = new UndoMove(fp, tp, m, boardHistory.hash,  0);
 		undoList.add(um);
 
 		// save the hash to detect board repetitions
-		boardHistory[bturn].add();
+		boardHistory.add();
 		bturn = 1 - bturn;
 
 	}
@@ -889,7 +884,7 @@ public class Board
 	}
 
 	// check if the square is guarded
-	boolean isGuarded(Piece trapped, int j)
+	public boolean isGuarded(Piece trapped, int j)
 	{
         int color = trapped.getColor();
         Rank rank = trapped.getRank();
@@ -3832,7 +3827,7 @@ public class Board
 
 		// If opponent piece does not move between same two squares,
 		// then this move cannot result in a two squares victory.
-		Move m4 = getLastMove(4);
+		UndoMove m4 = getLastMove(4);
 		if (m4 == UndoMove.NullMove)
 		 	return false;
 
@@ -3889,8 +3884,15 @@ public class Board
 		// (if they are equal, it means we are at position D
 		// rather than at position C)
 		// -- then this is a repetitive move
+
+        // Note: versions 11-12 wrongly compared boardHistory.hash to m5.hash,
+        // boardHistory.hash is like m0.  Comparisons only make sense 4 moves
+        // back, m0 and m4, m1 and m5, and m2 and m6.  I am guessing that the
+        // change was to fix a bug where the AI did not see a two squares combo,
+        // so that bug is back again.
+
 		if (m == m5.getMove()
-			&& boardHistory[bturn].hash == m5.hash
+			&& boardHistory.hash == m4.hash
 			&& !m6.equals(m2))	// compare Move, not UndoMove
 			return false;
 
@@ -3921,7 +3923,7 @@ public class Board
 		// has seen the position that the
 		// current player has just created.
 		// 
-		return boardHistory[bturn].get();
+		return boardHistory.get();
 	}
 
 	public void undoLastMove()
@@ -3930,8 +3932,7 @@ public class Board
 		if (size < 2)
 			return;
 
-		boardHistory[0].remove();
-		boardHistory[1].remove();
+		boardHistory.remove();
 
 		for (int j = 0; j < 2; j++, size--) {
 			UndoMove undo = undoList.get(size-1);
@@ -4094,7 +4095,7 @@ public class Board
 
 	public long getHash()
 	{
-		return boardHistory[bturn].hash;
+		return boardHistory.hash;
 	}
 
 	protected Piece getSetupPiece(int i)
