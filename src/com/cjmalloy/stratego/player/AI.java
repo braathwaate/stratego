@@ -442,43 +442,59 @@ public class AI implements Runnable
                 assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : "getMoves only for movable pieces, not " + fp.isKnown() + " " + fprank + " at " + i;
 
 		// FORWARD PRUNING:
-                // Unmoved unknown AI pieces really aren't very
-                // scary to the opponent, unless they can attack
-                // on their first move.  The AI has to generate
-                // moves for its unmoved unknown pieces because
-                // lower ranks may be needed for defense.  But it
-                // is unlikely (but possible) that the piece
-                // will be part of a successful attack.
-                // TBD: So it may be possible to prune off unmoved
-                // high rank piece moves in the active area.
-                //
-                // Unknown unmoved opponent pieces are also not
-                // very scary to the AI.
-                // Prior to version 9.3, the AI didn't generate moves
-                // for any unknown unmoved opponent piece unless
-                // it could attack on its first move.  This effective
-                // forward pruning was generalized in 9.3 to include
-                // all inactive pieces in version 9.4.
-                //
-                // But version 9.4 suffers from a horizon effect
-                // when these pieces are in the active area, but far
-                // away from potential AI targets.  If the extended
-                // search is not deep enough, the AI may mistakely
-                // assume an attack by an unknown piece is the best
-                // move, and allow some lesser attack on its pieces,
-                // thus losing material.
-                //
-                // So in version 9.5, the AI prunes off moves by
-                // any unknown opponent piece more than 1 space away, unless
-                // the unknown piece was the last piece moved by
-                // the opponent.
-		//
+        // Unmoved unknown AI pieces really aren't very
+        // scary to the opponent, unless they can attack
+        // on their first move.  The AI has to generate
+        // moves for its unmoved unknown pieces because
+        // lower ranks may be needed for defense.  But it
+        // is unlikely (but possible) that the piece
+        // will be part of a successful attack.
+        // TBD: So it may be possible to prune off unmoved
+        // high rank piece moves in the active area.
+
+        // Unknown unmoved opponent pieces are also not
+        // very scary to the AI.
+        // Prior to version 9.3, the AI didn't generate moves
+        // for any unknown unmoved opponent piece unless
+        // it could attack on its first move.  This effective
+        // forward pruning was generalized in 9.3 to include
+        // all inactive pieces in version 9.4.
+
+        // But version 9.4 suffers from a horizon effect
+        // when these pieces are in the active area, but just far
+        // enough away from potential AI targets to cause a horizon
+        // effect if the unknown piece can reach an advantageous target.
+        // The AI would then assume that is the best move and
+        // allow some lesser attack on its pieces,
+        // thus losing material.  (Mitigated by distanceFactor()).
+
+        // So in version 9.5, the AI prunes off moves by
+        // any unknown opponent piece more than 1 space away, unless
+        // the unknown piece was the last piece moved by
+        // the opponent.
+
 		// (Note: if n <= 3, those moves are already pruned off)
+
+        // Pruning in this fashion often works, but consider this
+        // example:
+        // -- r? xx xx R1 -- xx xx -- --
+        // -- -- -- r? -- -- -- -- -- --
+        // -- -- -- r? -- -- r? B8 -- --
+        // r? -- r? -- -- r? RB -- r? --
+        // r? -- r? r? -- RB RF RB -- rB
+        // Unknown Red on g8 flees from Blue Eight to g7, giving
+        // Blue Eight clear access to the flag structure after
+        // 8h8-g8.  But the unknown Red on f9 gets pruned off,
+        // so Red plays some other move allowing the opponent to play f9-f8,
+        // blocking access to the flag structure.
+
+        // Version 13 excludes pruning of pieces near the flag structure
 
 		if (n > 3
 			&& fprank == Rank.UNKNOWN
 			&& fp != lastMovedPiece
-			&& !b.grid.isCloseToEnemy(b.bturn, i, 1))
+			&& !b.grid.isCloseToEnemy(b.bturn, i, 1)
+            && !b.isNearOpponentFlag(i))
 			return true;
 
 		if (b.grid.hasAttack(b.bturn, i))
@@ -1128,6 +1144,7 @@ public class AI implements Runnable
 	private int qs(int n, int alpha, int beta)
 	{
 		int bvalue = b.boardValue(b.getValue());
+        
 		if (n < 1)
 			return bvalue;
 
@@ -1137,7 +1154,8 @@ public class AI implements Runnable
 		b.pushNullMove();
 		int best = -qsbest( n, -beta, -alpha, -bvalue);
 		b.undo();
-		return qsbest(n, alpha, beta, best);
+		best = qsbest(n, alpha, beta, best);
+        return best;
 	}
 
 
@@ -1170,7 +1188,10 @@ public class AI implements Runnable
 		if (bg.get(0) == 0 && bg.get(1) == 0)
 			return best;
 
-        ArrayList<Integer> queue = new ArrayList<Integer>();
+        int maxvm = best;   // attacks are optional
+        int maxvm1 = best;
+        int maxvm2 = best;
+        Move lastmove = b.getLastMove();
 
 		for (int bi = 0; bi < 2; bi++) {
 			int k;
@@ -1227,6 +1248,67 @@ public class AI implements Runnable
                         continue;
 
                     int move = Move.packMove(i, t);
+
+        // Version 13 redefines qs so that a player is not rewarded for chasing
+        // a opponent piece when another player piece is under immediate attack.  This eliminates
+        // chases that are delaying moves for imminent loss.
+
+        // For example,
+        // -- -- xx xx -- -- xx xx r? --
+        // -- -- -- -- -- -- -- -- -- b8
+        // -- -- r? -- -- -- -- rB -- r?
+        // -- RB -- B4 -- -- -- -- -- --
+        // Blue Eight is under attack and there is nothing that Blue can do about it.
+        // If Blue Four chases unknown Red on the left side of the board,
+        // Version 12 qs rewarded Blue, because qs would
+        // evaluate r?xb8 and then allow B4xr?.  But Blue will simply move unknown Red after
+        // each chase until the cows come home and then attack Blue Eight.
+
+        // If there is only one attack and the defender can move,
+        // opponent will move it, so qs does not change.  This was the same in Version 12.
+
+        // However, in Version 13, if there are multiple pieces attacked that can move,
+        // then qs is minimum of the attacks, because opponent
+        // will move the most valuable piece.  In the example, Blue qs is the minimum of B4xr?
+        // and B8xr?.  B8xr? is negative, so Blue would choose the null move option instead.
+        // Red qs will then be r?xb8, because Blue chose the null move option.
+
+        // Note that this still does nothing to stop chases that delay eventual loss.
+
+                    boolean canflee = false;
+
+        // When n == QSMAX, it is the first time qs is called after the player
+        // makes his move.  The opponent is awarded any attack.
+        // When n < QSMAX, the first move in qs has already been played.  If the prior
+        // move is a null move or the opponent attacks a piece other than the
+        // one the player just used to make a capture,
+        // then the opponent is awarded only those attacks
+        // where the defender cannot flee or has a choice of multiple attacks.
+        // This avoids a reward to a pointless chase when another player piece
+        // is under direct attack.
+
+                    if (lastmove == UndoMove.NullMove
+                            || (n < QSMAX && lastmove.getPiece() != tp))
+                        for (int fleedir : dir ) {
+                            int fleeto = t + fleedir;	// flee square
+                            if (!Grid.isValid(fleeto)
+                                || fleeto == i)
+                                continue;
+                            Piece fleetp = b.getPiece(fleeto);
+
+            // Is the piece able to flee?
+            // Note: although the piece may be able to flee, the flee move may
+            // not be a good one, but that is not possible to determine in qs.
+            // Only if the piece is trapped without legal moves is the move
+            // value always computed.
+
+                            if ((fleetp == null
+                                || fleetp.getColor() != tp.getColor())
+                                && !b.isPossibleTwoSquares(Move.packMove(t, fleeto))) {
+                                canflee = true;
+                                break;
+                            }
+                        } // for flee dir
 
                     boolean wasKnown = tp.isKnown();
                     int bvalue = b.boardValue(b.getValue());
@@ -1315,92 +1397,26 @@ public class AI implements Runnable
                             b.undo();
                             continue;   // do not bother to evaluate move
                     }
+
+                    int vm = -qs(n-1, -beta, -alpha);
                     b.undo();
 
-                    queue.add(move);
+                    if (!canflee)
+                        maxvm = Math.max(maxvm, vm);
+                    else if (vm > maxvm1) {
+                        maxvm2 = maxvm1;
+                        maxvm1 = vm;
+                    } else if (vm > maxvm2)
+                        maxvm2 = vm;
+
                 }   // dir
             } // data
         } // bi
 
-        int minvm = -22222;
-        int maxvm = best;   // attacks are optional
-
-        // Version 13 redefines qs so that a player is not rewarded for chasing
-        // a opponent piece when another player piece is under immediate attack.  This eliminates
-        // chases that are delaying moves for imminent loss.
-
-        // For example,
-        // -- -- xx xx -- -- xx xx r? --
-        // -- -- -- -- -- -- -- -- -- b8
-        // -- -- r? -- -- -- -- rB -- r?
-        // -- RB -- B4 -- -- -- -- -- --
-        // Blue Eight is under attack and there is nothing that Blue can do about it.
-        // If Blue Four chases unknown Red on the left side of the board,
-        // Version 12 qs rewarded Blue, because qs would
-        // evaluate r?xb8 and then allow B4xr?.  But Blue will simply move unknown Red after
-        // each chase until the cows come home and then attack Blue Eight.
-
-        // If there is only one attack and the defender can move,
-        // opponent will move it, so qs does not change.  This was the same in Version 12.
-
-        // However, in Version 13, if there are multiple pieces attacked that can move,
-        // then qs is minimum of the attacks, because opponent
-        // will move the most valuable piece.  In the example, Blue qs is the minimum of B4xr?
-        // and B8xr?.  B8xr? is negative, so Blue would choose the null move option instead.
-        // Red qs will then be r?xb8, because Blue chose the null move option.
-
-        // Note that this still does nothing to stop chases that delay eventual loss.
-
-        int count = 0;
-        Move m = b.getLastMove();
-        while (count < queue.size()) {
-            int move = queue.get(count++);
-            int from = Move.unpackFrom(move);
-            int to = Move.unpackTo(move);
-            Piece fp = b.getPiece(from);
-            Piece tp = b.getPiece(to);
-
-            boolean canflee = false;
-            if (m == UndoMove.NullMove || m.getPiece() != tp)
-                for (int d : dir ) {
-                    int t = to + d;	// flee square
-                    if (!Grid.isValid(t))
-                        continue;
-                    Piece fleetp = b.getPiece(t);
-
-            // can the piece can flee safely?
-
-                    if ((fleetp == null
-                        && !b.isPossibleTwoSquares(move)
-                        && !b.isGuarded(tp, t))
-                        || (fleetp != null
-                            && fleetp.getColor() != tp.getColor()
-                            && fleetp.getRank() != Rank.BOMB)) {
-                        canflee = true;
-                        break;
-                    }
-                } // dir
-
         // if the piece cannot flee or there are 2 or more attacks
         // to consider, evaluate the attack move
 
-            if (!canflee || queue.size() >= 2) {
-                b.move(move);
-                int vm = -qs(n-1, -beta, -alpha);
-                b.undo();
-
-                if (!canflee)
-                    maxvm = Math.max(maxvm, vm);
-                else if (minvm == -22222)
-                    minvm = vm;
-                else
-                    minvm = Math.min(minvm, vm);
-
-            } // evaluate attack
-
-        } // while moves
-
-        int vm = Math.max(maxvm, minvm);
+        int vm = Math.max(maxvm, maxvm2);
 
         // Save worthwhile attack (vm > best)
         // (if vm < best, the player will play

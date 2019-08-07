@@ -3138,7 +3138,7 @@ public class Board
         int color = p.getColor();
         int index = p.getIndex();
         int dir = (color == Settings.topColor ? 11 : -11);
-        if (isPieceLocked(p))
+        if (Grid.getY(index) < Grid.yside(color, 4) && isPieceLocked(p))
             return getFlagBomb(getPiece(index + dir));
         return p;
     }
@@ -4092,6 +4092,17 @@ public class Board
 		Rank rank = p.getRank();
 		return isInvincibleDefender(p.getColor(), rank.ordinal());
 	}
+
+    public boolean isNearOpponentFlag(int to)
+    {
+        return flag[Settings.bottomColor] != 0 &&
+            Grid.steps(to, flag[Settings.bottomColor]) <= 4;
+    }
+
+    public boolean isNearOpponentFlag(Piece p)
+    {
+        return isNearOpponentFlag(p.getIndex());
+    }
 
 	public long getHash()
 	{
