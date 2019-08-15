@@ -816,8 +816,7 @@ public class Board
 
     protected void updateSafe(Piece p)
     {
-
-        // clear safe if AI moves another piece
+        //  Clear safe on *prior* piece if player moved some other piece
 
         UndoMove m3 = getLastMove(3);
         if (m3 != UndoMove.NullMove) {
@@ -827,10 +826,24 @@ public class Board
                 priorPiece.clear(Piece.SAFE);
         }
 
+        // Unknown pieces are safe until they become known
+        // because it is unlikely that an opponent will use its
+        // unknown superior pieces on random attacks that would
+        // reveal their identity in exchange for possibly an low
+        // valued piece.
+
         if (!p.isKnown())
             return;
 
-        // Moved piece is known, might not be safe anymore
+        // Known piece might not be safe anymore
+
+        // clear safe once the AI captures a valuable piece
+        // - one rank lower (don't push your luck)
+
+        if (m3 != UndoMove.NullMove
+            && m3.tp != null
+            && p.getRank().ordinal() - 1 != m3.tp.getRank().ordinal())
+            p.clear(Piece.SAFE);
 
         UndoMove m2 = getLastMove(2);
 
@@ -1183,7 +1196,7 @@ public class Board
         // blufferRisk is increased and the chase rank is reset to the
         // newly chased piece.  If the opponent continues in this fashion,
         // blufferRisk will continue to increase to the point where the AI knows it
-        // is playing a human and can adjust its tactics accordingly.
+        // is playing more than a dumb botand can adjust its tactics accordingly.
         // Finally, if the piece corners a superior AI piece by chasing
         // it past unknowns, blufferRisk will quickly increase as
         // it passes each unknown to the point that the AI will realize the opponent
@@ -1200,11 +1213,19 @@ public class Board
         // do next.  The chaser could be a Three, Four, or Five, and
         // if a Four or Five, may chase an unknown.
 
+        // If the opponent forks a known strong AI piece and an unknown
+        // piece (say a Spy or an unknown One), what should the player do?
+        // If the strong AI piece flees, the opponent might only be
+        // a weak piece and then attack the unknown piece.  But it could
+        // be a strong piece chasing the known strong AI piece, especially
+        // if it is invincible.
+
         if (arank == Rank.SPY
             || (arank != Rank.NIL
                 && ((chaserRank.ordinal() >= 6 && arank.ordinal() <= 4)
                     || (chaserRank.ordinal() <= 4 && arank.ordinal() >= 6)))) {
                 chased.clearActingRankChase();
+
                 guess(false);
         }
 
@@ -1872,13 +1893,13 @@ public class Board
 		// If an unprotected unknown chaser forks a known and unknown
 		// piece, assume that the chaser is after the known piece.
 		// -- R3 --
-		// b? -- r?
+		// -- b? r?
 		// This assigns the chaser a rank of Two.
 		//
 		// If an unprotected unknown chaser forks two known pieces
 		// assume that the chaser is after the stronger known piece.
 		// -- R3 --
-		// b? -- R6
+		// -- b? R6
 		// This assigns the chaser a rank of Two.
 		//
 		// If the known piece is expendable (5-9) or a Bomb,
@@ -1886,11 +1907,22 @@ public class Board
 		// or the unknown, so set an unknown chase rank.
 		// For example,
 		// -- R5 --
-		// B? -- R?
+		// -- b? r?
 		// The chaser may be a Four or a Five, but it is more often
 		// a Five.  This check is consistent with setDirectChaseRank()
 		// which sets the chase rank to Unknown if a piece chases
 		// a known Five, and then an unknown, or vice versa.
+        //
+        // TBD: these assumptions make the AI vulnerable to
+        // the following attack:
+		// -- R3 --
+		// -- b? s?
+        // Blue has forked known Red Three and unknown Spy.  If
+        // Red Three flees, unknown Blue could be bluffing like
+        // a Scout and then attack Red Spy.
+        //
+        // Consider blufferRisk and whether Blue has dangerous
+        // invincible pieces.
 
 				Piece chased2 = null;
 				for (int d2 : dir) {
@@ -1913,6 +1945,10 @@ public class Board
 						&& chased2.isKnown()
 						&& chased2.getRank().ordinal() <= 4)
 						break;
+
+		// If the chased piece is forked with a superior
+        // piece, do not set chase rank based on the inferior piece
+        // (chase rank will be set based on the superior piece).
 
 					if (chased.isKnown()
 						&& chased2.isKnown()
@@ -2622,7 +2658,13 @@ public class Board
         // loss of pieces compromise the defense
 
                     if (p.getRank() == Rank.FLAG)
-                        power -= 3;
+                        power -= 2;
+
+        // Some intermediate pieces are needed
+
+                    if (p.getRank() == Rank.FOUR
+                        || p.getRank() == Rank.FIVE)
+                        power++;
 
                 }  // x
 			} // y
@@ -2636,7 +2678,7 @@ public class Board
                     forayLane[color] = 0;
                 continue;
             }
-            power -= lowrank[color];
+            power -= lowrank[color]*2;
 
         // Discourage forays in the center lane because they are much more
         // easily defended, but allow them rarely just to keep the

@@ -1151,7 +1151,7 @@ public class AI implements Runnable
 		// qs is the better of a null move or its attacks,
 		// in case the attacks worsen the position
 
-		b.pushNullMove();
+		b.pushMove(UndoMove.FleeMove);
 		int best = -qsbest( n, -beta, -alpha, -bvalue);
 		b.undo();
 		best = qsbest(n, alpha, beta, best);
@@ -1278,17 +1278,30 @@ public class AI implements Runnable
                     boolean canflee = false;
 
         // When n == QSMAX, it is the first time qs is called after the player
-        // makes his move.  The opponent is awarded any attack.
+        // makes his move.  The opponent is *always* awarded any attack, even
+        // if the last move was null.  A null move is just like forfeiting a turn
+        // and the opponent can play any move.
+
         // When n < QSMAX, the first move in qs has already been played.  If the prior
-        // move is a null move or the opponent attacks a piece other than the
+        // move is a flee move or the opponent attacks a piece other than the
         // one the player just used to make a capture,
         // then the opponent is awarded only those attacks
         // where the defender cannot flee or has a choice of multiple attacks.
+        // Note that here a flee move is like forfeiting a turn *except* if
+        // the opponent wants to attack a piece that can flee.
+
         // This avoids a reward to a pointless chase when another player piece
         // is under direct attack.
 
-                    if (lastmove == UndoMove.NullMove
-                            || (n < QSMAX && lastmove.getPiece() != tp))
+        // Note: the reason why the null and flee move meanings differ is because of the
+        // transposition table.  qs does not use the transposition table whereas
+        // the search tree does.  A search tree position must return
+        // a specific result for a specific position to prevent incorrect results
+        // for different positions.
+
+                    if (lastmove == UndoMove.FleeMove
+                        || (n < QSMAX
+                            && lastmove.getPiece() != tp))
                         for (int fleedir : dir ) {
                             int fleeto = t + fleedir;	// flee square
                             if (!Grid.isValid(fleeto)
@@ -1406,15 +1419,16 @@ public class AI implements Runnable
                     else if (vm > maxvm1) {
                         maxvm2 = maxvm1;
                         maxvm1 = vm;
-                    } else if (vm > maxvm2)
+                    } else if (vm > maxvm2) {
                         maxvm2 = vm;
+                    }
 
                 }   // dir
             } // data
         } // bi
 
         // if the piece cannot flee or there are 2 or more attacks
-        // to consider, evaluate the attack move
+        // to consider, the attack move is rewarded
 
         int vm = Math.max(maxvm, maxvm2);
 
@@ -2079,7 +2093,7 @@ public class AI implements Runnable
 		// for the opponent.  Even if the board is the same,
 		// the outcome is different if the player is different.
 		// So set a new hash and reset it after the move.
-			b.pushNullMove();
+			b.pushMove(UndoMove.NullMove);
 			return MoveResult.OK;
 		}
 
@@ -2152,7 +2166,7 @@ public class AI implements Runnable
 		return MoveResult.OK;
 	}
 
-	// An important complication with using a transposition table (TT)
+	// An important complication with using a position table (TT)
 	// in Stratego is that it is not just the position but how
 	// the position was reached that governs the result
 	// if the move sequence can lead to a Two Squares ending.
@@ -2586,7 +2600,7 @@ public class AI implements Runnable
 		int bestmove = entry.bestMove;
 		if (bestmove == 0) {
 			log(PV,  index + ":   (null)\n");
-			b.pushNullMove();
+			b.pushMove(UndoMove.NullMove);
 		} else if (bestmove == -1) {
 			log(PV,  index + ":   (end of game)\n");
 			return;

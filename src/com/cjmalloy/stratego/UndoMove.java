@@ -41,5 +41,6 @@ public class UndoMove extends Move
         public UndoMove() {super (null, 0); }
 
     public static final UndoMove NullMove = new UndoMove();
+    public static final UndoMove FleeMove = new UndoMove();
 }
 
