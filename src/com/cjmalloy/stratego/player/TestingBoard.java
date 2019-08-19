@@ -1758,7 +1758,7 @@ public class TestingBoard extends Board
 		for ( int r = 1; r <= 10; r++)
 			if (isExpendable(1-color, r)) {
                 int tmp[] = genDestTmpGuardedOpen(color, i, Rank.toRank(r));
-                for (TestPiece pp : planPiece[1-color][r]) {
+                for (TestPiece pp : planPiece[1-color][r-1]) {
                     if (pp != null) {
                         if (color == Settings.bottomColor) {
                             move(Move.packMove(pp.getIndex(), i), false);
@@ -3437,6 +3437,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		Piece attackPiece = null;
 		Piece unk = null;
 		Rank minDefendKnownRank = Rank.NIL;
+        boolean justmoved = false;
 		for (int d : dir) {
             int j = to + d;
             if (!Grid.isValid(j))
@@ -3475,9 +3476,19 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
         // TBD: not all unknowns are protectors: check flee rank
                
-                    if (unk == null
-                        || j == aito)
-                        unk = tp; 
+                    if (unk == null) {
+                        unk = tp;
+                        if (j == aito)
+                            justmoved = true;
+                    } else if (j == aito) {
+                        unk = tp;
+                        justmoved = true;
+
+        // Two unknowns and if neither moved to protect:
+        // AI believes opponent learns nothing
+
+                    } else if (justmoved == false)
+                        return 0;
                 }
                 continue;
             } else {
@@ -3533,7 +3544,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		for (int d : dir) {
 			Piece tp = getPiece(i + d);
 			if (tp == null
-                || tp.getColor() != 1 - Settings.bottomColor)
+                || tp.getColor() != Settings.topColor
+                || !tp.hasMoved())
 				continue;
             int vm = setProtector(to, tp, i+d);
             if (vm != 0)
@@ -3731,7 +3743,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
         // A piece is needed only if can act on its plan
 
-        if (p.plan[0][p.getIndex()] != DEST_VALUE_NIL)
+        if (p.plan[0][p.getIndex()] != DEST_VALUE_NIL
+            && p.plan[0][p.getIndex()] != DEST_PRIORITY_LANE)
             p.neededPiece = true;
 	}
 
@@ -6526,19 +6539,21 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // r? r? xx xx -- R1 xx xx -- --
         // r? -- xx xx R7 -- xx xx -- --
 
-        // This is an actual position.   Blue should move unknown Blue Nine on c3 to c2
-        // because it may dislodge Red Four into b3.   Blue 3 is about to be
-        // discovered anyway because Red Seven is barrelling towards it.   That would
+        // This is an actual position.   Blue should move unknown Blue Nine on c3 to b2
+        // because it may dislodge Red Four into c3.   Blue 3 is about to be
+        // discovered anyway because Red Seven is barreling towards it.   That would
         // force Blue 3 to approach Red Four, which would cause it to lose stealth
-        // anyway, and force Red Four to c3.  All this is very bad for Blue.
+        // anyway, and force Red Four to b3.  All this is very bad for Blue.
 
         // Chasing a Four with a bluffing piece signals
         // that the chaser is strong, perhaps a Three or Two, and this can result
         // in a very good outcome *if* the opponent falls for the bluff.
         // Version 13 bluffs againsts known Fours and Fives.
 
-		if (isExpendable(oppPiece)
-            || hasLowValue(oppPiece) && !oppPiece.isKnown())
+		if (hasLowValue(oppPiece)
+            && !((oppPiece.getRank() == Rank.FOUR
+                    || oppPiece.getRank() == Rank.FIVE)
+                && oppPiece.isKnown()))
             return pieceValue(aiPiece) / 2;
 
 		// An important bluff is entrapment of an opponent piece by an unknown AI low
@@ -7355,6 +7370,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		int vb = pieceValue(color, unknownRank[color]);
 
 		assert vb <= vs : "vb for " + unknownRank[color] + " must be less than vs for rank " + rank;
+
+        vb += (vs - vb) / blufferRisk;
 
 		return Math.min(vs, vb + (vs - vb) * p.getMoves() / (SUSPECTED_RANK_AGING_DELAY * blufferRisk));
 	}
