@@ -1167,15 +1167,19 @@ public class TestingBoard extends Board
 	// increase the value of the invincible piece.  Then there
 	// is no need to check for this special case in the EVEN code.
 
-	// TBD: If the AI is winning, it should also try for even
+	// If the AI is winning, it should also try for even
 	// exchanges.  Yet it can be better to avoid even exchanges
-	// and try to increase its advantage.  Currently, if it is
-    // winning and both pieces are known, half the value of an 
-    // unknown offsets the values, which if the AI is winning big,
-    // could be less than that needed to discourage the trade,
-    // so the AI *will* trade in that case (a good thing).
-    // This also means that if the AI is *losing* badly, it
-    // will eschew the trade.
+	// and try to increase its advantage.
+
+    // RB r8 -- -- -- -- rF -- r8 RB
+    // -- -- r9 r8 -- r3 B3 r5 r1 --
+    // Red has the move.  It is winning by more than a Three.
+    // Blue Three is not invincible (because of unknown Red One).
+    // Red thinks that its flag is safe because it still has
+    // unknown bombs, but Blue Three is lottoing (because it
+    // is losing) and plays B3xrF to win.
+    // Red should be more prudent in this case and
+    // play r3xB3 and win based on its material advantage.
 
 	// Note that suspected invincible pieces (except the One,
 	// if the AI has the Spy) must also
@@ -1215,7 +1219,9 @@ public class TestingBoard extends Board
     // thus preventing them from loss by the dangerous rank.
 
                     || (c == Settings.bottomColor
-                        && (rank > dangerousUnknownRank || rank > dangerousKnownRank)
+                        && (rank > dangerousUnknownRank
+                            || rank > dangerousKnownRank
+                            || isWinning(Settings.topColor) > VALUE_THREE)
                         && rank <= 4)) {
                     values[c][rank] += values[1-c][unknownRank[1-c]]/2;
 
@@ -1750,27 +1756,28 @@ public class TestingBoard extends Board
         genPlan(PLANB, false, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG, false);
 	}
 
-	protected void chaseWithWinningExpendable(Piece p, int i, int priority)
+	protected void chasePositiveResult(Piece p, int i, int priority)
 	{
         if (!grid.hasMove(p))
             return;
         int color = p.getColor();
-		for ( int r = 1; r <= 10; r++)
-			if (isExpendable(1-color, r)) {
-                int tmp[] = genDestTmpGuardedOpen(color, i, Rank.toRank(r));
-                for (TestPiece pp : planPiece[1-color][r-1]) {
-                    if (pp != null) {
-                        if (color == Settings.bottomColor) {
-                            move(Move.packMove(pp.getIndex(), i), false);
-                            int vm = value;
-                            undo();
-                            if (boardValue(value - vm) > 0)
-                                genNeededPlan(false, tmp, 1-color, pp, priority);
-                        } else
+		for ( int r = 1; r <= 10; r++) {
+            if (isInvincible(1-p.getColor(),r))
+                continue;
+            int tmp[] = genDestTmpGuardedOpen(color, i, Rank.toRank(r));
+            for (TestPiece pp : planPiece[1-color][r-1]) {
+                if (pp != null) {
+                    if (color == Settings.bottomColor) {
+                        move(Move.packMove(pp.getIndex(), i), false);
+                        int vm = value;
+                        undo();
+                        if (boardValue(vm - value) > 0)
                             genNeededPlan(false, tmp, 1-color, pp, priority);
-                    }
+                    } else
+                        genNeededPlan(false, tmp, 1-color, pp, priority);
                 }
             }
+        }
 	}
 
 	protected void chaseWithUnknown(int plan, Piece p, int tmp[], int priority)
@@ -1997,8 +2004,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			if (p.isSuspectedRank()
 				&& (chasedRank <= 3
 					|| chasedRank == Rank.SPY.ordinal())) {
-				chaseWithWinningExpendable(p, i, DEST_PRIORITY_CHASE);
-				chaseWithScout(p, i, DEST_PRIORITY_CHASE);
+				chasePositiveResult(p, i, DEST_PRIORITY_CHASE);
 			}
 
 		// Chase the piece with the same rank IF an EVEN exchange
@@ -2084,7 +2090,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // unless the exchange is in its favor,
         // because otherwise it is just moving pieces unnecessarily.
 
-            chaseWithWinningExpendable(p, i, DEST_PRIORITY_LOW);
+            chasePositiveResult(p, i, DEST_PRIORITY_LOW);
 
             if (!p.hasMoved())
                 return;	// do not comment this out!
@@ -3053,7 +3059,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// So the expendable will only be activated IF
 		// there is an open path to the flag.
 
-		chaseWithWinningExpendable(flagp, i, DEST_PRIORITY_ATTACK_FLAG);
+		chasePositiveResult(flagp, i, DEST_PRIORITY_ATTACK_FLAG);
 
 		// Note: planA and planB keep only 2 pieces
 		// occupied.  Thus it can happen that the AI has several
@@ -3744,7 +3750,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // A piece is needed only if can act on its plan
 
         if (p.plan[0][p.getIndex()] != DEST_VALUE_NIL
-            && p.plan[0][p.getIndex()] != DEST_PRIORITY_LANE)
+            && p.plan[1][p.getIndex()] != DEST_PRIORITY_LANE)
             p.neededPiece = true;
 	}
 
@@ -8459,9 +8465,36 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // This code is always in flux trying to make a better guess.
 
     // Note that this function passes in fpvalue and generally
-    // returns a percentage of it, not to exceed 1/2 (why?)
-    // fpvalue is not necessarily pieceValue(fp), because
+    // returns a percentage of it, not to exceed 1/2 because otherwise
+    // the AI will attack a piece of one rank lower protected by unknowns:
+    // -- -- --
+    // R2 B3 b?
+    // -- b? b?
+    // B3 is half the value of R2 so if b?xR2 is also half, the
+    // result is neutral, but this needs to be negative because it is
+    // likely that one of the Blue unknowns is Blue One.
+
+    // Note fpvalue is not necessarily pieceValue(fp), because
     // of apparentValue().
+
+    // Note: the AI has a horizon problem if it *could* be trapped
+    // by unknowns. For example,
+    // -- b? -- |
+    // -- -- R2 |
+    // -- b? -- |
+    // If the AI is Red, it will see that it cannot escape a trap
+    // by unknowns and this can cause it to blunder away material
+    // because it thinks that Blues best move is to trap it as
+    // b?xR2 or R2xb? is negative for the AI.
+
+    // distanceFactor, marking unknown pieces as Weak, and having
+    // riskOfWin return the highest possible value mitigate this
+    // issue somewhat, but if the pieces are close (as in the example)
+    // and are not marked Weak, the trap is significantly negative.
+
+    // Version 13 looks at boardPiece.  Like distanceFactor, this
+    // is used to increase riskOfWin if the AI piece does not
+    // move during the search.
 
     int riskOfWin(int fpvalue, Piece fp, Piece tp, boolean maybeBomb)
     {
@@ -8480,8 +8513,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // particularly so if the opponent has been chasing unknowns
 
             if (!(tp.isChasing(Rank.UNKNOWN)
-                && fprank.ordinal() >= 7))
-                v += fpvalue/ 4;
+                && fprank.ordinal() >= 7)) {
+                v += fpvalue/ 3;
+                if (((TestPiece)fp).boardPiece().getIndex() == fp.getIndex())
+                    v += fpvalue/ 3;
+            }
 
     // Could be a bomb
 
@@ -8510,7 +8546,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
             if (isForay(tp.getIndex())  // goal is to clear the foray line
                 || isForay(fp.getIndex())) // but may require aggression to get there
-                v *= 5;
+                v *= 4;
         } else if (tp.isSuspectedRank())
                 v /= 3;
 

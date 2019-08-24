@@ -2648,17 +2648,15 @@ public class Board
                         continue;
 
 		// Avoid pushing pieces and leaving unknown bombs behind
-		// because then the bombs become obvious 
+		// because then the bombs become obvious.
+        // The Flag and Spy also become vulnerable with the loss
+        // of other pieces compromise the defense.
 
                     if (!p.isKnown()
-                        && p.getRank() == Rank.BOMB)
+                        && (p.getRank() == Rank.BOMB
+                            || p.getRank() == Rank.SPY
+                            || p.getRank() == Rank.FLAG))
                         power-= Grid.yside(color,y);
-
-        // Don't foray on the flag side because the inevitable
-        // loss of pieces compromise the defense
-
-                    if (p.getRank() == Rank.FLAG)
-                        power -= 2;
 
         // Some intermediate pieces are needed
 
