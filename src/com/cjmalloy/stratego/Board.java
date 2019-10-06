@@ -67,7 +67,7 @@ public class Board
 	protected int[] piecesInTray = new int[2];
 	protected int[] remainingUnmovedUnknownPieces = new int[2];
 	protected int[] nUnknownWeakRankAtLarge = new int[2];
-	protected int[] flag = new int[2];  // flags
+	protected Piece[] flag = new Piece[2];  // flags
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected static final int BLUFFER_RANK_MIN = 2;
 	protected static final int BLUFFER_RANK_MAX = 5;
@@ -661,12 +661,48 @@ public class Board
 
 	void genFleeRank(Piece fp, Piece tp)
 	{
-		// delayPiece is lowest of:
-		// 1. the piece just captured
-		// 2. a piece chased by the last move
-		// 3. a piece fled from by the last move
-		Piece delayPiece = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), tp);
-		delayPiece = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), delayPiece);
+		// delayRank is lowest of:
+		// 1. the rank just captured
+		// 2. a rank chased by the last move
+        // 3. if the piece chased an unknown, then use the rank that just moved
+		// 4. a rank fled from by the last move
+        // 5. if the piece fled from an unknown, then use the rank that just moved
+
+		Piece delayPieceChase = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), tp);
+		Piece delayPieceFled = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), null);
+        Rank delayRank = Rank.NIL;
+        if (delayPieceFled != null)
+            delayRank = delayPieceFled.getApparentRank();
+        if (delayRank == Rank.UNKNOWN)
+            delayRank = fp.getApparentRank();
+
+        Rank delayRankChase = Rank.NIL;
+        if (delayPieceChase != null)
+            delayRankChase = delayPieceChase.getApparentRank();
+        if (delayRankChase == Rank.UNKNOWN)
+            delayRankChase = fp.getApparentRank();
+
+        if (delayRankChase.ordinal() < delayRank.ordinal())
+            delayRank = delayRankChase;
+
+        // If the opponent calls an AI bluff,
+        // the AI needs to curtail bluffing, or it will quickly lose
+        // many of its pieces through its aggressive bluffing.
+
+        // For now, just stop bluffing against Fives
+        // TBD: this code needs to be fleshed out
+        // perhaps choosing only a few pieces to bluff with
+
+        boolean noFiveBluffs = false;
+        if (fp.getColor() == Settings.bottomColor
+            && tp != null
+            && fp.getRank() == Rank.FIVE) {
+            UndoMove um = getLastMove(2);
+            if (um != null
+                && um.getPiece() == tp
+                && !um.fpcopy.isKnown())
+                noFiveBluffs = true;
+        }
 
 		for ( int i = 12; i <= 120; i++) {
 			if (!Grid.isValid(i))
@@ -676,6 +712,13 @@ public class Board
 				|| fleeTp == fp
 				|| fleeTp.isKnown())
 				continue;
+
+        // Setting flee rank to Five on all the unknown pieces
+        // makes the pieces ineffective for bluffing against Fives
+
+            if (noFiveBluffs
+                && fleeTp.getColor() == Settings.topColor)
+                fleeTp.setActingRankFlee(Rank.FIVE);
 			
 			for (int d : dir) {
 				int j = i + d;
@@ -696,22 +739,21 @@ public class Board
 					continue;
 
 		// Handle this case:
-		// | -- R? --
-		// | B3 B? R5
+		// | -- r? --
+		// | B3 b? R5
 		// | -- -- --
-		// After R5xB? and B3xR5, unknown Red gains an immediate
+		// After R5xb? and B3xR5, unknown Red gains an immediate
 		// flee rank so that Red will realize that it must move
 		// away.
 
 				Rank rank = op.getApparentRank();
-				if (op == fp) {
+				if (op == fp && fleeTp.getColor() == Settings.topColor) {
 					fleeTp.setActingRankFlee(rank);
 					continue;
 				}
 
 				if (rank == Rank.BOMB
-					|| (delayPiece != null
-						&& rank.ordinal() >= delayPiece.getApparentRank().ordinal()))	// new in version 9.5
+					|| rank.ordinal() >= delayRank.ordinal())	// new in version 9.5
 					continue;
 
 				fleeTp.setActingRankFlee(rank);
@@ -973,6 +1015,9 @@ public class Board
         Rank arank = chased.getActingRankChase();
 		Rank chaserRank = chaser.getApparentRank();
 
+        if (chased.isChasing(chaserRank))  // new in 13.1
+            return;
+
 		// Do not reset chase rank on a trapped piece
 		// that already has a chase rank
 		// even if it wasn't chased, because it may try
@@ -1190,25 +1235,26 @@ public class Board
         // and then chases an unknown, it is an indication of bluffing,
         // but if no rank is assigned, then revealRank will not update
         // blufferRisk when the piece finally attacks.
-        //
+
         // Therefore, in Version 12.1 if the opponent
         // chases both an unknown or inferior and also a superior piece,
         // blufferRisk is increased and the chase rank is reset to the
         // newly chased piece.  If the opponent continues in this fashion,
         // blufferRisk will continue to increase to the point where the AI knows it
         // is playing more than a dumb botand can adjust its tactics accordingly.
+
         // Finally, if the piece corners a superior AI piece by chasing
         // it past unknowns, blufferRisk will quickly increase as
         // it passes each unknown to the point that the AI will realize the opponent
         // is bluffing, allowing the superior piece to strike back.
-        //
+
         // Why is this important to know?  So that the AI can clobber
         // the bot faster.  Humans also invariably adjust their
         // play when they know they are playing a bot, and take advantage
         // of their predictable behavior.  So when a human plays the AI,
         // the AI begins predictably, but soon becomes unpredictable
         // itself in response to the opponent unpredictable behavior.
-        //
+
         // Note that chasing a Five tells us nothing about what it will
         // do next.  The chaser could be a Three, Four, or Five, and
         // if a Four or Five, may chase an unknown.
@@ -1220,14 +1266,24 @@ public class Board
         // be a strong piece chasing the known strong AI piece, especially
         // if it is invincible.
 
-        if (arank == Rank.SPY
-            || (arank != Rank.NIL
-                && ((chaserRank.ordinal() >= 6 && arank.ordinal() <= 4)
-                    || (chaserRank.ordinal() <= 4 && arank.ordinal() >= 6)))) {
-                chased.clearActingRankChase();
+        // Version 13.1 reverts to the 9.3/10.1 strategy.  The problem with
+        // 12.1 is that reset erases opponent piece chase history which is
+        // useful to establish that the piece is erratic.
+        // The rank miscalculation problem can then be solved
+        // by simply discarding the erratic pieces (see, maybeBluffing()).
+        // Also, once the AI establishes that the opponent is a bluffer,
+        // the AI will then guess erratic pieces could be weak as well.
 
-                guess(false);
-        }
+        // In 12.1, the AI was duped into assuming that the last rank that
+        // the opponent piece chased was significant and prior chases were
+        // not.  This assumption cannot be made.  The AI now assumes that the lowest
+        // rank is significant until proven otherwise, which is more conservative.
+
+        // The prior comments about the deficiencies of 9.3/10.1 remain correct.
+        // The AI will waste pieces attacking these erratic pieces.
+        // But since 9.3/10.1, reaching blufferRisk of 5 requires only 2 surprises,
+        // which is a cost that the AI can pay to determine if it is playing a dumb
+        // bot or a human.
 
         chased.setActingRankChaseEqual(chaserRank);
 	}
@@ -2144,7 +2200,8 @@ public class Board
 
 	boolean maybeBluffing(Piece p)
 	{
-		if (p.getMoves() >= SUSPECTED_RANK_AGING_DELAY)
+		if (p.isErraticChaser()
+            || p.getMoves() >= SUSPECTED_RANK_AGING_DELAY)
 			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
@@ -2229,7 +2286,7 @@ public class Board
 		for (int c = RED; c <= BLUE; c++) {
             piecesInTray[c] = 0;
             piecesMovableOrKnown[c] = 0;
-			flag[c] = 0;
+			flag[c] = null;
             for (int j=0;j<12;j++) {
                 allRank[c][j] = Rank.getRanks(Rank.toRank(j+1));
                 knownRank[c][j] = 0;
@@ -2266,7 +2323,7 @@ public class Board
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().ordinal()-1]++;
 			if (p.getRank() == Rank.FLAG)
-				flag[p.getColor()] = i;
+				flag[p.getColor()] = p;
 			else if (p.hasMoved() || p.isKnown())
 				piecesMovableOrKnown[p.getColor()]++;
 		}
@@ -2414,9 +2471,9 @@ public class Board
                                         grid.clearMovable(p);
 				} else {
 					p.setRank(Rank.FLAG);
-                                        p.makeKnown();
-					flag[c] = p.getIndex();
-                                        grid.clearMovable(p);
+                    p.makeKnown();
+					flag[c] = p;
+                    grid.clearMovable(p);
 				}
 
 			} // for
@@ -2773,7 +2830,7 @@ public class Board
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
 
-            Piece flagp = getPiece(flag[c]);
+            Piece flagp = flag[c];
             if (flagp != null && flagp.isKnown())
                 continue;
 
@@ -2864,9 +2921,9 @@ public class Board
 
 			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
 			if (c == Settings.bottomColor) {
-				flag[c] = maybe[bestGuess][0];
-				getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
-				grid.clearMovable(getPiece(flag[c]));
+				flag[c] = getPiece(maybe[bestGuess][0]);
+				flag[c].setSuspectedRank(Rank.FLAG);
+				grid.clearMovable(flag[c]);
 			}
 
 		// Mark surrounding pieces in all usual flag
@@ -3029,7 +3086,7 @@ public class Board
         // assert flagp != null : "Well, where IS the flag?";
 
 			if (flagp != null) {
-				flag[c] = flagp.getIndex();
+				flag[c] = flagp;
 				flagp.setSuspectedRank(Rank.FLAG);
 				grid.clearMovable(flagp);
                 for (int d : dir) {
@@ -3065,7 +3122,7 @@ public class Board
         // ensure isBombedFlag is set correctly for AI
 
             if (color == Settings.topColor
-                && maybe[i][0] == flag[Settings.topColor])
+                && maybe[i][0] == flag[Settings.topColor].getIndex())
                 return i;
 
 		// compute the number of bombs in the structure
@@ -3269,7 +3326,7 @@ public class Board
 		// of the last potential bomb structure, clear isBombedFlag.
 
         if (color == Settings.topColor
-            && flagi != flag[color])
+            && flagi != flag[color].getIndex())
             isBombedFlag[color] = false;
 	}
 	// ********* end of suspected ranks
@@ -4135,8 +4192,8 @@ public class Board
 
     public boolean isNearOpponentFlag(int to)
     {
-        return flag[Settings.bottomColor] != 0 &&
-            Grid.steps(to, flag[Settings.bottomColor]) <= 4;
+        return flag[Settings.bottomColor] != null &&
+            Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 4;
     }
 
     public boolean isNearOpponentFlag(Piece p)

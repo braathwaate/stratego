@@ -298,6 +298,28 @@ public class Piece implements Comparable<Piece>
 		flags &= ~LESS;
 	}
 
+    public boolean isErraticChaser()
+    {
+        return
+            (actingRankChase &
+                (Rank.ONE.ordinal()
+                |(1>>Rank.TWO.ordinal())
+                |(1>>Rank.THREE.ordinal())
+                |(1>>Rank.FOUR.ordinal()))) != 0
+            && (actingRankChase &
+                ((1>>Rank.SIX.ordinal())
+                |(1>>Rank.SEVEN.ordinal())
+                |(1>>Rank.EIGHT.ordinal())
+                |(1>>Rank.NINE.ordinal())
+                |(1>>Rank.SPY.ordinal())
+                |(1>>Rank.UNKNOWN.ordinal()))) != 0;
+    }
+
+	public void clearActingRankFlee()
+	{
+		actingRankFlee = 0;
+    }
+
 	public Rank convertActingRankChaseLess()
 	{
         if ((flags & LESS) != 0) {
