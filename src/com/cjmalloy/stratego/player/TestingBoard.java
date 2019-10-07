@@ -2959,11 +2959,13 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// is just larger than its expendable pieces, which
 		// the AI still uses to hammer into the remaining unknowns.
 
-            if (maybe_count[c] == 1)
-                makeFlagKnown(pflag);
+            if (isBombedFlag[c]) {
+                if (maybe_count[c] == 1)
+                    makeFlagKnown(pflag);
 
-            if (isBombedFlag[c] && opponentEightsAtLarge == 0)
-                    continue;
+                if (opponentEightsAtLarge == 0)
+                        continue;
+            }
 
 		// Note:Flag value depends on opponent Eight value above
 		setFlagValue(pflag);
@@ -6939,13 +6941,13 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		int v;
 
 	// If the flag is known (because it is the last piece on the board)
-    // or is a bombed flag
+    // (or because it was marked known because it is a bombed flag in
+    // the last structure on the board)
 	// it has a high value and must be protected or
 	// attacked at all costs.
 	// (But this value must be less than alpha/beta).
 
-		if ((pflag.isKnown()
-            || isBombedFlag[color])
+		if (pflag.isKnown()
 			&& (color == Settings.topColor
 				|| unknownBombs[Settings.bottomColor] == 0))
 			v = VALUE_ONE * 2;
