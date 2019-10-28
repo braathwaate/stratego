@@ -1662,7 +1662,7 @@ public class TestingBoard extends Board
                     || atRiskCount >= 1
                     || rnd.nextInt(10) != 0)))
                 unmovedValue[i] += VALUE_MOVED
-                    + values[color][rank.ordinal()]/VALUE_NINE * 10;
+                    + pieceValue(color, rank.ordinal())/VALUE_NINE * 10;
 		} // i
 
 		// Call genUnknownRank again because setUnmovedValues()
@@ -6815,6 +6815,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		if (c == Settings.bottomColor
 			|| invincibleWinRank[1-c] >= invincibleWinRank[c]) {
 			pflag.makeKnown();
+            pflag.setSuspectedRank(Rank.FLAG);
 		}
 	}
 
@@ -6850,14 +6851,18 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	// A worthwhile bomb of "color" is worth the value
 	// of the AI Miner, its stealth value, and more.
 	// This makes attacking or defending a worthwhile bomb always
-        // worth sacrificing an AI eight if necessary.  Thus, even
-        // if the opponent has expendable Miners, the AI will still
-        // sacrifice its miner to protect its bomb structure.
+    // worth sacrificing an AI eight if necessary.  Thus, even
+    // if the opponent has expendable Miners, the AI will still
+    // sacrifice its miner to protect its bomb structure.
 	//
-	// (But a flag bomb should not be too valuable; otherwise
-	// the opponent will be able to "sense" the flag
-	// bomb location by the AI's reaction.)
-
+    // A worthwhile bomb must also be worth more than the opponent AI
+    // Miner.  Otherwise, the AI will may allow an unknown piece to
+    // attack a flag bomb, to prove it is a Miner so that it can attack
+    // it with a superior (or expendable Miner) and gain its high value.
+    // (A more accurate approach would be to decrease the value of Miners after
+    // one attacks a flag structure, but this is just more complexity to
+    // save/restore in the tree).
+    // 
 	// Note that a known miner taking a worthless bomb,
 	// the value is zero, but an unknown miner,
 	// the value is -stealthvalue.  This deters an
@@ -6893,7 +6898,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	private int aiBombValue(Piece p)
 	{
         int color = p.getColor();
-        int value = pieceValue(Settings.topColor, 8) * 4/3 + grid.defenderCount(color, p.getIndex())*VALUE_MOVED;
+        int value = Math.max(pieceValue(Settings.topColor, 8),pieceValue(Settings.bottomColor, 8))
+            * 4/3 + grid.defenderCount(color, p.getIndex())*VALUE_MOVED;
 
         // If a bomb in the AI flag structure is known
         // (which can happen either by attack or by being the last structure on the board)
@@ -8547,10 +8553,13 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
     // If the AI has guessed the rank, then the risk of win is about nil
     // unless the opponent is bluffing.  In the foray area,
-    // the AI is willing to risk weak pieces against possible bluffers.
+    // the AI is more willing to use weak pieces to attack unknown pieces
+    // that haven't chased other unknowns to try to discover the stronger
+    // pieces.
 
-        if ((((fp.isKnown() || tp.getRank() == Rank.UNKNOWN)
-            && isExpendable(Settings.topColor, fprank.ordinal()))
+        if ((((fp.isKnown()
+            || (tp.getRank() == Rank.UNKNOWN && !tp.isChasing(Rank.UNKNOWN)))
+                && isExpendable(Settings.topColor, fprank.ordinal()))
             || (tp.getRank() == Rank.UNKNOWN
                 && fprank == Rank.FOUR))
 

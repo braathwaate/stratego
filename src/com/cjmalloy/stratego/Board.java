@@ -671,8 +671,10 @@ public class Board
 		Piece delayPieceChase = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), tp);
 		Piece delayPieceFled = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), null);
         Rank delayRank = Rank.NIL;
-        if (delayPieceFled != null)
+        if (delayPieceFled != null) {
             delayRank = delayPieceFled.getApparentRank();
+            fp.setActingRankFlee(delayRank);    // actually fled
+        }
         if (delayRank == Rank.UNKNOWN)
             delayRank = fp.getApparentRank();
 
@@ -2079,7 +2081,10 @@ public class Board
     // nUnknownWeakRankAtLarge is rarely zero.
     // But this should not deter valuable ranks from attack.
     // So the AI subtracts a percentage (1/3) of
-    // remainingUnmovedUnknownPieces in determining safety.
+    // remainingUnmovedUnknownPieces.  The lower the value
+    // returned by weakRanks(), the less chance an unknown piece
+    // will be randomly attacked, and if it is, the more likely
+    // it will escape.
     protected int weakRanks(int color)
     {
             return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3);
@@ -2364,13 +2369,24 @@ public class Board
 				|| p.isKnown())
 				continue;
 
-    // Unknown pieces become less safe
-    // as weak pieces are removed from the board
-    // because the remaining pieces are stronger
-    // and have started to guess the rank of unknown pieces.
+    // Initially, a surpise attack by an unknown piece is a good
+    // move because the captured rank and the discovery of a strong
+    // rank that recaptures (if any) exceeds the value of the unknown piece.
+
+    // However, this becomes a poorer move as play continues
+    // as weak pieces are removed from the board because
+    // 1. the remaining pieces are stronger and are more likely to recapture
+    // 2. players have begun to guess the rank of unknown pieces (reduced stealth)
+    // 3. mobility is increased, increasing the possibility of recapture
+    // 4. the ability to capitalize on rank discovery decreases
+
+    // TBD: In reality, the decision is more complex.  Humans base
+    // the risk of recapture based on guessing the setup, which indirectly
+    // factors in the statistics of prior captures.  The AI does this to a limited
+    // extent when blufferRisk is high.
 
             if (isInvincible(p) // caveat: excludes defacto invincible ranks 
-                || weakRanks(1-p.getColor()) > 6)
+                || nUnknownWeakRankAtLarge[1-p.getColor()] > 12)
                 p.set(Piece.SAFE);
             else
                 p.clear(Piece.SAFE);
@@ -2831,7 +2847,9 @@ public class Board
 	// on the board), skip this code.
 
             Piece flagp = flag[c];
-            if (flagp != null && flagp.isKnown())
+            if (flagp != null
+                && flagp.isKnown()
+                && !flagp.isSuspectedRank())
                 continue;
 
             int [][] maybe = new int[31][];
