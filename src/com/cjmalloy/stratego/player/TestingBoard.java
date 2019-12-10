@@ -1380,7 +1380,7 @@ public class TestingBoard extends Board
                 && highPiece != null)
                 for (int rank = lowPiece.getRank().ordinal(); rank <= highPiece.getRank().ordinal(); rank++) {
                     for (TestPiece pp : planPiece[Settings.topColor][rank-1])
-                            if (pp != null && pp != lowPiece && pp != highPiece)
+                            if (pp != null && (!hasPlan(pp) || pp != lowPiece && pp != highPiece))
                                 setPlan(pp, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
 
                 }
@@ -1444,14 +1444,6 @@ public class TestingBoard extends Board
                         ranksNeeded -= genDefenderPlan(c,r,goal,oppRank);
 				}
 			} // c
-
-		// Spy flees the lane if the opponent one is not known
-
-			if (knownRankAtLarge(Settings.bottomColor, Rank.ONE) == 0
-				&& rankAtLarge(Settings.bottomColor, Rank.ONE) != 0) {
-				genPlanAll(fleetmp[Settings.topColor], Settings.topColor, 10, DEST_PRIORITY_LANE);
-			}
-
 		} // lane
 	}
 
@@ -7415,7 +7407,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		Rank tprank = tp.getRank();
 
 		// The AI assumes that any unknown piece
-		// will take a known or flag bomb
+		// will take a known bomb or an unknown flag bomb
 		// because of flag safety.  All other attacks
 		// on bombs are considered lost.
 		//
@@ -7426,34 +7418,28 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		//
 		// maybeEight determines whether a known Unknown
 		// can take a bomb.  For example,
-		// RF RB B? -- -- R9
+		// RF RB b? -- -- R9
 		// RB -- R7 -- -- --
 		// -- -- -- -- -- --
 		//
-		// Red has the move. If R9xB? or R7xB?,
-		// the result is a known Unknown.  But R9xB? does not
+		// Red has the move. If R9xb? or R7xb?,
+		// the result is a known Unknown.  But R9xb? does not
 		// clear maybeEight, so the piece can still take the bomb.
-		// R7xB? clears maybeEight, so the piece
+		// R7xb? clears maybeEight, so the piece
 		// cannot take the bomb.
 		//
 		// Another example:
 		// RF RB
 		// RB --
 		// -- --
-		// B? R8 R2
-		// -- B3
+		// -- R8 R2
+		// b? -- --
 		//
-		// Red has the move.  Unknown Blue has a chase rank of
-		// Eight because it approached Red 8.  Red has no choice
-		// but to attack Unknown Blue or risk losing the game.
+		// Blue moves up and approaces Red Eight, becoming a suspected 7.
+		// Red has no choice but to attack suspected Blue Seven
+        // or risk losing the game.
 		//
-		// The flag must be known OR the attacker does not
-		// have a suspected rank to allow the attack on the
-		// bomb to succeed.  The AI assumes that an attacker
-		// can succeed in attacking the flag position even
-		// if the opponent makes a lucky guess.
-
-		// Yet the AI still needs to make an intelligent guess
+		// Yet the AI still needs to guess
 		// whether the oncoming attacker is after the flag
 		// or after a valuable piece.  So if the chase rank
 		// has matured (that is, the chase rank was acquired
@@ -7463,14 +7449,21 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// RB --
 		// -- RB 
 		// -- R3
-		// B? --
-		// Unknown Blue has a chase rank of Two.  It moves forward
+		// b2 --
+		// Suspected Blue Two moves forward
 		// towards the flag, which also attacks Red Three.
 		// Because the chase rank has matured, Red Three
 		// moves away.
 		//
 		// Note: maybeEight is cleared for matured suspected ranks
 		// in Board.java
+
+        // TBD: When the AI is worried that any piece can take the
+        // flag bomb, and that piece is within striking distance,
+        // the AI may start making poor moves due to the horizon
+        // effect.  It would perhaps be wiser to clear maybeEight
+        // on pieces that do not appear to attack the bomb structure
+        // if they are able.
 		//
 		// Note: Prior to version 10.1, this was qualified by
 		//
@@ -7483,7 +7476,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// xxxxxxxx|
 		// -- RB RF|
 		// R9 -- RB|
-		// -- B? R7|
+		// -- b? R7|
 		// The AI thinks that it is no danger because if
 		// unknown Blue moves up, R9xB? creates a known
 		// but suspected Five (i.e. known unknown) and

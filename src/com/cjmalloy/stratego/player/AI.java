@@ -1463,9 +1463,13 @@ public class AI implements Runnable
 		if (um1 == UndoMove.NullMove && um2 == UndoMove.NullMove)
 			return true;
 
+        // If the flag isn't known, then it is just a guess
+        // and the search should continue as if the piece was not the flag
+
 		if (um1 != null
 			&& um1.tp != null
-			&& um1.tp.getRank() == Rank.FLAG)
+			&& um1.tp.getRank() == Rank.FLAG
+            && um1.tp.isKnown())
 			return true;
 
 		return false;
