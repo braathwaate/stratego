@@ -244,7 +244,6 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankChase()
 	{
-		assert !isKnown() : "actingRankChase: piece must be unknown";
 		if (actingRankChase == 0)
 			return Rank.NIL;
 		return Rank.toRank(Integer.numberOfTrailingZeros(actingRankChase));
@@ -252,6 +251,8 @@ public class Piece implements Comparable<Piece>
 
 	public void setActingRankChase(Rank r)
 	{
+		assert !isKnown() : "piece must be unknown";
+
 		// Reset moves.  Chase rank matures after a certain
 		// number of subsequent moves to give the AI time
 		// to confirm (attack) the suspected rank.
@@ -347,7 +348,6 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankFleeLow()
 	{
-		assert !isKnown() : "actingRankFleeLow: piece must be unknown";
 		if (actingRankFlee == 0)
 			return Rank.NIL;
 		return Rank.toRank(Integer.numberOfTrailingZeros(actingRankFlee));
@@ -355,7 +355,6 @@ public class Piece implements Comparable<Piece>
 
 	public Rank getActingRankFleeHigh()
 	{
-		assert !isKnown() : "actingRankFleeHigh: piece must be unknown";
 		if (actingRankFlee == 0)
 			return Rank.NIL;
 		return Rank.toRank(31 - Integer.numberOfLeadingZeros(actingRankFlee));
@@ -363,6 +362,7 @@ public class Piece implements Comparable<Piece>
 
 	public void setActingRankFlee(Rank r)
 	{
+		assert !isKnown() : "piece must be unknown";
 		actingRankFlee |= (1 << r.ordinal());
 	}
 

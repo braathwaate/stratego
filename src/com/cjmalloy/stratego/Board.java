@@ -671,7 +671,7 @@ public class Board
 		Piece delayPieceChase = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), tp);
 		Piece delayPieceFled = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), null);
         Rank delayRank = Rank.NIL;
-        if (delayPieceFled != null) {
+        if (!fp.isKnown() && delayPieceFled != null) {
             delayRank = delayPieceFled.getApparentRank();
             fp.setActingRankFlee(delayRank);    // actually fled
         }

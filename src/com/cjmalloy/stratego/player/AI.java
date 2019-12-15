@@ -2477,10 +2477,9 @@ public class AI implements Runnable
 		if (p == null)
 			return "ILLEGAL PIECE";
 		Rank rank = p.getRank();
-		if (!p.isKnown()
-			&& (p.getActingRankFleeLow() != Rank.NIL
+		if (p.getActingRankFleeLow() != Rank.NIL
 				|| p.getActingRankFleeHigh() != Rank.NIL
-				|| p.getActingRankChase() != Rank.NIL))
+				|| p.getActingRankChase() != Rank.NIL)
 			return rank.value + "["
 				+ p.getActingRankChase().value
 				+ "," + p.getActingRankFleeLow().value

@@ -133,7 +133,7 @@ public class TestingBoard extends Board
 	private static final int VALUE_FIVE = VALUE_FOUR/2;
 	private static final int VALUE_SIX = VALUE_FIVE/2;
 	private static final int VALUE_SEVEN = VALUE_SIX * 60/100;
-	private static final int VALUE_EIGHT = VALUE_SIX;
+	private static final int VALUE_EIGHT = VALUE_SIX * 50/100;
 
     // Opponent Nine value must be more than lowest AI stealth
     // (usually six or seven)
@@ -150,7 +150,7 @@ public class TestingBoard extends Board
 		VALUE_FIVE,	// 5 Captain
 		VALUE_SIX,	// 6 Lieutenant
 		VALUE_SEVEN,	// 7 Sergeant
-		VALUE_EIGHT,	// 8 Miner
+		VALUE_EIGHT,	// 8 Miner (valued by code)
 		VALUE_NINE,	// 9 Scout
 		VALUE_SPY,	// Spy
 		0,	// Bomb valued by code
@@ -420,8 +420,9 @@ public class TestingBoard extends Board
 		}
 		attackLanes();
 
-		// setunmovedValues depends on neededPiece:
-		// chase()
+		// setUnmovedValues depends on:
+        // neededPiece which is which is set during chase()
+
 		setUnmovedValues();
 		assert flag[Settings.topColor] != null : "AI flag unknown";
 	}
@@ -520,31 +521,6 @@ public class TestingBoard extends Board
 			if (hasSpy(1-c))
 				values[c][1] = values[c][1]*9/10;
 
-			if (rankAtLarge(1-c, Rank.ONE) == 1) {
-
-		// The stealth value of the Spy is worth somewhere between
-		// a Three and a Four with the opponent One still on the board.
-        // Spy stealth also falls in value as ranks are removed and
-        // the One falls in value.
-        // (A high Spy stealth value results in the AI dropping pieces).
-
-        // Note: The reason why the Spy has high stealth rather than a high
-        // value is because if it attacks the opponent One during the tree search,
-        // it instantly loses its stealth.  Values do not change during the tree
-        // search, so if it had high value, then the calculation would be
-        // erroneous if the opponent could recapture the Spy.
-
-                valueStealth[c][9] = values[c][1] / 5;
-
-		// A suspected spy is worth less because it is easily avoided,
-        // but this depends on the remaining pieces, because in an endgame with
-		// Ones on the board, the Spy can be the critical piece to win the game.
-
-                if (c == Settings.bottomColor)
-                    valueStealth[c][9] /= 2; // TBD: depends on remaining pieces
-
-        }
-
 		// Do invincible pieces have higher value than
 		// non-invincible pieces?
 		//
@@ -561,6 +537,18 @@ public class TestingBoard extends Board
 		// due to the lack of a Four.
 		//
 		// Therefore, invincible pieces do not have a higher value.
+
+        // Starting value of Miners is about the same as a SIX,
+        // unless the Six is invincible.  This is because invincible
+        // pieces win more endgames than Miners attacking flags.
+        // Note: Miner stealth is greater, making the unknown
+        // Miner more valuable than an unknown SIX.
+
+            for (int rank = 6; rank < 8; rank++)
+                if (!invincibleRank[c][rank-1]) {
+                    values[c][Rank.EIGHT.ordinal()] = values[c][rank] * 9 / 10;
+                    break;
+                }
 
 		// Sum the values of the remaining piece ranks.
 		// This is used to determine whether the AI is winning.
@@ -954,6 +942,39 @@ public class TestingBoard extends Board
 
 		valueStealth[c][Rank.FLAG.ordinal()-1] = valueStealth[c][Rank.NINE.ordinal()-1];
 
+        if (rankAtLarge(1-c, Rank.ONE) == 1) {
+
+		// The stealth value of the Spy is worth between a value of a Three
+		// and a Four with the opponent One still on the board.
+        // Spy stealth also falls in value as ranks are removed and
+        // the One falls in value.
+        // (A high Spy stealth value results in the AI dropping pieces).
+
+        // Note: The reason why the Spy has high stealth rather than a high
+        // value is because if it attacks the opponent One during the tree search,
+        // it instantly loses its stealth.  Values do not change during the tree
+        // search, so if it had high value, then the calculation would be
+        // erroneous if the opponent could recapture the Spy.
+
+        // Note: (value(3) + value(4))/2 is not correct, because if the Threes
+        // are gone from the board, value(3) becomes value(4).  If the Twos
+        // and Fours are gone, then value(1) becomes value(3) and value(4),
+        // which would make the stealth value of a Spy the same as the One
+        // value, meaning the Spy would not attack the One.  By tying the
+        // stealth value of the Spy to the Three value, the Spy often becomes
+        // the most valuable piece after the One during endgames, which is
+        // correct because the Spy becomes essential to winning these endgames.
+
+            valueStealth[c][9] = values[c][3] * 2 / 3;
+
+		// A suspected spy is worth less because it is easily avoided,
+        // but this depends on the remaining pieces, because in an endgame with
+		// Ones on the board, the Spy can be the critical piece to win the game.
+
+            if (c == Settings.bottomColor)
+                valueStealth[c][9] /= 2; // TBD: depends on remaining pieces
+        }
+
 		} // color c
 
 		// Unknown bombs not surrounding the flag have no value,
@@ -1059,7 +1080,7 @@ public class TestingBoard extends Board
 		// suspected One value must be greater than the AI Spy
 		// stealth value (see WINS).   This happens in two ways.
 		// (1) The stealth value of AI Spy is tied to the value of the opponent
-		// Three and Four (see adjustPieceValues(), and so
+		// Three (see adjustPieceValues(), and so
 		// drops as AI Threes and Fours are removed
 		// from the board.   (2) The suspected value of the opponent One
 		// increases with moves (see actualValue()).
@@ -1624,8 +1645,11 @@ public class TestingBoard extends Board
         // helps clear the pieces out so that others outside
         // the foray area can more easily assist (less blockage).
 
-            if (isForayLane(color, i))
-                unmovedValue[i]=1;
+        // Note: chasePositiveResult() should make a piece that
+        // can attack the foray area move
+
+        //    if (isForayLane(color, i))
+        //       unmovedValue[i]=1;
 
 		// If the opponent has a dangerous invincible rank
         // (i.e. the players lower ranks are all known),
@@ -1770,6 +1794,9 @@ public class TestingBoard extends Board
             for (TestPiece pp : planPiece[1-color][r-1]) {
                 if (pp != null) {
                     if (color == Settings.bottomColor) {
+                        // note that unmovedValues are zero at this point
+                        // which is desired because it will remain zero
+                        // if the piece is needed.
                         move(Move.packMove(pp.getIndex(), i), false);
                         int vm = value;
                         undo();
@@ -3830,6 +3857,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
         int vm = planv(a, from, to);
 
+        assert (Math.abs(vm) <= DEST_PRIORITY_DEFEND_FLAG_STAY);
+
 		// Scouts go too fast, so limit the points to one
 
 		if (scoutFarMove)
@@ -4387,6 +4416,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             }
 
             // same as board.updateSafe()
+            // remains safe if pursuing a two squares chase
+            // or if an opponent piece attacked
             if (fp.isKnown()
                 && fp.is(Piece.SAFE)
                 && !(isPossibleTwoSquaresChase()
@@ -4467,14 +4498,16 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			switch (result) {
 			case EVEN :
 				// assert fprank != Rank.UNKNOWN : "fprank is unknown?";
+
 		// If the defender is an AI piece and the
 		// attacker is unknown OR the defender is an unknown
 		// opponent piece, the AI is just guessing the opponent's
-		// rank, and it is guessing that it could be even.
+		// rank, and it is guessing that the result is EVEN.
+
 		// However, the AI usually overstates the strength of
 		// the opponent to be safe, and the opponent piece is more
 		// likely a less strong piece.
-		//
+
 		// Thus, the result should be positive for the AI.  Yet if the 
 		// AI attacker is unknown (the opponent piece is
 		// also unknown at this point in the code), and
@@ -4482,18 +4515,18 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// high ranked piece, the AI would lose stealth
 		// and gain very little, which could cause the result
 		// to be negative.
-		//
+
 		// The AI stands to gain more from an attack
 		// the lower the suspected rank.  This is because multiple
 		// ranks map into a lower suspected rank, so an
 		// EVEN exchange is more likely to WIN.
-		//
+
 		// The AI stands to lose more the higher the suspected rank
 		// because higher ranks tend to LOSE.  The worst
 		// case is the Spy.  The AI should not play SxB?
 		// nor allow B?xS,
 		// even if unknown Blue is a suspected Spy.
-		// 
+
 		// A known Unknown is also usually overstated in rank.
 		// For example:
 		// -- RB --
@@ -4508,9 +4541,26 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 				if (fpcolor == Settings.bottomColor) {
 
+		// If the defender is known, and either the attacker is known
+		// or the AI is the attacker (AI knows its own pieces)
+		// then, this is a known even exchange based on actual values.
+
+		// Note that although the exchange is even, the value
+		// may not be.  If the AI is winning, its ranks are
+		// worth less than opponent ranks, encouraging it to
+		// make an even exchange.
+
+                    if (isAggressive(tp, fp))
+                        tpvalue = tpvalue * 9 / 10;
+
+					// fp is known
+
+					if (fp.isKnown() && !fp.isSuspectedRank())
+						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, tpvalue) - fpvalue;
+
 		// If the opponent piece is unknown,
 		// the AI mave have guessed wrong,
-		// and the exchange could be a loss.  This case
+		// and the exchange could be LOSES.  This case
 		// should only happen at depth, because if
 		// the opponent actually allows its piece to contact
 		// the known AI piece, the opponent would gain
@@ -4523,12 +4573,14 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// -- -- -- --
 		// xx -- R3 xx
 		// xx -- R4 xx
-		// -- -- B? --
+		// -- -- b3 --
 		// Unknown Blue approaches known R3.  This makes Blue
-		// a suspected rank of 3.  Red Four should move,
-		// because a suspected Blue Three approaching known Red Three 
-		// (this EVEN case) is negative for Blue because it
-		// would lose its stealth in an even exchange
+		// a suspected rank of 3.  Red Four should move left.
+        // In the search tree, if suspected Blue Three moves up
+        // and forks Red Three and Red Four, Red plays R3xb3.
+        // The result (this EVEN case)
+        // is negative for Blue because Blue Three
+        // would lose its stealth in an even exchange
 		// (note that only stealth is on the line; the values
 		// of suspected and known differ greatly so they are not used).
 
@@ -4540,12 +4592,28 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// capture Red Four.
 
 		// If Red Three is unknown, then the stealth exchange is a wash,
-		// but it is unlikely that Blue would approach unknown Red
+		// but it is unlikely that Blue would approach an unknown Red
 		// and so Blue would get a negative value from valueBluff().
 
-					if (!fp.isKnown()) {
-						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp))
-                             - stealthValue(Settings.bottomColor, tprank.ordinal());
+        // An exchange with a known Unknown is usually zero because of
+        // situations like this example:
+        // b? -- --
+        // R3 R6 b?
+        // -------
+        // All of Blue's Fives and Fours are gone.   b?xR6
+        // results in a known Unknown which could be Blue Three.
+        // B3xR3 is even. All unknowns have very little
+        // value so the result cannot be computed based on exchange of values.
+        // If so, then R3 would eschew the exchange and play
+        // R3xB? which happens to be a bomb.
+
+        // However, if the AI piece is unknown, it loses its stealth value
+        // as expected.
+
+					else {
+						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, stealthValue(tp));
+                        if (!fp.isKnown())
+                             vm -= stealthValue(Settings.bottomColor, tprank.ordinal());
 
 		// While the AI always gains the stealth value of the
 		// unknown opponent piece, it may have guessed wrong.
@@ -4564,34 +4632,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 						if (!fp.isFleeing(tprank))
 							vm += riskOfLoss(tp, fp)/6;
-					} // fp is unknown
-
-		// If the defender is known, and either the attacker is known
-		// or the AI is the attacker (AI knows its own pieces)
-		// then, this is a known even exchange based on actual values.
-
-		// Note that although the exchange is even, the value
-		// may not be.  If the AI is winning, its ranks are
-		// worth less than opponent ranks, encouraging it to
-		// make an even exchange.
-
-        // An exchange with a known Unknown is zero because of
-        // situations like this example:
-        // b? -- --
-        // R3 R6 b?
-        // -------
-        // All of Blue's Fives and Fours are gone.   b?xR6
-        // results in a known Unknown which could be Blue Three.
-        // B3xR3 is even. A known Unknown has very little
-        // value so Red would lose a lot in an event exchange,
-        // which appears to be forced because Red Three
-        // cannot flee.  So Red plays R3xB? which happens to
-        // be a bomb.
-
-					// fp is known
-
-					else if (!fp.isSuspectedRank())
-						vm += apparentWinValue(fp, fprank, unknownScoutFarMove, tp, tpvalue) - fpvalue;
+					} // fp is unknown or suspected
 
 		// Unknown AI pieces also have bluffing value
 
@@ -4642,6 +4683,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// worth less than opponent ranks, encouraging it to
 		// make an even exchange.
 
+                if (isAggressive(fp, tp))
+                    fpvalue = fpvalue * 9 / 10;
+
 				if (tp.isKnown())
 					vm += tpvalue - fpvalue;
 				else {
@@ -4689,36 +4733,33 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		// Consider the following example.
 		// -- R1 --
-		// BS -- B2
-		//
-		// Blue Spy and Two are unknown and Red One is known.  Blue Two
+		// bS -- b1
+		// Blue Spy and One are unknown and Red One is known.  Blue One
 		// has a suspected rank of One (because it chased Red Two).
-		// Blue Two moves towards Blue Spy.  R1xB2 removes both
-		// pieces from the board because the AI thinks that Blue Two
-		// is Blue One.  Therefore it does not see BSXR1 and thus
-		// loses the game.
-		//
+		// Blue One moves towards Blue Spy.  R1xb1 removes both
+		// pieces from the board.
+
+        // However, Blue One is actually Blue Two (or some other piece)!
+		// Therefore it does not see bSXR1 and loses the game.
+
 		// It is unlikely that unknown Blue One would have moved to
 		// attack known Red One because the value of an unknown One
-		// is much higher than a known One.  Although B2 is suspected
-		// to be a One elsewhere on the board, if it moves to attack
-		// Red One, Red must assume that it is a lower ranked piece
-		// protected by a Spy.
+		// is much higher than a known One.
 		//
 		// The same example with different ranks:
 		// -- R3 --
-		// B2 -- B4
+		// b2 -- b3 
 		//
-		// Blue Four has a suspected rank of Three.
-		// R3xB4 would remove the pieces from the board
-		// and the AI would not see B2xR3.
+		// R3xb3 would remove the pieces from the board
+		// and the AI would not see b2xR3 if Blue Three turned
+        // out to be some other piece.
 		//
 		// By leaving the AI piece on the board, it can make
 		// the following error:
 		// R8
-		// B? BB
+		// b8 BB
 		// BB BF BB
-		// unknown Blue is suspected to be an Eight.  R8xB? would
+		// unknown Blue is suspected to be an Eight.  R8xb8 would
 		// leave the Red Eight on the board in position to attack
 		// the flag.
 
@@ -4734,28 +4775,31 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// -- b3
 		// Red Three and Red Bomb are known and Blue Three
 		// is suspected. 
-		// ...    R3-a6
+		// ...    b3(b6)-a6
 		// R3xb3  (null)
 		// is very negative because perhaps B3 is a Two.
 		//
-		// ....   b3-b5
+		// ....   b3(b6)-b5
 		// R3-a6  b3xRB
 		// results in the same position and the cache returns
 		// the negative number stored, rather than a highly
 		// positive number because B3 just rammed into a known bomb!
-		//
+
 		// (Note: this issue also exists in a much reduced
 		// form even in WINS. If the pieces are known, there
 		// is no bug, but removing a suspected
 		// opponent piece to a known bomb is not the same as removing
 		// a suspected opponent piece in an exchange with a
 		// known AI piece, but at least both are positive.)
-		//
+
 		// As of Version 10.4, this issue is handled by the "ghost"
 		// square code when tp is null.
-        //
+
         // As of Version 12, this issue is handled by the ghostPiece
         // code, leaving the AI piece on the board for 1 ply.
+        // This allows the AI to see a counterattack after an "EVEN"
+        // exchange, but removes the pieces from the board to
+        // prevent the cache equivalency bug.
 
                     if (fp.getColor() == 1- bturn) {
                         fp.makeKnown();
@@ -7314,12 +7358,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		int color = p.getColor();
 		Rank rank = p.getRank();
-		if (color == Settings.topColor
-			|| (p.isKnown() && !p.isSuspectedRank())
-			|| rank == Rank.SPY
-			|| rank == Rank.BOMB
-			|| rank == Rank.FLAG)
-			return pieceValue(p);
 
 		// Note: the value of an unknown is the minimum value
 		// of the remaining unknowns.  Hence, if the Spy and One
@@ -7327,8 +7365,25 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// of the Spy.  Stealth value varies depending on the
         // character of the unknown.
 
+        // TBD: if the unknown is known, it means that it attacked
+        // a weak AI piece and survived.  This limits the range of unknown
+        // pieces that the unknown could be, but this is not
+        // accounted for here.  Perhaps the MAYBE EIGHT flag
+        // flag should be the lowest attacked rank and so MAYBE EIGHT
+        // should be a test if this rank is eight or less.
+        // Or set the suspected rank to one less and use the MAYBE EIGHT flag
+        // to mark that the suspected rank is just a wild guess
+        // and could be lower.
+
 		if (rank == Rank.UNKNOWN)
             return values[color][unknownRank[color]] + stealthValue(p);
+
+		if (color == Settings.topColor
+			|| (p.isKnown() && !p.isSuspectedRank())
+			|| rank == Rank.SPY
+			|| rank == Rank.BOMB
+			|| rank == Rank.FLAG)
+			return pieceValue(p);
 
 		// Suspected ranks have much less value than known ranks
 		// because of uncertainty.  
@@ -8086,7 +8141,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // -- R3 R6
     // r? -- B9
     // -- -- RB
-    // Unknown red is not a target, but the move needs to be played to
+    // Unknown red is not a target, but B9xr? should be played to
     // prevent the loss of Blue Nine for no gain.
 
     // Yet, this is a necessary check to prune moves generated
@@ -8555,16 +8610,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 && isExpendable(Settings.topColor, fprank.ordinal()))
             || (tp.getRank() == Rank.UNKNOWN
                 && fprank == Rank.FOUR))
-
-    // Prefer targets in the foray line, for example
-    // | b5 r?
-    // | r? r? r?
-    // ----------
-    // Blue Five should attack unknown Red below rather than to right
-
-            && (isForay(tp.getIndex())  // goal is to clear the foray line
-                || isForay(fp.getIndex()))) // but may require aggression to get there
-                v *= 4;
+            && isAggressive(fp, tp))
+                v += values[Settings.topColor][Rank.FIVE.ordinal()];
         else if (tp.isSuspectedRank())
                 v /= 3;
 
@@ -8585,6 +8632,17 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     {
         int v = values[p.getColor()][p.getRank().ordinal()] + stealthValue(p);
         return v;
+    }
+
+    public boolean isAggressive(Piece fp, Piece tp)
+    {
+        assert fp.getColor() == Settings.topColor;
+
+        Rank fprank = fp.getRank();
+        return isForay(tp.getIndex())  // goal is to clear the foray line
+            || isForay(fp.getIndex()) // but may require aggression to get there
+            || dangerousUnknownRank < fprank.ordinal() // increase aggression
+            || dangerousKnownRank < fprank.ordinal();   // increase aggression
     }
 
     public boolean isFlagBombAtRisk(Piece p)
