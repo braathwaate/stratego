@@ -545,7 +545,7 @@ public class Board
 			if (prot.isKnown()
 				&& targetPiece.isKnown()
 				&& prot.getRank().ordinal()
-					>= targetPiece.getRank().ordinal()-2)
+					> targetPiece.getRank().ordinal()-2)
 				continue;
 
 			 if (isThreat(prot, attackPiece))
@@ -673,7 +673,8 @@ public class Board
         Rank delayRank = Rank.NIL;
         if (!fp.isKnown() && delayPieceFled != null) {
             delayRank = delayPieceFled.getApparentRank();
-            fp.setActingRankFlee(delayRank);    // actually fled
+            if (!isProtected(delayPieceFled, fp))
+                fp.setActingRankFlee(delayRank);    // actually fled
         }
         if (delayRank == Rank.UNKNOWN)
             delayRank = fp.getApparentRank();
@@ -888,25 +889,6 @@ public class Board
             && m3.tp != null
             && p.getRank().ordinal() - 1 != m3.tp.getRank().ordinal())
             p.clear(Piece.SAFE);
-
-        UndoMove m2 = getLastMove(2);
-
-        if (isPossibleTwoSquaresChase()
-
-        // A known piece is still safe
-        // if it was just attacked on the last move
-        // For example,
-        // xx r3 -- xx
-        // xx B6 -- xx
-        // b? B4 -- b?
-        // b? b? b? b?
-        // Unknown Red Three should approach Blue Four.
-        // B6xr3 (or r3xB6) does not change the safe Two Squares result.
-
-            || m2.getTo() == p.getIndex())
-            return;
-
-        p.clear(Piece.SAFE);
     }
 
 	// stores the state prior to the move
@@ -1006,8 +988,7 @@ public class Board
 
 	void setDirectChaseRank(Piece chaser, Piece chased, int i)
 	{
-		if (chased.isKnown()
-            || chased.isFleeing(chaser.getRank()))        // ha ha
+		if (chased.isKnown())
 		    return;
 
 		Move m = getLastMove();
@@ -4318,7 +4299,8 @@ public class Board
                     Piece unk = getSetupPiece(j);
                     if (unk == null
                         || unk.getColor() != Settings.bottomColor
-                        || unk.isKnown())
+                        || unk.isKnown()
+                        || unk.isSuspectedRank())
                         continue;
                     if (revealRank == Rank.ONE)
                         unk.setActingRankFlee(Rank.TWO);    // safe for a Two to approach
@@ -4365,7 +4347,8 @@ public class Board
                     Piece p = getPiece(j);
                     if (p == null
                         || p.getColor() != Settings.bottomColor
-                        || p.isKnown())
+                        || p.isKnown()
+                        || p.isSuspectedRank())
                         continue;
                     p.setActingRankFlee(revealRank);
 
