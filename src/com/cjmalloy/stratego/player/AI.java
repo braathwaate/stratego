@@ -249,7 +249,6 @@ public class AI implements Runnable
 		aiLock.lock();
 		log("Settings.aiLevel:" + Settings.aiLevel);
 		log("Settings.twoSquares:" + Settings.twoSquares);
-		log("blufferRisk:" + board.blufferRisk);
 		stopTime = startTime
 			+ Settings.aiLevel * Settings.aiLevel * 10;
 

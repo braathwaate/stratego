@@ -158,9 +158,8 @@ because statistically, random forays lead to loss of material if the
 opponent has strategically placed his pieces for defense.
 
 Demon of Ignorance analyzes its pieces at the start of the game
-and chooses either the left or right flank to mount an attack.
-Its goal is to charge along the side of the board hoping to either
-find a corner flag structure or make it to the rear of the board
+and chooses one of the three lanes to mount an attack,
+hoping to either find a flag structure or make it to the rear of the board
 so that it can attack pieces on the rear that are statistically weak
 and eventually make it to the flag structure.
 

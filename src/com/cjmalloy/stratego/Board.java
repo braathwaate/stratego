@@ -75,6 +75,7 @@ public class Board
 	public int blufferRisk = BLUFFER_RANK_INIT;
 	protected int guessedRankCorrect = 0;
 	protected int guessedRankWrong = 0;
+	protected int riskyAttacks = 0;
 	protected int[] maybe_count = new int[2];
 	protected int[] open_count = new int[2];
 	protected int[][] lowerRankCount = new int[2][10];
@@ -89,9 +90,10 @@ public class Board
 	// generate bomb patterns
 	static final int[][] bombPattern = new int[30][6];
 	static {
+    final int flagSearchOrder[] = { 0, 9, 2, 7, 3, 6, 1, 8, 4, 5 };
 	for (int y = 0; y <= 2; y++)
-	for (int x = 0; x <= 9; x++) {
-		int flag = Grid.getIndex(x,y);
+	for (int x = 0; x < 10; x++) {
+		int flag = Grid.getIndex(flagSearchOrder[x],y);
 		int bpi = 0;
 		bombPattern[y*10+x][bpi++] = flag;
 		for (int d : dir) {
@@ -195,6 +197,7 @@ public class Board
 		blufferRisk = b.blufferRisk;
 		guessedRankCorrect = b.guessedRankCorrect;
 		guessedRankWrong = b.guessedRankWrong;
+        riskyAttacks = b.riskyAttacks;
 	}
 
 	public boolean add(Piece p, Spot s)
@@ -238,6 +241,7 @@ public class Board
 			fp.setShown(true);
 			revealRank(fp);
 			revealRank(tp);
+            countRiskyAttacks(fp, tp);
 			fp.setMoved();
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
@@ -525,6 +529,10 @@ public class Board
 	public boolean isProtected(Piece targetPiece, Piece attackPiece)
 	{
 		int target = targetPiece.getIndex();
+        Rank targetRank = targetPiece.getRank();
+        if (targetRank == Rank.ONE)
+            return false;
+
 		for (int d : dir) {
 			int j = target + d;
 			if (!Grid.isValid(j))
@@ -545,8 +553,22 @@ public class Board
 			if (prot.isKnown()
 				&& targetPiece.isKnown()
 				&& prot.getRank().ordinal()
-					> targetPiece.getRank().ordinal()-2)
+					> targetRank.ordinal()-2)
 				continue;
+
+    // If an opponent unknown could be invincible,
+    // then the opponent unknown should be assigned a flee rank
+    // from a known target piece.
+    // For example,
+    // r? R4 b?
+    // Unknown Red is not a protector if the lowest unknown Red invincible piece
+    // is a Red Three.
+
+            if (!prot.isKnown()
+				&& targetPiece.isKnown()
+                && lowerRankCount[targetPiece.getColor()][targetRank.ordinal()-2] ==
+                    lowerKnownOrSuspectedRankCount[targetPiece.getColor()][targetRank.ordinal()-2])
+                continue;
 
 			 if (isThreat(prot, attackPiece))
 				return true;
@@ -671,11 +693,15 @@ public class Board
 		Piece delayPieceChase = getLowestRankedOpponent(fp.getColor(), getLastMove().getTo(), tp);
 		Piece delayPieceFled = getLowestRankedOpponent(fp.getColor(), getLastMove().getFrom(), null);
         Rank delayRank = Rank.NIL;
-        if (!fp.isKnown() && delayPieceFled != null) {
+        if (delayPieceFled != null) {
             delayRank = delayPieceFled.getApparentRank();
-            if (!isProtected(delayPieceFled, fp))
+            if (!fp.isKnown() && !isProtected(delayPieceFled, fp))
                 fp.setActingRankFlee(delayRank);    // actually fled
         }
+
+        // DelayRank is the piece that fled, such as when
+        // a known piece is chased by an unknown piece
+
         if (delayRank == Rank.UNKNOWN)
             delayRank = fp.getApparentRank();
 
@@ -2925,13 +2951,13 @@ public class Board
 				grid.clearMovable(flag[c]);
 			}
 
-		// Mark surrounding pieces in all usual flag
+		// Mark surrounding pieces in possible flag
 		// structures as suspected bombs.
 
 			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
 			for (int i = 0; i < maybe_count[c]; i++)
-				if (usualFlagLocation(c, maybe[i][0]))
-					markBombedFlag(maybe, maybe_count[c], open_count[c], i);
+                markBombedFlag(maybe, maybe_count[c], open_count[c], i);
+
                 // Call markBombedFlag yet again on bestGuess
                 // to set isBombedFlag
                 // (it was called first because suspected bomb allocation
@@ -3239,9 +3265,9 @@ public class Board
         return p;
     }
 
-	private void markBombedFlag(int[][] maybe, int maybe_count, int open_count, int bestGuess)
+	private void markBombedFlag(int[][] maybe, int maybe_count, int open_count, int maybe_flag)
 	{
-		int flagi = maybe[bestGuess][0];
+		int flagi = maybe[maybe_flag][0];
 		Piece flagp = getPiece(flagi);
 		int color = flagp.getColor();
 
@@ -3256,9 +3282,9 @@ public class Board
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
-		for (int j = 1; maybe[bestGuess][j] != 0; j++) {
-			assert Grid.isValid(maybe[bestGuess][j]) : maybe[bestGuess][j] + " is not valid ";
-			Piece p = getPiece(maybe[bestGuess][j]);
+		for (int j = 1; maybe[maybe_flag][j] != 0; j++) {
+			assert Grid.isValid(maybe[maybe_flag][j]) : maybe[maybe_flag][j] + " is not valid ";
+			Piece p = getPiece(maybe[maybe_flag][j]);
 			if (p == null
 				|| !(p.getApparentRank() == Rank.BOMB
 					|| p.getApparentRank() == Rank.FLAG
@@ -3267,6 +3293,7 @@ public class Board
 				isBombedFlag[color] = false;
 				continue;
 			}
+
 
 			if (color == Settings.bottomColor) {
 
@@ -3277,8 +3304,7 @@ public class Board
 		// these pieces if the reward is large enough.
 		// (See riskOfLoss()).
 
-				if (eightAttack
-					&& !p.isKnown()) {
+				if (!p.isKnown()) {
 
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
@@ -3296,7 +3322,8 @@ public class Board
 		// otherwise make it a suspected bomb
 
 					} else if (b.getRank() == Rank.UNKNOWN) {
-						suspectedBomb(b);
+                        if (!Grid.isAdjacent(flag[Settings.bottomColor].getIndex(), maybe[maybe_flag][0]))
+                            suspectedBomb(b);
                     }
 				}
 			} else {
@@ -4370,5 +4397,18 @@ public class Board
             } // switch
         } // top color
     } // end of function
+
+    void countRiskyAttacks(Piece fp, Piece tp)
+    {
+        UndoMove um = getLastMove();
+        if (fp.getColor() == Settings.bottomColor
+            && !um.tpcopy.isKnown()) {
+            Rank fprank = fp.getRank();
+            if (fprank.ordinal() <= 4
+                && (tp.hasMoved()
+                    || !isInvincible(fp)))
+                riskyAttacks++;
+        }
+    }
 
 } // end of file
