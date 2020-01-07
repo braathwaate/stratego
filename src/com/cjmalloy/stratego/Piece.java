@@ -154,6 +154,8 @@ public class Piece implements Comparable<Piece>
 
 	public void makeKnown()
 	{
+        if (!isKnown())
+            moves=0;    // reset move count to limit SAFE
 		flags |= KNOWN;
 		flags &= ~(SUSPECTED | LESS | MAYBE_EIGHT | LIKELY_SPY);
 		clearActingRank();

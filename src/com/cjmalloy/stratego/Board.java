@@ -71,7 +71,7 @@ public class Board
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected static final int BLUFFER_RANK_MIN = 2;
 	protected static final int BLUFFER_RANK_MAX = 5;
-	protected static final int BLUFFER_RANK_INIT = 3;
+	protected static final int BLUFFER_RANK_INIT = 4;
 	public int blufferRisk = BLUFFER_RANK_INIT;
 	protected int guessedRankCorrect = 0;
 	protected int guessedRankWrong = 0;
@@ -83,7 +83,10 @@ public class Board
 	protected boolean[] isBombedFlag = new boolean[2];
 	protected int unknownBombs[] = new int[2];
     protected Random rnd = new Random();
+    protected final int[] attackX = {0, 0, 4+rnd.nextInt(2), 9};
+    protected final int[] attackaltX = {0, 1, 4+rnd.nextInt(2), 8};
     protected static int forayLane[] = { 0, 0 };
+    protected int suspectedFlagX[] = { -1, -1 };
     protected boolean[][] foraySquare =  new boolean[2][121];
     public ReentrantLock lock = new ReentrantLock();  // graphics lock
 
@@ -240,9 +243,11 @@ public class Board
 
 			fp.setShown(true);
 			revealRank(fp);
+            nearFlagGuess(fp, tp);
 			revealRank(tp);
             countRiskyAttacks(fp, tp);
-			fp.setMoved();
+            fp.setMoved();
+            updateSafe(fp);
 			if (!Settings.bNoShowDefender || fp.getRank() == Rank.NINE) {
 				tp.setShown(true);
 			}
@@ -887,16 +892,6 @@ public class Board
 
     protected void updateSafe(Piece p)
     {
-        //  Clear safe on *prior* piece if player moved some other piece
-
-        UndoMove m3 = getLastMove(3);
-        if (m3 != UndoMove.NullMove) {
-            Piece priorPiece = m3.getPiece();
-            if (priorPiece != p
-                && priorPiece.isKnown())
-                priorPiece.clear(Piece.SAFE);
-        }
-
         // Unknown pieces are safe until they become known
         // because it is unlikely that an opponent will use its
         // unknown superior pieces on random attacks that would
@@ -908,12 +903,7 @@ public class Board
 
         // Known piece might not be safe anymore
 
-        // clear safe once the AI captures a valuable piece
-        // - one rank lower (don't push your luck)
-
-        if (m3 != UndoMove.NullMove
-            && m3.tp != null
-            && p.getRank().ordinal() - 1 != m3.tp.getRank().ordinal())
+        if (p.getMoves() > 2)
             p.clear(Piece.SAFE);
     }
 
@@ -2748,8 +2738,7 @@ public class Board
 			} // y
 
         // Once a stronger opponent piece appears, its time to change
-        // the foray lane (tbd: although this could be an indication of
-        // a bomb structure)
+        // the foray lane
 
             if (lowrank[1-color] < lowrank[color]) {
                 if (forayLane[color] == lane + 1)
@@ -2775,15 +2764,20 @@ public class Board
 
         if (forayLane[color] == 0)
             forayLane[color] = newlane;
+
+        // For starters, the opponent flag is guessed to near the foray lane
+        // because thats where the action is headed, and we don't
+        // want to be mislead elsewhere until we know its not there.
+
+        if (suspectedFlagX[1-color] == -1)
+            suspectedFlagX[1-color] = attackX[newlane];
 	}
 
     protected boolean isForayAttack(int color, int i)
     {
-        final int[] attack = {0, 0, 4+rnd.nextInt(2), 9};
-        final int[] attackalt = {0, 1, 4+rnd.nextInt(2), 8};
-        return (attack[forayLane[color]] == Grid.getX(i)
-            || (getRank(getPiece(attack[forayLane[color]], Grid.getY(i))) == Rank.BOMB
-                && attackalt[forayLane[color]] == Grid.getX(i)));
+        return (attackX[forayLane[color]] == Grid.getX(i)
+            || (getRank(getPiece(attackX[forayLane[color]], Grid.getY(i))) == Rank.BOMB
+                && attackaltX[forayLane[color]] == Grid.getX(i)));
     }
 
     protected boolean isForayLane(int color, int i)
@@ -3134,21 +3128,31 @@ public class Board
 		int bestProb = 0;
 		int bestGuess = 99;
 
-        // For starters, the flag is guessed to be in the foray lane
-        // because thats where the action is headed, and we don't
-        // want to be mislead elsewhere until we know its not there.
-
         selectForayLane(1-color);
 
 		for (int i = 0; i < maybe_count; i++) {
-
-            int prob = 1;
 
         // ensure isBombedFlag is set correctly for AI
 
             if (color == Settings.topColor
                 && maybe[i][0] == flag[Settings.topColor].getIndex())
                 return i;
+
+            int prob = 1;
+
+        // If the AI thinks it knows the area where the flag is already,
+        // the best guess is the first structure in maybe[][] that matches.
+        // (Recall that maybe[][] is an ordered list of usual flag locations)
+
+            int flagX = Grid.getX(maybe[i][0]);
+            if (flagX == suspectedFlagX[color]
+                || flagX + 1 == suspectedFlagX[color]
+                || flagX - 1 == suspectedFlagX[color]) {
+                if (color == Settings.bottomColor)
+                    return i;
+                else
+                    prob++;
+            }
 
 		// compute the number of bombs in the structure
 
@@ -3177,9 +3181,6 @@ public class Board
 					prob--;
 					break;
 				}
-
-                if (isForayAttack(1-color,j))
-                    prob++;
 			}
 
 		// The AI examines the opponent setup for possible sentries
@@ -4258,7 +4259,7 @@ public class Board
 		else
 			guessedRankWrong++;
 
-		blufferRisk = BLUFFER_RANK_INIT - guessedRankCorrect/2 + guessedRankWrong;
+		blufferRisk = BLUFFER_RANK_INIT - guessedRankCorrect + guessedRankWrong;
 		blufferRisk = Math.max(blufferRisk, BLUFFER_RANK_MIN);
 		blufferRisk = Math.min(blufferRisk, BLUFFER_RANK_MAX);
 	}
@@ -4397,6 +4398,25 @@ public class Board
             } // switch
         } // top color
     } // end of function
+
+    // If an unknown piece is attacked by a strong rank or a Miner
+    // when it is on the 2nd or 3rd row of the enemy territory,
+    // it *could* mean that the opponent was worried that the unknown
+    // piece was a Miner headed for the flag structure, so it is
+    // a reasonable assumption to assume that the flag structure is nearby
+
+    void nearFlagGuess(Piece fp, Piece tp)
+    {
+        int y = Grid.yside(fp.getColor(), Grid.getY(tp.getIndex()));
+        Rank fprank = fp.getRank();
+        if (!tp.isKnown()
+            && (y == 1 || y == 2) 
+            && (fprank == Rank.ONE
+                || fprank == Rank.TWO
+                || fprank == Rank.THREE
+                || fprank == Rank.EIGHT))
+            suspectedFlagX[fp.getColor()] = Grid.getX(tp.getIndex());
+    }
 
     void countRiskyAttacks(Piece fp, Piece tp)
     {

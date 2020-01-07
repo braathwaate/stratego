@@ -373,12 +373,17 @@ public class TestingBoard extends Board
 
 		genUnknownRank();   // first pass
 		genDestFlag();      // depends on unknown rank (actualValue)
+		genUnknownRank();   // again because of Eights could have changed value
+
 		aiFlagSafety(); // depends on genDestFlag, valueStealth, values
+		genUnknownRank();   // again because of Eights could have changed value
 
 		// The following code depends on values[] and valueStealth[]
 		// and unknownRank[]
 
 		adjustInvincibleRanks();
+		genUnknownRank();   // again because adjustInvincibleRanks changes values
+
 		genFleeRankandWeak();
 
 		scouts[0] = new ArrayList<Piece>();
@@ -1248,32 +1253,23 @@ public class TestingBoard extends Board
                 if (rankAtLarge(1-c, rank) == 0)
                         break;
 
-    // If player's rank is invincible (i.e. lower opponent rank known)
-    // and the opponent rank is not invincible (i.e. lower opponent rank not known),
-    // increase the value of the player's piece
+    // If player's rank is invincible, increase the value of player's piece
+    // to encourage the opponent to exchange
 
-                if ((isInvincibleDefender(c, rank)
-                    && !isInvincibleDefender(1-c, rank))
+                if (isInvincibleDefender(c, rank)
+                    || isWinning(1-c) > VALUE_THREE) {
 
-    // If the opponent has a dangerous rank, encourage the AI to quickly
-    // exchange its low ranks if possible,
-    // thus preventing them from loss by the dangerous rank.
-
-                    || (c == Settings.bottomColor
-                        && (rank > dangerousUnknownRank
-                            || rank > dangerousKnownRank
-                            || isWinning(Settings.topColor) > VALUE_THREE)
-                        && rank <= 4)) {
                     values[c][rank] += values[1-c][unknownRank[1-c]]/2;
 
-    // Encourage an EVEN exchange where the opponent is unknown (loses stealth)
-    // unless the player has a lower rank (known) that can keep the
+    // Encourage an EVEN exchange by increasing the value of a player piece
+    // when the opponent is unknown (would lose stealth)
+    // and the opponent does not have a lower rank (known) that can keep the
     // opponent invincible rank at bay, because it is preferable to corner
     // an invincible rank rather than for the players equivalent rank to lose
     // stealth in an exchange.
 
                     if (unknownRankAtLarge(1-c, rank) != 0
-                        && lowerRankCount[c][rank-1] == 0)
+                        && lowerRankCount[1-c][rank-1] == 0)
                         values[c][rank] += stealthValue(1-c, rank);
                 }
             }
@@ -1687,12 +1683,6 @@ public class TestingBoard extends Board
 			}
 
 		} // i
-
-		// Call genUnknownRank again because setUnmovedValues()
-		// could change pieceValue()
-        // TBD: Is this true anymore?
-
-		genUnknownRank();
 	}
 
 	protected void chaseWithScout(Piece p, int i, int priority)
@@ -2261,9 +2251,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                     || !p.isKnown()
 
         // don't go for an exchange of an Unknown One for a Known One
-        //  if we still have our Spy
+        // if we still have our Spy
 
-					|| chasedRank == 1 && hasSpy(1-p.getColor())))
+					|| (chasedRank == 1
+                        && unknownRankAtLarge(1-p.getColor(), Rank.ONE) != 0
+                        && hasSpy(1-p.getColor()))))
 				continue;
 
             Piece pp = getAttackPiece(p.getColor(), Rank.toRank(j));
@@ -8673,7 +8665,21 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
     int pieceValue(Piece p)
     {
-        int v = values[p.getColor()][p.getRank().ordinal()] + stealthValue(p);
+
+    // If the opponent has a dangerous rank, encourage the AI to quickly
+    // use its moved pieces to attack,
+    // thus preventing them from loss by the dangerous rank.
+
+        int rank = p.getRank().ordinal();
+        int c = p.getColor();
+        int v = values[c][rank] + stealthValue(p);
+
+        if (c == Settings.topColor
+            && p.hasMoved()
+            && (rank > dangerousUnknownRank
+                || rank > dangerousKnownRank))
+            v -= values[c][unknownRank[c]]/2;
+
         return v;
     }
 
