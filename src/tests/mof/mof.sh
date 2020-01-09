@@ -5,4 +5,4 @@
 # ncat -l -p 8096 -c ./mof.sh
 # ncat -c ./run*s*sh 127.0.0.1 8096
 #
-$HOME/Downloads/node-v0.10.35-linux-x64/bin/node mof.js | stdbuf -o0 tee /tmp/mof.out
+node mof.js | stdbuf -o0 tee /tmp/mof.out
