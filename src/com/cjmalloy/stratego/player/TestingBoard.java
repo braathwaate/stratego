@@ -1364,7 +1364,7 @@ public class TestingBoard extends Board
                 if (y < 3
                     && isChased(j)
                     && lowerRankCount[Settings.bottomColor][rank.ordinal()-1] > 1) {
-                    setPlan(false, p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+                    setPlan(p, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
                     continue;
                 }
 
@@ -1412,7 +1412,7 @@ public class TestingBoard extends Board
                 for (int rank = lowPiece.getRank().ordinal(); rank <= highPiece.getRank().ordinal(); rank++) {
                     for (TestPiece pp : planPiece[Settings.topColor][rank-1])
                             if (pp != null && (!hasPlan(pp) || pp != lowPiece && pp != highPiece))
-                                setPlan(false, pp, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+                                setPlan(pp, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
 
                 }
 
@@ -1435,7 +1435,7 @@ public class TestingBoard extends Board
 			if (aiInvinciblePiece != null
 				&& isStealthy(aiInvinciblePiece, lowRank[Settings.bottomColor])) {
                 if (!hasPlan(aiInvinciblePiece))
-					setPlan(false, (TestPiece)aiInvinciblePiece, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
+					setPlan((TestPiece)aiInvinciblePiece, fleetmp[Settings.topColor], DEST_PRIORITY_LANE);
 			}
 
 		// It is tempting to make guarding the lanes high priority,
@@ -1581,6 +1581,7 @@ public class TestingBoard extends Board
         int atRiskCount=0;
         int movedExpendableCount=0;
         int movedMinerCount=0;
+        int movedInvincibleCount=0;
 		for (int i=12;i<=120;i++) {
 			if (!Grid.isValid(i))
 				continue;
@@ -1590,6 +1591,8 @@ public class TestingBoard extends Board
                     && !p.isKnown())
                 || p.getColor() == Settings.bottomColor)
 				continue;
+
+            // counts are for AI only
 
             if (p.getRank() != Rank.BOMB
                 && p.getRank() != Rank.FLAG
@@ -1601,6 +1604,10 @@ public class TestingBoard extends Board
 
             if (p.getRank() == Rank.EIGHT)
                 movedMinerCount++;
+
+            if (isInvincible(p))
+                movedInvincibleCount++;
+
 		} // i
 
 		for (int i=12;i<=120;i++) {
@@ -1652,6 +1659,14 @@ public class TestingBoard extends Board
                 && rnd.nextInt(
                     (remainingUnmovedUnknownPieces[Settings.topColor]
                     +rankValue
+
+        // 2 or more moved invincible pieces are sufficient to win or tie the game.
+        // Moving more pieces could lose it
+
+                    +(movedInvincibleCount * movedInvincibleCount)
+
+        // prefer not to move pieces in structure
+
                     +unmovedValue[i])*5) != 0
                 && (lowerKnownOrSuspectedRankCount[1-p.getColor()][rank.ordinal()-1] >= 2
                     || atRiskCount >= 1))
@@ -1775,8 +1790,8 @@ public class TestingBoard extends Board
         // Send the one Miner on a mad dash towards the flag.
 
         int destTmp2[] = genDestTmpGuardedOpen(bombColor, j, Rank.EIGHT);
-        genNeeded(false, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG);
-        genPlan(PLANB, false, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG, false);
+        genNeeded(destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG);
+        genPlan(PLANB, destTmp2, 1-bombColor, 8, DEST_PRIORITY_ATTACK_FLAG, false);
 	}
 
 	protected void chasePositiveResult(Piece p, int i, int priority)
@@ -1798,9 +1813,9 @@ public class TestingBoard extends Board
                         int vm = value;
                         undo();
                         if (boardValue(vm - value) > 0)
-                            genNeededPlan(false, tmp, 1-color, pp, priority);
+                            genNeededPlan(tmp, 1-color, pp, priority);
                     } else
-                        genNeededPlan(false, tmp, 1-color, pp, priority);
+                        genNeededPlan(tmp, 1-color, pp, priority);
                 }
             }
         }
@@ -1833,7 +1848,7 @@ public class TestingBoard extends Board
 			}
 
 			if (isExpendable(1-p.getColor(), r)) {
-                genNeeded(rnd.nextInt(2) != 0, tmp, 1-p.getColor(), r, priority);
+                genNeeded(tmp, 1-p.getColor(), r, priority);
 				found = true;
 			} else if (valuableRank == 0 || valuableRankValue > pieceValue(1-p.getColor(), r)) {
 				valuableRank = r;
@@ -1844,7 +1859,7 @@ public class TestingBoard extends Board
 		// If unknown expendables are exhausted, bluff with the least valuable piece
 
 		if (!found && valuableRank != 0)
-            genPlan(plan, rnd.nextInt(2) != 0, tmp, 1-p.getColor(), valuableRank, priority, false);
+            genPlan(plan, tmp, 1-p.getColor(), valuableRank, priority, false);
 	}
 
 	public int[][] getPlan(Piece p)
@@ -1957,7 +1972,7 @@ public class TestingBoard extends Board
                             || isForayLane(1-p.getColor(), p.getIndex()))
                             priority = DEST_PRIORITY_CHASE_ATTACK;
 
-                        genNeededPlan(isInvincible(p) || (rnd.nextInt(2) != 0), destTmp2, 1-p.getColor(), pp, priority);
+                        genNeededPlan(destTmp2, 1-p.getColor(), pp, priority);
                         return pp;
                     } // in range and available piece
                 } // will attack
@@ -2022,7 +2037,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         || weakRanks(p.getColor()) <= 4
                         || p.getIndex() <= 65)) {
                 int destTmp2[] = genDestTmpGuardedRank(p.getColor(), i, Rank.SPY);
-                genNeeded(rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
+                genNeeded(destTmp2, 1-p.getColor(), 10, DEST_PRIORITY_CHASE);
                 chaseWithUnknown(p, destTmp[GUARDED_UNKNOWN]);
             }
 
@@ -2076,7 +2091,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 			// go for an even exchange
 			int destTmp2[] = genDestTmpGuarded(p.getColor(), i, opp);
-			genNeeded(rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), chasedRank, DEST_PRIORITY_CHASE);
+			genNeeded(destTmp2, 1-p.getColor(), chasedRank, DEST_PRIORITY_CHASE);
 		}
 
         } else { // not known or suspected
@@ -2090,23 +2105,23 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         for (int j = p.getActingRankFleeLow().ordinal(); j > 0; j--)
                             if (!isInvincible(1-p.getColor(),j)) {
                                 int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
-                                genPlan(PLANA, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
+                                genPlan(PLANA, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
                             }
 
                     } else if (p.getActingRankFleeLow() == Rank.UNKNOWN) {
                         for ( int j = 2; j < 10; j++)
                             if (isExpendable(1-p.getColor(), j)) {
                                 int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(j));
-                                genPlan(PLANA, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
-                                genPlan(PLANB, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
+                                genPlan(PLANA, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
+                                genPlan(PLANB, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
                             }
 
                     } else if (p.getActingRankFleeLow() != Rank.NIL
                         && p.getActingRankFleeLow().ordinal() >= 5) {
                             int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, p.getActingRankFleeLow());
-                            genPlan(PLANA, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), p.getActingRankFleeLow().ordinal(), DEST_PRIORITY_CHASE, false);
+                            genPlan(PLANA, destTmp2, 1-p.getColor(), p.getActingRankFleeLow().ordinal(), DEST_PRIORITY_CHASE, false);
                             int destTmp3[] = genDestTmpGuardedOpen(p.getColor(), i, Rank.toRank(p.getActingRankFleeLow().ordinal()+1));
-                            genPlan(PLANB, rnd.nextInt(2) != 0, destTmp3, 1-p.getColor(), p.getActingRankFleeLow().ordinal()+1, DEST_PRIORITY_CHASE, false);
+                            genPlan(PLANB, destTmp3, 1-p.getColor(), p.getActingRankFleeLow().ordinal()+1, DEST_PRIORITY_CHASE, false);
                     }
 
         // Also use Fours and Fives to chase unknown pieces.
@@ -2121,8 +2136,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         if (pp == null || isProtected(p, pp))
                             continue;
                         int destTmp2[] = genDestTmpGuardedOpen(p.getColor(), i, pp);
-                        genPlan(PLANA, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
-                        genPlan(PLANB, rnd.nextInt(2) != 0, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
+                        genPlan(PLANA, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
+                        genPlan(PLANB, destTmp2, 1-p.getColor(), j, DEST_PRIORITY_CHASE, false);
                     }
                 } // has moved
 
@@ -2308,7 +2323,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// once the clump dissolves in order to avoid continuous
 		// chase sequences.
 		//
-		// Corner opponent pieces (stayBack=true).  Invincible pieces
+		// Corner opponent pieces.  Invincible pieces
         // must be cornered to prevent them from causing damage
         // elsewhere on the board.   Non-invincible pieces
         // must be cornered to wait for another
@@ -2324,8 +2339,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                     || (p.getColor() == Settings.bottomColor
                         && !isPossibleUnknownSpyXOne(op, p))) {
                     int priority = lowRankChasePriority(op, p);
-                    genPlan(PLANA, true, destTmp2, 1-p.getColor(), j, priority, invinciblePieceCount++ < 2);
-                    genPlan(PLANB, true, destTmp2, 1-p.getColor(), j, priority, false);
+                    genPlan(PLANA, destTmp2, 1-p.getColor(), j, priority, invinciblePieceCount++ < 2);
+                    genPlan(PLANB, destTmp2, 1-p.getColor(), j, priority, false);
                 }
 
 		// The AI could be cautious in sending its unknown low
@@ -2353,7 +2368,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                     && p.isKnown()) {
             
 				int priority = lowRankChasePriority(null, p);
-                genNeeded(true, destTmp2, 1-p.getColor(), j, priority);
+                genNeeded(destTmp2, 1-p.getColor(), j, priority);
 
 				// tbd: PlanB as well
 				if (!isInvincible(p))
@@ -2640,7 +2655,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		int r = defender.getRank().ordinal();
 		int color = defender.getColor();
 		planPiece[color][r-1][PLANA] = (TestPiece)defender;
-		genNeeded(false, tmp, color, r, priority);
+		genNeeded(tmp, color, r, priority);
 	}
 
 	// Because the search tree is so shallow that it is often
@@ -3341,17 +3356,17 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		return genDestTmpCommon(GUARDED_CAUTIOUS, color, to, guard);
 	}
 
-	private void genNeeded(boolean stayBack, int [] desttmp, int color, int rank, int priority)
+	private void genNeeded(int [] desttmp, int color, int rank, int priority)
 	{
         for (TestPiece pp : planPiece[color][rank-1]) {
             if (pp != null)
-                genNeededPlan(stayBack, desttmp, color, pp, priority);
+                genNeededPlan(desttmp, color, pp, priority);
         }
 	}
 
-	private void genNeededPlan(boolean stayBack, int [] desttmp, int color, TestPiece pp, int priority)
+	private void genNeededPlan(int [] desttmp, int color, TestPiece pp, int priority)
 	{
-        setPlan(stayBack, pp, desttmp, priority);
+        setPlan(pp, desttmp, priority);
         setNeededPiece(pp);
 	}
 
@@ -3359,10 +3374,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
         for (TestPiece pp : planPiece[color][rank-1])
             if (pp != null)
-                setPlan(false, pp, desttmp, priority);
+                setPlan(pp, desttmp, priority);
 	}
 
-	private void setPlan(boolean stayBack, TestPiece pp, int[] tmp, int priority)
+	private void setPlan(TestPiece pp, int[] tmp, int priority)
 	{
 		if (tmp == null)
 			return;
@@ -3386,7 +3401,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 		assert tmp[0] == DEST_VALUE_NIL : "call genDestTmp before setPlan";
 		for (int j = 12; j <= 120; j++) {
-            int t = (stayBack && tmp[j] == 2) ? 5 : tmp[j];
+            int t = tmp[j];
 			if (plan[1][j] > priority) {
 				if (plan[0][j] == DEST_VALUE_NIL) {
 					plan[0][j] = t;
@@ -3406,11 +3421,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         }
 	}
 
-	private void genPlan(int plan_name, boolean stayBack, int [] desttmp, int color, int rank, int priority, boolean needed)
+	private void genPlan(int plan_name, int [] desttmp, int color, int rank, int priority, boolean needed)
 	{
         TestPiece pp = planPiece[color][rank-1][plan_name];
         if (pp != null) {
-            setPlan(stayBack, pp, desttmp, priority);
+            setPlan(pp, desttmp, priority);
             if (needed)
                 setNeededPiece(pp);
         }
@@ -3425,7 +3440,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             if (pp != null
                 && !isStealthy(pp, oppRank)) {
                 int desttmp[] = genDestTmpGuardedRank(1-c, goal, Rank.toRank(r));
-                setPlan(false, pp, desttmp, DEST_PRIORITY_CHASE);
+                setPlan(pp, desttmp, DEST_PRIORITY_CHASE);
                 setNeededPiece(pp);
                 if (isNeededPiece(pp))
                     defenders++;
@@ -3824,6 +3839,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		int vto = plan[0][to];
 		int vfrom = plan[0][from];
 
+        // discourage pointless chasing
+        // a chase must be made on its own merit
+        if (vto <= 2)
+            return 0;
+
 		if (pto == pfrom) {
 
 		// Award the high value DEST_PRIORITY_DEFEND_FLAG
@@ -3844,15 +3864,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         }
 
 		// The difference in chase plan values for adjacent squares
-		// should always be 1, except if the plan was modified by
-		// stayBack, which makes the squares
-		// adjacent to the target (value 2) to be value 5.
-		//
-		// 4 3 4 5	4 3 4 5
-		// 3 2 3 4	3 5 3 4
-		// 2 T 2 3	5 T 5 3
-		// 3 2 3 4	3 5 3 2
-		// chase	stayBack
+		// should always be 1.
+		// 4 3 4 5
+		// 3 2 3 4
+		// 2 T 2 3
+		// 3 2 3 4
+        // where T is the target square.
 		//
 		// Yet if a blocking piece can be reached via two different
 		// paths, and the blocking piece moves allowing the chase
@@ -3862,7 +3879,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// and cause the AI to sacrifice material for the shortcut.
 		// So the value is limited to the maximum plan step value.
 
-			return Math.max(Math.min(vfrom - vto, 2), -2) * pto;
+			return Math.max(Math.min(vfrom - vto, 1), -1) * pto;
 
 		} // to-priority == from-priority
 
@@ -7505,7 +7522,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// -- R8 R2
 		// b? -- --
 		//
-		// Blue moves up and approaces Red Eight, becoming a suspected 7.
+		// Blue moves up and approaches Red Eight, becoming a suspected 7.
 		// Red has no choice but to attack suspected Blue Seven
         // or risk losing the game.
 		//
@@ -7534,32 +7551,11 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // effect.  It would perhaps be wiser to clear maybeEight
         // on pieces that do not appear to attack the bomb structure
         // if they are able.
-		//
-		// Note: Prior to version 10.1, this was qualified by
-		//
-		// && (flag[Settings.topColor].isKnown()
-		//	|| fprank == Rank.UNKNOWN)) {
-		//
-		// But if the attacker becomes a known unknown during
-		// the search, then the attacker lost by attacking
-		// a bomb.  For example,
-		// xxxxxxxx|
-		// -- RB RF|
-		// R9 -- RB|
-		// -- b? R7|
-		// The AI thinks that it is no danger because if
-		// unknown Blue moves up, R9xB? creates a known
-		// but suspected Five (i.e. known unknown) and
-		// although maybeEight was still true, the AI thought the
-		// attacker would lose if it attacked the bomb structure.
-		//
-		// So now the AI depends only on maybeEight.  This means
-		// that unmatured suspected ranks can successfully win
-		// an attack on an unknown AI bomb structure.
 
 		// AI IS DEFENDER (tp)
 
-		if (!fp.isKnown()
+		if ((fprank == Rank.UNKNOWN  // could be known unknown
+            || fp.isSuspectedRank())
 			&& tp.getColor() == Settings.topColor) {
 
             if (tprank == Rank.BOMB) {
@@ -7569,7 +7565,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                 return LOSES;	// most likely
             }
 
-            if (fprank == Rank.UNKNOWN) {
+            if (fprank == Rank.UNKNOWN) {   // could be known unknown
 
 		// Any piece will take a SPY or FLAG
 
@@ -8310,7 +8306,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	boolean isPossibleUnknownSpyXOne(Piece fp, Piece tp)
 	{
-		assert !tp.isKnown() : "Opponent piece must be unknown";
+		// Note: tp can be known unknown
 
 		if (fp.getRank() != Rank.ONE)
 			return false;
@@ -8590,7 +8586,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     int riskOfWin(int fpvalue, Piece fp, Piece tp, boolean maybeBomb)
     {
         assert fp.getColor() == Settings.topColor : "riskOfWin only for AI";
-        assert !tp.isKnown() : "riskOfWin: opponent piece must be unknown";
+        // NOTE: tp can be known unknown
+
         Rank fprank = fp.getRank();
         assert !(maybeBomb && fprank == Rank.EIGHT);
 
@@ -8687,8 +8684,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     // 1. directed forays
     // 2. if the opponent has a dangerous piece, minimize moved pieces
     //      because they are easy prey
-    // 3. try to get at the flag, even if it means making questionable
-    //      exchanges
+    // 3. try to get at the flag, once it becomes relatively clear where it is.
+    //      This means making questionable exchanges;
+    //      use Scouts to attack any unknown pieces in the flag area.
 
     public boolean makeAggressive(Piece fp, Piece tp)
     {
@@ -8704,7 +8702,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             || isForay(fp.getIndex()) // but may require aggression to get there
             || dangerousUnknownRank < fprank
             || dangerousKnownRank < fprank
-            || isNearOpponentFlag(tp);
+            || (isNearOpponentFlag(tp) && weakRanks(Settings.bottomColor) <= 6);
     }
 
     public boolean isFlagBombAtRisk(Piece p)
@@ -9054,7 +9052,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             for (int plan = 0; plan < 2; plan++) {
                 Piece p = planPiece[c][rank][plan];
                 if (p != null)
-                    s += "(" + Rank.toRank(rank + 1) + "," + plan + "," + p.getIndex() + "," + isNeededPiece(p) + "," + hasPlan(p) + "," + unmovedValue[p.getIndex()] + ")\n";
+                    s += "(" + Rank.toRank(rank + 1) + "," + plan + "," + p.getIndex() + ", needed:" + isNeededPiece(p) + ", plan:" + hasPlan(p) + "," + unmovedValue[p.getIndex()] + ")\n";
             }
             s += "\n";
 

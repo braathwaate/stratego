@@ -4217,10 +4217,20 @@ public class Board
 		return isInvincibleDefender(p.getColor(), rank.ordinal());
 	}
 
+    // Opponent flag area is defined as within three steps
+    // of the *suspected* flag.
+
+    // (Note: expanding the flag area (say 4 steps) is not advised
+    // because isNearOpponentFlag() qualifies makeAggressive()
+    // and causes questionable exchanges).  It also qualifies
+    // isEffectiveBluffWins(). If bluffing fails to be effective,
+    // the size of the flag area is not the solution, but
+    // an increase in the riskyAttacks count will stop the AI bluffing.
+
     public boolean isNearOpponentFlag(int to)
     {
         return flag[Settings.bottomColor] != null &&
-            Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 4;
+            Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 3;
     }
 
     public boolean isNearOpponentFlag(Piece p)
