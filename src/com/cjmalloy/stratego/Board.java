@@ -197,6 +197,7 @@ public class Board
 		tray.addAll(b.tray);
 		undoList.addAll(b.undoList);
 		setup = b.setup.clone();
+		flag = b.flag.clone();
 		blufferRisk = b.blufferRisk;
 		guessedRankCorrect = b.guessedRankCorrect;
 		guessedRankWrong = b.guessedRankWrong;
@@ -220,6 +221,8 @@ public class Board
 		{
 			if (p.getColor() == Settings.bottomColor)
 			 	p.setRank(Rank.UNKNOWN);
+            else if (p.getRank() == Rank.FLAG)
+                flag[Settings.topColor] = p;
 			setPiece(p, s);
 			tray.remove(p);
 			setup[Grid.getIndex(s.getX(), s.getY())] = p;
@@ -2084,7 +2087,7 @@ public class Board
     // it will escape.
     protected int weakRanks(int color)
     {
-            return nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3);
+            return Math.max(0, nUnknownWeakRankAtLarge[color] - (remainingUnmovedUnknownPieces[color] / 3));
     }
 
 	// The usual Stratego attack strategy is one rank lower.
@@ -2288,7 +2291,6 @@ public class Board
 		for (int c = RED; c <= BLUE; c++) {
             piecesInTray[c] = 0;
             piecesMovableOrKnown[c] = 0;
-			flag[c] = null;
             for (int j=0;j<12;j++) {
                 allRank[c][j] = Rank.getRanks(Rank.toRank(j+1));
                 knownRank[c][j] = 0;
@@ -2296,6 +2298,7 @@ public class Board
 			}
 
 		} // c
+        flag[Settings.bottomColor] = null;
 
 		// subtract the tray pieces from allRank[]
 		for (int i=0;i<getTraySize();i++) {
@@ -2324,8 +2327,6 @@ public class Board
 
 			if (p.isKnown())
 				knownRank[p.getColor()][p.getRank().ordinal()-1]++;
-			if (p.getRank() == Rank.FLAG)
-				flag[p.getColor()] = p;
 			else if (p.hasMoved() || p.isKnown())
 				piecesMovableOrKnown[p.getColor()]++;
 		}
@@ -4128,6 +4129,16 @@ public class Board
 
 		return false;
 	}
+
+    public Piece fromPiece(int m)
+    {
+        return getPiece(Move.unpackFrom(m));
+    }
+	
+    public Piece toPiece(int m)
+    {
+        return getPiece(Move.unpackTo(m));
+    }
 	
 	private boolean validScoutMove(int x, int y, int tox, int toy, Piece p)
 	{

@@ -908,10 +908,11 @@ public class AI implements Runnable
         // due to other consumptive tasks running at the same time.
         // The difference in ply can be quite dissimilar.
         // One move might get 8 ply and the next only 2 ply.
-        // Thus the analysis from the prior is often more accurate,
-        // subject to the lastMoveInfo() constraints.
-        // So the AI begins the search starting from
-        // the basis of the prior move.
+        // Thus the analysis from the prior is often more accurate, IF
+        // - the prior move was not an attack that revealed new info
+        // - the best move was not an attack which could have been a bluff
+        // - the best move is a valid move (a bluff might move a bomb/flag?)
+        // The AI begins the search starting from the basis of the prior move.
 
         int nstart=1;
 		long hashOrig = getHash();
@@ -923,7 +924,8 @@ public class AI implements Runnable
             && entry.hash == hashOrig
             && !lastMoveInfo()
             && entry.bestMove != -1
-            && b.validMove(entry.bestMove)) {
+            && b.validMove(entry.bestMove)
+            && (b.fromPiece(entry.bestMove).isKnown() || b.toPiece(entry.bestMove) == null)) {
                 nstart = Math.max(1, entry.depth - 2);
                 log("\n<<< Reusing prior move state starting at " + nstart);
                 bestMove = entry.bestMove;
