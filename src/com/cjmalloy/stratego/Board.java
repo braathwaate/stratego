@@ -574,6 +574,7 @@ public class Board
 
             if (!prot.isKnown()
 				&& targetPiece.isKnown()
+                && attackPiece.getRank() != Rank.ONE
                 && lowerRankCount[targetPiece.getColor()][targetRank.ordinal()-2] ==
                     lowerKnownOrSuspectedRankCount[targetPiece.getColor()][targetRank.ordinal()-2])
                 continue;
@@ -1070,9 +1071,14 @@ public class Board
 		//
 		// Version 11.0 clarifies this concept by restating it:
 		// A chase rank is always assigned to the chased piece
-		// unless the protector is stronger than the chaser.
+		// unless the protector is stronger than the chaser
+        // or unknown.
 
-		if (chaser.isKnown()) {
+        // If the chaser is a known weak piece, even it if has protection,
+        // assign a chase rank, because it means that the chaser is
+        // also weak.
+
+		if (chaser.isKnown() && chaserRank.ordinal() < 6) {
 
         // Version 12 does not assign a chase rank if the chaser
         // is invincible, because it is rare that the opponent
@@ -1095,21 +1101,22 @@ public class Board
                     || p.getColor() != chased.getColor())
                     continue;
 
-                Rank prank = p.getRank();   // known or suspected
+                Rank prank = p.getRank();
 
-            // If the only protector is truly unknown, then the AI
-            // will assign a chase rank to the chased piece.
-            // (Although the protector *could* be strong, the AI
-            // assumes that the chased piece is the strong piece.)
+        // If a protector is truly unknown, then the AI
+        // will not assign a chase rank to the chased piece.
+        // (Added in Version 13, because the strong piece
+        // could be either.  Chase ranks are really only useful
+        // against dumb bots anyway).
 
-			if (prank == Rank.UNKNOWN)
-				continue;
+			if ((prank == Rank.UNKNOWN
+                && !p.isChasing(Rank.UNKNOWN))
 
-            // Both chaser and defender have known or suspected ranks.
-            // If the defender would win the chaser,
-            // then the AI does not assign a chase rank to the chased piece.
+        // Both chaser and defender have known or suspected ranks.
+        // If the defender would win the chaser,
+        // then the AI does not assign a chase rank to the chased piece.
 
-			if (prank.winFight(chaserRank) == Rank.WINS)
+                || prank.winFight(chaserRank) == Rank.WINS)
 				return;
             }
         } // chaser is known
