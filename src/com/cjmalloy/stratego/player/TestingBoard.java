@@ -563,11 +563,11 @@ public class TestingBoard extends Board
         // Note: Miner stealth is greater, making the unknown
         // Miner more valuable than an unknown SIX.
 
-            values[c][Rank.EIGHT.ordinal()] = values[c][6] * 9 / 10;
-            int superiorRanks = lowerRankCount[1-c][5];
-            int lessorRanks = lowerRankCount[1-c][7] - superiorRanks;
+            values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SIX.ordinal()] * 9 / 10;
+            int superiorRanks = lowerRankCount[1-c][Rank.SIX.ordinal()-1];
+            int lessorRanks = lowerRankCount[1-c][Rank.SPY.ordinal()-1] - superiorRanks;
             if (superiorRanks <= 2 && lessorRanks >= 2)
-                values[c][Rank.EIGHT.ordinal()] = values[c][7] * 9 / 10;
+                values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SEVEN.ordinal()] * 9 / 10;
 
 		// Sum the values of the remaining piece ranks.
 		// This is used to determine whether the AI is winning.
@@ -1664,7 +1664,7 @@ public class TestingBoard extends Board
                         && p.getRank() != Rank.EIGHT
                         && movedExpendableCount < 3)
                     || (p.getRank() == Rank.EIGHT
-                        && movedMinerCount < 2)))
+                        && movedMinerCount == 0)))
                 unmovedValue[i] = 0;
             else {
 
@@ -9039,6 +9039,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             for (int rank = 0; rank < 10; rank++)
                 if (invincibleRank[c][rank] && rankAtLarge(c, rank+1) != 0)
                     s += Rank.toRank(rank+1) + ",";
+            s += "\n";
+            s += "Lower Rank Count: ";
+            for (int rank = 0; rank < 10; rank++)
+                s += lowerRankCount[c][rank] + ",";
             s += "\n";
                     
             s += "isBombedFlag: " + isBombedFlag[c] + "\n";
