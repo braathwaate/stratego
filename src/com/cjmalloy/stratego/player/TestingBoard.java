@@ -104,10 +104,7 @@ public class TestingBoard extends Board
 	// • The value of a Miner varies depending on the number
 	//	of possible opponent bombed structures remaining.
 	//	When there are less Miners than structures,
-	//	a known Miner is equal to a known Six
-	//	but an unknown Miner has more stealth than a Six,
-	//	making it considerably more valuable, but not as
-	//	valuable as a Five.
+	//	a known Miner is about equal to a known Six.
 	//	Otherwise the Miner is expendable and is worth less than
 	//	a Seven.
 	// • If the AI is winning, an AI piece is worth less than
@@ -553,17 +550,16 @@ public class TestingBoard extends Board
 		//
 		// Therefore, invincible pieces do not have a higher value.
 
-        // Starting value of Miners is 90% of a SIX,
+        // Starting value of Miners is slightly more than the value of a SIX
+        // (so that the Miner is not considered expendable)
         // given that the opponent still has an intact bomb structure.
+
         // However, in reduced piece endgames with limited superior pieces
         // but with remaining lessor pieces, the value of a Miner becomes 
         // 90% of a SEVEN, because winning such endgames is all
         // about superior rank.  TBD: This formula is just a guess.
 
-        // Note: Miner stealth is greater, making the unknown
-        // Miner more valuable than an unknown SIX.
-
-            values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SIX.ordinal()] * 9 / 10;
+            values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SIX.ordinal()] * 10 / 9;
             int superiorRanks = lowerRankCount[1-c][Rank.SIX.ordinal()-1];
             int lessorRanks = lowerRankCount[1-c][Rank.SPY.ordinal()-1] - superiorRanks;
             if (superiorRanks <= 2 && lessorRanks >= 2)
@@ -1323,6 +1319,10 @@ public class TestingBoard extends Board
 				if (p == null)
 					continue;
                 Rank rank = p.getRank();
+                if (rank == Rank.BOMB
+                    || rank == Rank.FLAG)
+                    continue;
+
 				if (rank.ordinal() < lowRank[p.getColor()])
 					lowRank[p.getColor()] = rank.ordinal();
 
@@ -2781,6 +2781,26 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		} // d
 	}
 
+    // Mark the piece as a bomb to be removed
+    // This is recursive because multiple bombs could surround the flag,
+    // and it is important that the outside is marked valuable or otherwise
+    // the AI will not defend/attack the piece
+
+    void protectFlagBomb(TestPiece flagBomb)
+    {
+        flagBomb.setFlagBomb(true);
+        flagBomb.targetValue = aiBombValue(flagBomb);
+
+		for (int d : dir) {
+			int j = flagBomb.getIndex() + d;
+			Piece p = getPiece(j);
+            if (p != null
+                && p.getRank() == Rank.BOMB
+                && ((TestPiece)p).targetValue != aiBombValue(p))
+                protectFlagBomb((TestPiece)p);
+        }
+    }
+
 	// depends on possibleFlag() which can set the ai flag
 	// isSuspectedRank to true
 	// if it detects an obvious bomb structure
@@ -2820,18 +2840,12 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			int j = flagi + d;
 				
 			if (!Grid.isValid(j)
-				|| Grid.getY(j) > 3)
+                || Grid.getY(j) > 3)
 				continue;
 			TestPiece p = (TestPiece)getPiece(j);
-			if (p == null) {
-				bombed = false;
-				continue;
-			}
-
-			if (p.getRank() == Rank.BOMB) {
-                p.setFlagBomb(true);
-				p.targetValue = aiBombValue(p);
-			} else
+			if (p != null && p.getRank() == Rank.BOMB)
+                protectFlagBomb(p);
+            else
 				bombed = false;
 		}
 
@@ -2981,8 +2995,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
                         if (!Grid.isValid(j))
                             continue;
                         TestPiece p = (TestPiece)getFlagBomb(getPiece(j));
-                        p.setFlagBomb(true);
-                        p.targetValue = aiBombValue(p);
+                        protectFlagBomb(p);
                     }
         // defendFlag() for AI flag is called in aiFlagSafety
 
