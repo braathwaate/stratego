@@ -2726,15 +2726,17 @@ public class Board
                         continue;
 
 		// Avoid pushing pieces and leaving unknown bombs behind
-		// because then the bombs become obvious.
+		// because then the bombs become obvious.  
         // The Flag and Spy also become vulnerable with the loss
-        // of other pieces compromise the defense.
+        // of pieces during the foray.  Unmoved pieces also
+        // get into the way.  It is best to chose the foray lane
+        // with the least number of obstructions.
 
                     if (!p.isKnown()
                         && (p.getRank() == Rank.BOMB
                             || p.getRank() == Rank.SPY
                             || p.getRank() == Rank.FLAG))
-                        power-= Grid.yside(color,y);
+                        power-= (Grid.yside(color,y) + 1);
 
         // Some intermediate pieces are needed
 

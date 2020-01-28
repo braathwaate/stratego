@@ -35,4 +35,9 @@ public class TestPiece extends Piece
 	{
 		return orig;
 	}
+
+    public int getTestMoves()
+    {
+        return getMoves() - orig.getMoves();
+    }
 }
