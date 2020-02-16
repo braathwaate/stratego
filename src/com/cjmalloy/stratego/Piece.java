@@ -244,11 +244,18 @@ public class Piece implements Comparable<Piece>
 		moves = m;
 	}
 
-	public Rank getActingRankChase()
+	public Rank getActingRankChaseLow()
 	{
 		if (actingRankChase == 0)
 			return Rank.NIL;
 		return Rank.toRank(Integer.numberOfTrailingZeros(actingRankChase));
+	}
+
+	public Rank getActingRankChaseHigh()
+	{
+		if (actingRankChase == 0)
+			return Rank.NIL;
+		return Rank.toRank(31 - Integer.numberOfLeadingZeros(actingRankChase));
 	}
 
 	public void setActingRankChase(Rank r)
@@ -301,23 +308,6 @@ public class Piece implements Comparable<Piece>
 		flags &= ~LESS;
 	}
 
-    public boolean isErraticChaser()
-    {
-        return
-            (actingRankChase &
-                (Rank.ONE.ordinal()
-                |(1>>Rank.TWO.ordinal())
-                |(1>>Rank.THREE.ordinal())
-                |(1>>Rank.FOUR.ordinal()))) != 0
-            && (actingRankChase &
-                ((1>>Rank.SIX.ordinal())
-                |(1>>Rank.SEVEN.ordinal())
-                |(1>>Rank.EIGHT.ordinal())
-                |(1>>Rank.NINE.ordinal())
-                |(1>>Rank.SPY.ordinal())
-                |(1>>Rank.UNKNOWN.ordinal()))) != 0;
-    }
-
 	public void clearActingRankFlee()
 	{
 		actingRankFlee = 0;
@@ -330,7 +320,7 @@ public class Piece implements Comparable<Piece>
                 actingRankChase <<= 1;
             flags &= ~LESS;
         }
-        return getActingRankChase();
+        return getActingRankChaseLow();
     }
 
 	public boolean isChasing(Rank rank)

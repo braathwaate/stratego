@@ -419,15 +419,44 @@ public class AI implements Runnable
 		}
 	}
 
-	public void getAllMoves(ArrayList<Integer> moveList, int i)
+	public boolean getAllMoves(ArrayList<Integer>[] moveList, Piece fp, Rank fprank, int i)
 	{
+        int list;
+        boolean pruned = false;
+
+        // flee and attack moves are active
+		if (b.grid.hasAttack(b.bturn, i))
+			list = ACTIVE;
+		else
+			list = INACTIVE;
+
 		for (int d : dir ) {
 			int t = i + d ;
 			Piece tp = b.getPiece(t);
-			if (tp == null
-				|| tp.getColor() == 1 - b.bturn)
-				addMove(moveList, i, t);
+			if (tp == null) {
+                if (b.grid.hasAttack(b.bturn, t))   // approach moves are active
+                    addMove(moveList[ACTIVE], i, t);
+                else
+                    addMove(moveList[list], i, t);
+            } else if (tp.getColor() == 1 - b.bturn) {
+
+            // FORWARD PRUNING
+            // If the rank is unknown and unmoved and has already fled
+            // from an unknown, it isn't very likely that it will attack an unknown.
+            // This is just like when the AI guesses that certain pieces
+            // are bombs and not movable.  But here the piece is still movable:
+            // it very well may attack a known rank!
+
+                if (!tp.isKnown()
+                    && !fp.hasMoved()
+                    && fprank == Rank.UNKNOWN
+                    && fp.isFleeing(Rank.UNKNOWN))
+                    pruned = true;
+                else
+                    addMove(moveList[ACTIVE], i, t);
+            }
 		} // d
+        return pruned;
 	}
 
 	// n > 0: prune off inactive moves
@@ -438,7 +467,7 @@ public class AI implements Runnable
 	{
 		Piece fp = b.getPiece(i);
 		Rank fprank = fp.getRank();
-                assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : "getMoves only for movable pieces, not " + fp.isKnown() + " " + fprank + " at " + i;
+        assert !(fprank == Rank.BOMB || fprank == Rank.FLAG) : "getMoves only for movable pieces, not " + fp.isKnown() + " " + fprank + " at " + i;
 
 		// FORWARD PRUNING:
         // Unmoved unknown AI pieces really aren't very
@@ -484,7 +513,7 @@ public class AI implements Runnable
         // Unknown Red on g8 flees from Blue Eight to g7, giving
         // Blue Eight clear access to the flag structure after
         // 8h8-g8.  But the unknown Red on f9 gets pruned off,
-        // so Red plays some other move allowing the opponent to play f9-f8,
+        // so Blue plays some other move allowing the opponent to play f9-f8,
         // blocking access to the flag structure.
 
         // Version 13 excludes pruning of pieces near the flag structure
@@ -496,12 +525,7 @@ public class AI implements Runnable
             && !b.isNearOpponentFlag(i))
 			return true;
 
-		if (b.grid.hasAttack(b.bturn, i))
-			getAllMoves(moveList[ACTIVE], i);
-		else
-			getAllMoves(moveList[INACTIVE], i);
-
-		return false;
+        return getAllMoves(moveList, fp, fprank, i);
 	}
 
 	boolean genSafe(int i, boolean unsafe, BitGrid unprunedGrid)
@@ -540,25 +564,25 @@ public class AI implements Runnable
 		}
 	}
 
-        void addLastMovedPiece(BitGrid unpruned, BitGrid pruned)
-        {
-            // Make certain that the last piece that moved will
-            // not be pruned off, which happens with the best
-            // pruned move because it is outside the pruning area.
-            // This is particularly important to protect the
-            // bomb structure from an incoming attacker.
+    void addLastMovedPiece(BitGrid unpruned, BitGrid pruned)
+    {
+        // Make certain that the last piece that moved will
+        // not be pruned off, which happens with the best
+        // pruned move because it is outside the pruning area.
+        // This is particularly important to protect the
+        // bomb structure from an incoming attacker.
 
-            Move m2 = b.getLastMove(2);
-            if (m2 != UndoMove.NullMove) {
-                Piece p = b.getPiece(m2.getTo());
-                if (p == m2.getPiece()
-                    && p.getRank() != Rank.BOMB
-                    && p.getRank() != Rank.FLAG) {
-                    unpruned.setBit(m2.getTo());
-                    pruned.clearBit(m2.getTo());
-                }
+        Move m2 = b.getLastMove(2);
+        if (m2 != UndoMove.NullMove) {
+            Piece p = b.getPiece(m2.getTo());
+            if (p == m2.getPiece()
+                && p.getRank() != Rank.BOMB
+                && p.getRank() != Rank.FLAG) {
+                unpruned.setBit(m2.getTo());
+                pruned.clearBit(m2.getTo());
             }
         }
+    }
 
 	private boolean getMovablePieces(int n, BitGrid unpruned, BitGrid pruned)
 	{
@@ -677,18 +701,12 @@ public class AI implements Runnable
 		if (b.unknownRankAtLarge(1-b.bturn, Rank.NINE) != 0
 			&& ns >= 2)
 			genSafe(unprunedGrid);
-/*
-		// Never prune off a move to the last square, because
-		// it may be an unoccupied "ghost" square. See TestingBoard.
-		Move m = b.getLastMove(1);
-		if (m != UndoMove.NullMove)
-			unprunedGrid.setBit(m.getTo());
-*/
 
 		// Scan the board for movable pieces inside the active area
-                b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, unpruned, pruned);
-                addLastMovedPiece(unpruned, pruned);
-                return (pruned.get(0) != 0 || pruned.get(1) != 0);
+
+        b.grid.getMovablePieces(b.bturn, ns, unprunedGrid, unpruned, pruned);
+        addLastMovedPiece(unpruned, pruned);
+        return (pruned.get(0) != 0 || pruned.get(1) != 0);
 	}
 
 	public void getBombFlagMoves(ArrayList<Integer> moveList, int i)
@@ -850,7 +868,7 @@ public class AI implements Runnable
 
 			else if (!fp.isKnown()
                 && !fp.isSuspectedRank()
-				&& fp.getActingRankChase() != Rank.UNKNOWN)
+				&& fp.getActingRankChaseLow() != Rank.UNKNOWN)
 				getAttackingScoutFarMoves(moveList, i);
 		}
 	}
@@ -1464,13 +1482,13 @@ public class AI implements Runnable
 		if (um1 == UndoMove.NullMove && um2 == UndoMove.NullMove)
 			return true;
 
-        // If the flag isn't known, then it is just a guess
+        // If the opponent flag isn't known, then it is just a guess
         // and the search should continue as if the piece was not the flag
 
 		if (um1 != null
 			&& um1.tp != null
 			&& um1.tp.getRank() == Rank.FLAG
-            && um1.tp.isKnown())
+            && (um1.tp.getColor() == Settings.topColor || um1.tp.isKnown()))
 			return true;
 
 		return false;
@@ -2479,10 +2497,10 @@ public class AI implements Runnable
 			return "ILLEGAL PIECE";
 		Rank rank = p.getRank();
 		if (p.getActingRankFleeLow() != Rank.NIL
-				|| p.getActingRankFleeHigh() != Rank.NIL
-				|| p.getActingRankChase() != Rank.NIL)
+				|| p.getActingRankChaseLow() != Rank.NIL)
 			return rank.value + "["
-				+ p.getActingRankChase().value
+				+ p.getActingRankChaseLow().value
+				+ "," + p.getActingRankChaseLow().value
 				+ "," + p.getActingRankFleeLow().value
 				+ "," + p.getActingRankFleeHigh().value + "]";
 
