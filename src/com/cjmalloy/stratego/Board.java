@@ -42,7 +42,7 @@ public class Board
 	// number of moves unknown piece must make before
 	// AI begins to believe suspected rank is actual rank
 
-	public static final int SUSPECTED_RANK_AGING_DELAY = 15;
+	public static final int SUSPECTED_RANK_AGING_DELAY = 3;
 	
 	public Grid grid = new Grid();
 	protected ArrayList<Piece> tray = new ArrayList<Piece>();
@@ -748,7 +748,24 @@ public class Board
 			Piece fleeTp = getPiece(i);
 			if (fleeTp == null
 				|| fleeTp == fp
-				|| fleeTp.isKnown())
+
+        // Until version 13.2, any unknown piece could be assigned a flee rank.
+        // Version 13.2 no longer assigns a flee rank to an unknown piece
+        // that has a suspected rank.  Frequently, the opponent may not attack
+        // for other reasons.  Consider this example from actual play:
+        // -- -- r8 -- -- r2 r8 -- -- r1
+        // -- -- xx xx r9 -- xx xx -- R4
+        // r9 -- xx xx R4 -- xx xx -- --
+        // -- R3 -- -- B3 b3 -- -- B2 --
+        // b4 -- -- -- bB -- bB b3 bB --
+        // AI Red has the move.  It plays R4-f6! This is a very good move.
+        // Red avoids the possibility of losing R4 to known Blue Three.
+        // Blue cannot play b3xr4 because r2-f5, B3/f6-f7, r2-f6, B3-g7, r2-f7.
+        // Red has forked both Blue Threes and will win one of them!
+        // Blue (another bot, MOF) realizes this and plays B3-d4.  Red is
+        // is now able to move its Four out of danger.
+
+                || fleeTp.getApparentRank() != Rank.UNKNOWN)
 				continue;
 
         // Setting flee rank to Five on all the unknown pieces
@@ -1697,12 +1714,11 @@ public class Board
 		// it is not possible to tell which piece is stronger.
 		// b? -- R2
 		// -- b? --
+		// so no chase rank is assigned to the protector (nor
+        // is any chase rank assigned to the approacher)
 		//
-		// The approaching unknown will acquire a chase rank of Two,
-		// and no chase rank is assigned to the protector.
-		//
-		// However, if the unknown chased piece neglects to attack,
-		// it can be certain that the unknown protector
+		// Only after a subsequent move, if the unknown chased piece
+        // neglects to attack, can it be certain that the unknown protector
 		// is the stronger piece.
 		//
 		// For example, known Red Five approaches unknown Blue
@@ -1710,11 +1726,12 @@ public class Board
 		// unknown pieces, suggesting that it is a high ranked
 		// piece).  The unknown blue protector moves to protect
 		// the unknown blue under attack.
-		// -- B? R5
-		// B? -- -- 
+		// -- b? R5
+		// b? -- -- 
 
 			if (um1.getPiece() == chased) {
-				if (!chased.isKnown())
+				if (!chased.isKnown()
+                    && !chased.isFleeing(chaserRank))
 					return;
 
 			} else {
@@ -2231,7 +2248,7 @@ public class Board
 
 	boolean maybeBluffing(Piece p)
 	{
-		if (p.getMoves() >= SUSPECTED_RANK_AGING_DELAY)
+		if (p.getMoves() >= SUSPECTED_RANK_AGING_DELAY*blufferRisk)
 			return false;
 
 		for (int i = 1; i <= 5; i+=2) {
@@ -2244,7 +2261,7 @@ public class Board
 				&& !Grid.isAdjacent(oppm.getFrom(), aim.getTo()))
 				return true;
 		}
-		p.setMoves(SUSPECTED_RANK_AGING_DELAY);
+		p.setMoves(SUSPECTED_RANK_AGING_DELAY*blufferRisk);
 		return false;
 	}
 
@@ -2635,7 +2652,10 @@ public class Board
                 suspectedBomb(tp1);
         }
 
-		for (int i = 78; i <= 120; i++) {
+        // scan the top three rows for isolated pieces
+        // (isolated pieces on the bottom row could be movable
+        // because these often are the last to be moved).
+		for (int i = 78; i <= 109; i++) {
 			if (!Grid.isValid(i))
 				continue;
 
@@ -2916,79 +2936,79 @@ public class Board
                         if (open)
                             open_count[c]++;
                         maybe[maybe_count[c]++]=b;
+                    }
+                } // possible flag
+            } // bombPattern
 
-		// Note: Adjacent bomb structures are considered to be
-		// only one structure, because it only takes one Miner
-		// to penetrate.  For example:
-		// -- BB BB --
-		// BB B7 BF BB
-		// appears as two substructures, although only one Miner
-		// is necessary.  (Yet, two Miners could be required
-		// if any of the outside bombs were actually pieces.)
+            if (maybe_count[c] >= 1) {
 
-		// Note: The four level bomb structure
-		// -- -- -- BB
-		// -- -- BB B7
-		// -- BB B7 BB
-		// BB B7 BB BF
-		// would never be attacked by the AI, even if it has
-		// its full complement of five Miners.  That is
-		// because there are a total of six substructures.
-		// Yet an experienced player knows that it really
-		// only requires two Miners to penetrate, if the
-		// structure is actually constructed as above.
+            // Pick the structure that looks most likely and
+            // mark it as containing the flag.
 
-		// But early in the game these large structures
-		// may turn out to be pieces rather than bombs.
-		// So the adjacent structure rule must also examine
-		// the number of remaining unmoved movable pieces.
+                int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
+                if (c == Settings.bottomColor) {
+                    flag[c] = getPiece(maybe[bestGuess][0]);
+                    flag[c].setSuspectedRank(Rank.FLAG);
+                    grid.clearMovable(flag[c]);
+                }
 
-		// For example, say that the three Sevens in the
-		// four level bomb structure were Blue's last three unmoved
-		// movable pieces.  So remainingUnmovedUnknownPieces
-		// is ten, six of which are bombs and one is the flag,
-		// leaving three unknown unmoved pieces.  This allows
-		// open_count to increment to three,
-		// so the four level bomb structure
-		// can be considered to be only three substructures,
-		// and the AI will attack it if it has three or more Miners.
+            // Mark surrounding pieces in possible flag
+            // structures as suspected bombs.
 
-					if (bp[0] == lastbp + 1
-						&& remainingUnmovedUnknownPieces[c] - rankAtLarge(c, Rank.BOMB) - 1 < 7 - open_count[c])
-						open_count[c]++;
-					lastbp = bp[0];
-				}
-			} // possible flag
-		} // bombPattern
+                markBombedFlag(maybe, maybe_count[c], bestGuess);
+                for (int i = 0; i < maybe_count[c]; i++) {
 
-		if (maybe_count[c] >= 1) {
+            // Note: Adjacent bomb structures are considered to be
+            // only one structure, because it only takes one Miner
+            // to penetrate.  For example:
+            // -- BB BB --
+            // BB B7 BF BB
+            // appears as two substructures, although only one Miner
+            // is necessary.  (Yet, two Miners could be required
+            // if any of the outside bombs were actually pieces.)
 
-		// Pick the structure that looks most likely and
-		// mark it as containing the flag.
+            // Note: The four level bomb structure
+            // -- -- -- BB
+            // -- -- BB B7
+            // -- BB B7 BB
+            // BB B7 BB BF
+            // would never be attacked by the AI, even if it has
+            // its full complement of five Miners.  That is
+            // because there are a total of six substructures.
+            // Yet an experienced player knows that it really
+            // only requires two Miners to penetrate, if the
+            // structure is actually constructed as above.
 
-			int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
-			if (c == Settings.bottomColor) {
-				flag[c] = getPiece(maybe[bestGuess][0]);
-				flag[c].setSuspectedRank(Rank.FLAG);
-				grid.clearMovable(flag[c]);
-			}
+            // If the proposed flag location has already been marked
+            // as a suspected bomb, do not mark the bomb locations because it is too close
+            // to the structure that the AI prefers as the flag structure.  As a result, this code
+            // will guess the classic double layer bomb structure if it is the only remaining
+            // structure.
 
-		// Mark surrounding pieces in possible flag
-		// structures as suspected bombs.
+                    int flagi = maybe[i][0];
+                    if (c == Settings.bottomColor
+                         && getPiece(flagi).getRank() == Rank.BOMB) {
+                        open_count[c]++;
 
-			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
-			for (int i = 0; i < maybe_count[c]; i++)
-                markBombedFlag(maybe, maybe_count[c], open_count[c], i);
+            // Double layer bomb structure needs only two miners
 
-                // Call markBombedFlag yet again on bestGuess
-                // to set isBombedFlag
-                // (it was called first because suspected bomb allocation
-                // is limited, and we want to give priority to the
-                // best guess flag structure.)
+                        Piece below = getPiece(flagi+11);
+                        if (below != null && below.getRank() == Rank.BOMB)
+                            open_count[c]++;
+                        continue;
+                    }
+                    markBombedFlag(maybe, maybe_count[c], i);
+                }
 
-			markBombedFlag(maybe, maybe_count[c], open_count[c], bestGuess);
+            // Call markBombedFlag yet again on bestGuess
+            // to set isBombedFlag
+            // (it was called first because suspected bomb allocation
+            // is limited, and we want to give priority to the
+            // best guess flag structure.)
 
-		} else if (c == Settings.bottomColor) {
+                markBombedFlag(maybe, maybe_count[c], bestGuess);
+
+            } else if (c == Settings.bottomColor) {
 
 		// Player color c did not surround his flags with
 		// adjacent bombs.  That does not mean the player did
@@ -3266,7 +3286,10 @@ public class Board
 		return bestGuess;
 	}
 
-    // Search for the most accessible possible bomb in a compound bomb structure
+    // Search for the most accessible known bomb in a bomb structure
+    // containing concealed pieces besides the flag
+    // (If a surrounding piece is unknown, the AI assumes
+    // a simple bomb structure beneath it)
 
     protected boolean isPieceLocked(Piece lp)
     {
@@ -3278,7 +3301,7 @@ public class Board
             if (p == null
                 || p.hasMoved()
                 || p.getColor() != lp.getColor()
-                || p.isKnown() && p.getRank() != Rank.BOMB)
+                || (!p.isKnown() || p.getRank() != Rank.BOMB))
                 return false;
         }
         return true;
@@ -3289,39 +3312,18 @@ public class Board
         int color = p.getColor();
         int index = p.getIndex();
         int dir = (color == Settings.topColor ? 11 : -11);
-        if (Grid.getY(index) < Grid.yside(color, 4) && isPieceLocked(p))
+        if (Grid.yside(color, Grid.getY(index)) <  4 && isPieceLocked(p))
             return getFlagBomb(getPiece(index + dir));
         return p;
     }
 
-	private void markBombedFlag(int[][] maybe, int maybe_count, int open_count, int maybe_flag)
+	private void markBombedFlag(int[][] maybe, int maybe_count, int maybe_flag)
 	{
 		int flagi = maybe[maybe_flag][0];
 		Piece flagp = getPiece(flagi);
 		int color = flagp.getColor();
 
         assert maybe_count >= 1 : "markBombedFlag invalid maybe_count " + maybe_count;
-
-        // If the proposed flag location has already been marked
-        // as a suspected bomb, do not mark the bomb locations because it is too close
-        // to the structure that the AI prefers as the flag structure.  As a result, this code
-        // will guess the classic double layer bomb structure if it is the only remaining
-        // structure.
-        // | bB
-        // | b? bB
-        // | bB b? bB
-        // | bF bB b? bB
-        // ---------------
-        if (color == Settings.bottomColor
-             && flagp.getRank() == Rank.BOMB)
-                return;
-
-		int eightsAtLarge = rankAtLarge(1-color, Rank.EIGHT);
-
-		// Eights begin to attack bomb structures as the
-		// number of possible structures diminish
-		boolean eightAttack = (maybe_count <= 3
-			|| maybe_count - open_count <= eightsAtLarge);
 
 		// It doesn't matter if the piece really is a bomb or not.
 		isBombedFlag[color] = true;
@@ -3336,7 +3338,6 @@ public class Board
 				isBombedFlag[color] = false;
 				continue;
 			}
-
 
 			if (color == Settings.bottomColor) {
 

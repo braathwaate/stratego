@@ -130,7 +130,6 @@ public class TestingBoard extends Board
 	private static final int VALUE_FIVE = VALUE_FOUR/2;
 	private static final int VALUE_SIX = VALUE_FIVE/2;
 	private static final int VALUE_SEVEN = VALUE_SIX * 60/100;
-	private static final int VALUE_EIGHT = VALUE_SIX * 50/100;
 
     // Opponent Nine value must be more than lowest AI stealth
     // (usually six or seven)
@@ -147,7 +146,7 @@ public class TestingBoard extends Board
 		VALUE_FIVE,	// 5 Captain
 		VALUE_SIX,	// 6 Lieutenant
 		VALUE_SEVEN,	// 7 Sergeant
-		VALUE_EIGHT,	// 8 Miner (valued by code)
+		0,  	// 8 Miner (valued by code)
 		VALUE_NINE,	// 9 Scout
 		VALUE_SPY,	// Spy
 		0,	// Bomb valued by code
@@ -491,67 +490,6 @@ public class TestingBoard extends Board
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
-		// If a player no longer has any pieces of rank N
-		// and rank N-1, the value of the opponent's rank N-1 becomes
-		// equal to Math.min(value(N), value(N-1)), because pieces of
-		// both rank N and N-1 have the same strength.
-		//
-		// The rank value is set to the lowest value of any of the ranks.
-		//
-		// Example 1. Blue has a 2, 5, 8, 9.  Red has a 2, 4, 9, 9.
-		// Red 3 value is the same as Red 4 value.
-		// Blue 5,6,7 value is the same as Blue 7 value.
-		//
-		// Example 2.  Blue has 5, 8, 9.  Red has 4 4 5 6.
-		// Red 5,6 value is the same as Red 7.
-		//
-		// Example 3.  Blue has 1, S, 6, 7.  Red has 1, S, 2, 5, 8.
-		// The value of Red One is 3/4 of Red One original value.
-		// Blue 6 value is the same as Blue 7.
-		//
-		// Example 4.  Blue has S, 6, 7.  Red has 1, 4, 8.
-		// Red 2,3,4 value is the same as Red 5.
-		// The value of Red One is 3/4 of the value of
-		// Red Five.  This makes
-		// Red Four the most valuable piece on the board.
-		//
-		// Example 5.  Blue has 1, 6, 7.  Red has 1, S, 2, 5, 8.
-		// Should Red One exchange with Blue One, even though
-		// Blue one is worth less because Red has the Spy?
-		// The exchange would create an invincible Win Rank, but
-		// this needs more thought.
-		//
-		// a One is worth less if the opponent
-		// has a Spy.  (This is a big reason why the Spy
-		// is highly valued). 
-		
-		// (Note that percentage is used rather than subtracting
-		// some absolute value.  That is because the value
-		// of unmatched invincible pieces are set to the
-		// value of the next higher rank.)
-
-		// Note: a One can be worth *less* than a
-		// Two (or even higher) rank if the opponent
-		// no longer has any lower ranks but still has
-		// a Spy.
-
-			for (int r = 7; r >=1; r--)
-				if (rankAtLarge(1-c, r) == 0) {
-                    if (rankAtLarge(c, r) != 0)
-                        values[c][r] = missingValue(1-c, r+1);
-                    else {
-
-        // If rank is missing from both sides,
-        // reduce superior rank values.
-        // For example, if the Fours are missing,
-        // the Ones, Twos and Threes on both sides
-        // become 2X valuable as Fives rather than 4X
-
-                        for (int i = 1; i <= r-1; i++)
-                            values[c][i] = values[c][i+1];
-                    }
-                }
-
 		// The value of a One is worth somewhat less if the opponent
 		// still has the Spy.  This encourages the One to trade
 		// with an opponent One if the player does not have the Spy,
@@ -600,11 +538,75 @@ public class TestingBoard extends Board
         // 90% of a SEVEN, because winning such endgames is all
         // about superior rank.  TBD: This formula is just a guess.
 
-            values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SIX.ordinal()] * 10 / 9;
+            values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SIX.ordinal()] * 5 / 4;
             int superiorRanks = lowerRankCount[1-c][Rank.SIX.ordinal()-1];
             int lessorRanks = lowerRankCount[1-c][Rank.SPY.ordinal()-1] - superiorRanks;
             if (superiorRanks <= 2 && lessorRanks >= 2)
                 values[c][Rank.EIGHT.ordinal()] = values[c][Rank.SEVEN.ordinal()] * 9 / 10;
+
+		// If a player no longer has any pieces of rank N
+		// and rank N-1, the value of the opponent's rank N-1 becomes
+		// equal to Math.min(value(N), value(N-1)), because pieces of
+		// both rank N and N-1 have the same strength.
+		//
+		// The rank value is set to the lowest value of any of the ranks.
+		//
+		// Example 1. Blue has a 2, 5, 8, 9.  Red has a 2, 4, 9, 9.
+		// Red 3 value is the same as Red 4 value.
+		// Blue 5,6,7 value is the same as Blue 7 value.
+		//
+		// Example 2.  Blue has 5, 8, 9.  Red has 4 4 5 6.
+		// Red 5,6 value is the same as Red 7.
+		//
+		// Example 3.  Blue has 1, S, 6, 7.  Red has 1, S, 2, 5, 8.
+		// The value of Red One is 3/4 of Red One original value.
+		// Blue 6 value is the same as Blue 7.
+		//
+		// Example 4.  Blue has S, 6, 7.  Red has 1, 4, 8.
+		// Red 2,3,4 value is the same as Red 5.
+		// The value of Red One is 3/4 of the value of
+		// Red Five.  This makes
+		// Red Four the most valuable piece on the board.
+		//
+		// Example 5.  Blue has 1, 6, 7.  Red has 1, S, 2, 5, 8.
+		// Should Red One exchange with Blue One, even though
+		// Blue one is worth less because Red has the Spy?
+		// The exchange would create an invincible Win Rank, but
+		// this needs more thought.
+		//
+		// a One is worth less if the opponent
+		// has a Spy.  (This is a big reason why the Spy
+		// is highly valued). 
+		
+		// (Note that percentage is used rather than subtracting
+		// some absolute value.  That is because the value
+		// of unmatched invincible pieces are set to the
+		// value of the next higher rank.)
+
+		// Note: a One can be worth *less* than a
+		// Two (or even higher) rank if the opponent
+		// no longer has any lower ranks but still has
+		// a Spy.
+
+        // Note: this depends on the values for Eight and Nine
+        // that are set just above this code
+
+			for (int r = 7; r >=1; r--)
+				if (rankAtLarge(1-c, r) == 0) {
+                    if (rankAtLarge(c, r) != 0)
+                        values[c][r] = missingValue(1-c, r+1);
+                    else {
+
+        // If rank is missing from both sides,
+        // reduce superior rank values.
+        // For example, if the Fours are missing,
+        // the Ones, Twos and Threes on both sides
+        // become 2X valuable as Fives rather than 4X
+
+                        for (int i = 1; i <= r-1; i++)
+                            values[c][i] = values[c][i+1];
+                    }
+                }
 
 		// Sum the values of the remaining piece ranks.
 		// This is used to determine whether the AI is winning.
@@ -846,7 +848,7 @@ public class TestingBoard extends Board
 	private void genValueStealth()
 	{
 		for (int c = RED; c <= BLUE; c++) {
-		for (int r = Rank.ONE.ordinal(); r < Rank.NINE.ordinal(); r++) {
+		for (int r = Rank.ONE.ordinal(); r < Rank.EIGHT.ordinal(); r++) {
 		int v = 0;
 
 			int unknownDefenders = 0;
@@ -937,8 +939,8 @@ public class TestingBoard extends Board
 		// This is basically an even exchange.
 		// (A Six should always attack a Seven protected by an
 		// unknown piece).
-            if (r >= 5) {
-                final int stealthRatio[] = {0, 0, 0, 0, 0, 20, 20, 20, 8};
+            if (r >= 4) {
+                final int stealthRatio[] = {0, 0, 0, 0, 30, 20, 20, 20};
                 v = v * 10 / stealthRatio[r];
             } else if (c == Settings.bottomColor) {
 
@@ -994,7 +996,8 @@ public class TestingBoard extends Board
 
 		} // rank
 
-        // Scout stealth is a percentage of its value
+        // Miner and Scout stealth is a percentage of its value
+		valueStealth[c][Rank.EIGHT.ordinal()-1] = values[c][Rank.EIGHT.ordinal()]/3;
 		valueStealth[c][Rank.NINE.ordinal()-1] = values[c][Rank.NINE.ordinal()]/3;
 
 		// A Flag has value, not stealth, because once it is
@@ -2814,7 +2817,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 				if (pAttacker == null)
 					continue; // no open path
 
-		// Thwart the approach of the closest unknown or eight piece.
+		// Thwart the approach of the closest unknown or Miner.
 		// (Note: DEFEND_FLAG must be high enough so that if
 		// the defender is an unmoved piece part of a possible
 		// bomb structure, it will still be the best pruned move).
@@ -3798,12 +3801,6 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	// as values[] decreases in end game situations,
 	// (and stealthValue[] does not change)
 	// that Nines (with high stealth) remain expendable.
-    //
-    // Note: invincible pieces can be expendable.  In endgames it is
-    // likely that many pieces will be invincible when the opponents
-    // are all known.  isExpendable() is used to qualify attack plans
-    // using expendable pieces.  If an invincible piece is not expendable,
-    // the AI fails to attack in a far superior situation.
 
 	public boolean isExpendable(int c, int r)
 	{
@@ -3815,11 +3812,20 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         int r = p.getRank().ordinal();
         int c = p.getColor();
 
+    // Note: Excess invincible pieces can become expendable.  In endgames it is
+    // likely that many pieces will be invincible when the opponents
+    // are all known.  isExpendable() is used to qualify attack plans
+    // using expendable pieces.  If an invincible piece is not expendable,
+    // the AI fails to attack in a far superior situation.
+
+		if (isInvincible(p)
+            && lowerRankCount[c][r-1] >= 2)
+            return false;
+
         if (!p.isKnown())
             return isExpendable(c, r);
 
-		return (!isInvincible(p)
-            && values[c][r] <= values[c][6]);
+        return values[c][r] <= values[c][6];
 	}
 
 	// Note that an excess known Eight is expendable.   Call isStrongExpendable()
@@ -5200,32 +5206,47 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 						vm += tpvalue / 2 - fpvalue;
 					} else {
                         int sv = stealthValue(fp);
-/*
-THIS IS A BUG: NEED TO DETERMINE IF LAST MOVE ACTUALLY WAS A PROTECTOR MOVE;
-EVEN THEN, PERHAPS THE PIECE WAS UNMOVED, AND IT LOST IS UNMOVED VALUE!
-THIS NEEDS TO BE SOLVED IN A DIFFERENT WAY!  Cannot make the protector known,
-because the stealth could have be lost by a piece moving between the protector
-and the the attacker.  Perhaps the lost of stealth could be delayed, like
-with ghostPiece?  But the capture/recapture could be several moves away!
 
         // If this is a recapture, half of the stealth of the AI piece
-        // could have been lost by means of the AI attacker protecting
+        // *could* have been lost by means of the AI attacker protecting
         // the captured AI piece in various ways (see setProtector())
+        // In this case, the AI assumes that the opponent has already guessed
+        // that the protector is of lower rank, so only half the stealth 
+        // is lost.  (Added in 12.3).
 
-        // So if the prior AI move was not an attack, gain back anything that
-        // was lost by that move, which could have been loss of stealth.
+        // Note that an alternate solution tried but discarded in 13.2
+        // was to restore the prior move value
+        // after a recapture is not correct for several reasons. (1) the
+        // prior move value could contain other significant values like
+        // unmovedValue (2) the recapture could come several moves later
+
+        // One reason why the alternate solution was investigated was
+        // because if there were actually multiple protectors or if
+        // the lost piece was trapped, no stealth was lost, as in this example:
+        // b5 b4 b6 |
+        // b1 b7 -- |
+        // xx R4 -- |
+        // After R4xb7, Blue plays b1xR4, because it assumes that it already
+        // has lost half its stealth.  But it didn't, and b1xR4 simply
+        // exposes Blue One without cause.
+
+        // To mitigate that problem in 13.2, the stealth is only halved if
+        // the value of the opponent piece exceeds the actual stealth
+        // of the AI piece.
+
+        // Note that it would be difficult to mark the protector in some
+        // way because the protector may not have been the piece that moved
+        // to protect (see setProtector()).  Thus more state would have
+        // to be updated and saved with each move.
 
                         UndoMove m2 = getLastMove(2);
-                        UndoMove m3 = getLastMove(3);
+        // prior opp move was an attack and now AI recaptures
                         if (m2 != null
                             && m2 != UndoMove.NullMove
                             && m2.getTo() == to
                             && m2.tp != null
-                            && m3 != UndoMove.NullMove
-                            && m3.tp == null)
-                            vm += (m3.value - m2.value);
-
-*/
+                            && sv < tpvalue)
+                            sv /= 2;
 
                         vm -= sv;
 
@@ -5393,7 +5414,7 @@ with ghostPiece?  But the capture/recapture could be several moves away!
 						vm += tpvalue * risk / 100;
 
 		  				vm = vm / distanceFactor(tp, fp, scoutFarMove);
-						vm = makePositive(vm, values[Settings.topColor][unknownRank[Settings.topColor]]/2);
+						vm = makePositive(vm, values[Settings.topColor][unknownRank[Settings.topColor]]);
 
         // The AI chases opponent pieces towards (but not adjacent to) unmoved
         // AI pieces. This is a bluff if those pieces really are not bombs.  If the opponent
@@ -5402,7 +5423,7 @@ with ghostPiece?  But the capture/recapture could be several moves away!
         // position described above with the One chasing the Two.
 
                         if (wasChased)  // implies fp.getTestMoves() != 0
-                            vm -= values[Settings.topColor][unknownRank[Settings.topColor]]/2;
+                            vm -= values[Settings.topColor][unknownRank[Settings.topColor]];
 
 						if (risk < 25) {
 
@@ -8722,14 +8743,18 @@ with ghostPiece?  But the capture/recapture could be several moves away!
     // pieces.
 
         if (((fp.isKnown()
-            || (tp.getRank() == Rank.UNKNOWN && !tp.isChasing(Rank.UNKNOWN)))
-                && isExpendable(Settings.topColor, fprank.ordinal())
-                && fprank != Rank.NINE)    // save Scouts for attacks on suspected pieces
+            || (tp.getRank() == Rank.UNKNOWN
+                && isExpendable(Settings.topColor, fprank.ordinal())))
+                && !isWeakAggressive(tp)
+// save Scouts for attacks on suspected pieces
+// or on pieces that refuse to attack
+                && (fprank != Rank.NINE
+                    || tp.isFleeing(Rank.UNKNOWN))
 
             || (tp.getRank() == Rank.UNKNOWN
                 && fprank == Rank.FOUR
-                && makeAggressive(fp, tp)))
-                v += Math.min(fpvalue, values[Settings.topColor][Rank.FIVE.ordinal()]);
+                && makeAggressive(fp, tp))))
+                v += Math.min(fpvalue, values[Settings.topColor][Rank.SIX.ordinal()]);
 
     // If the AI has guessed that the target piece IS a bomb,
     // or if its piece is an Eight, Nine or Spy, then
