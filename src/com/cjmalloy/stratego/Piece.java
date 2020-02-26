@@ -383,11 +383,6 @@ public class Piece implements Comparable<Piece>
 			flags &= ~MAYBE_EIGHT;
 	}
 
-	public boolean isMaybeEight()
-	{
-		return (flags & MAYBE_EIGHT) != 0;
-	}
-
 	public void setFlagBomb(boolean b)
 	{
 		if (b)

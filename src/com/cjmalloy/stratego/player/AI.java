@@ -1407,7 +1407,7 @@ public class AI implements Runnable
 		// Also, if the attacker has multiple enemies, perhaps
 		// it is trapped, and is forced into a losing move.
 		//
-		// Version 10.1 also qualified this logic by isFlagBombAtRisk
+		// Version 10.1 also qualified this logic by isFlagBombAtRiskFromAttacker()
 		// because of this example:
 		// xxxxxxxxx
 		// -- RB RF|
@@ -2175,7 +2175,7 @@ public class AI implements Runnable
 			UndoMove m = b.getLastMove(1);
 			if (m.tp != null
 				&& (m.tpcopy.isKnown() || m.tpcopy.hasMoved())
-				&& (!b.isFlagBombAtRisk(m.tpcopy)
+				&& (!b.isFlagBombAtRiskFromAttacker(m.tpcopy)
 					|| m.getPiece().getRank() == Rank.NINE)) {
 				Piece tp = b.getPiece(Move.unpackTo(tryMove));
 				if (tp == m.tp) {	// lost the attack
@@ -2378,7 +2378,7 @@ public class AI implements Runnable
 		// even if there is a hot chase going on elsewhere on the board,
 		// broad search must still be used.
 
-				if (b.isFlagBombAtRisk(tp)) {
+				if (b.isFlagBombAtRiskFromAttacker(tp)) {
 					deepSearch = 0;
 					return;
 				}
@@ -2528,7 +2528,7 @@ public class AI implements Runnable
 			s += 'L';
 		else
 			s += '.';
-		if (p.isMaybeEight())
+		if (p.is(Piece.MAYBE_EIGHT))
 			s += '8';
 		else
 			s += '.';
