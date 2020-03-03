@@ -2500,7 +2500,7 @@ public class AI implements Runnable
 				|| p.getActingRankChaseLow() != Rank.NIL)
 			return rank.value + "["
 				+ p.getActingRankChaseLow().value
-				+ "," + p.getActingRankChaseLow().value
+				+ "," + p.getActingRankChaseHigh().value
 				+ "," + p.getActingRankFleeLow().value
 				+ "," + p.getActingRankFleeHigh().value + "]";
 

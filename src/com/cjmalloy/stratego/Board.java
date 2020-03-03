@@ -283,8 +283,10 @@ public class Board
 				else
 					setPiece(tp, m.getFrom());
 			}
-			genChaseRank(fp.getColor());
-			genFleeRank(fp, tp);	// depends on suspected rank
+            if (tp.getRank() != Rank.FLAG) {
+                genChaseRank(fp.getColor());
+                genFleeRank(fp, tp);	// depends on suspected rank
+            }
             lock.unlock();
 			return true;
 		}
@@ -2661,6 +2663,24 @@ public class Board
 
 	}
 
+    protected boolean isIsolated(Piece a)
+    {
+        int i = a.getIndex();
+        int found = 0;
+        for ( int d : dir ) {
+            int j = i + d;
+            if (!Grid.isValid(j))
+                continue;
+            Piece p = getPiece(j);
+
+            if (p != null
+                && !(p.hasMoved()
+                    || p.isKnown()))
+                found++;
+        }
+        return found == 0;
+    }
+
 	// Scan the board for isolated unmoved pieces (possible bombs).
 	// If the piece is Unknown and unmoved
 	// (and if the AI does not already suspect
@@ -2731,22 +2751,9 @@ public class Board
                 && tp.getActingRankFleeLow().ordinal() >= 4)
                 continue;
 
-            int found = 0;
-            for ( int d : dir ) {
-                int j = i + d;
-                if (!Grid.isValid(j))
-                    continue;
-                Piece p = getPiece(j);
-
-                if (p != null
-                    && !(p.hasMoved()
-                        || p.isKnown()))
-                    found++;
-            }
-
         // transform the piece into a suspected bomb.
 
-            if (found == 0)
+            if (isIsolated(tp))
                 suspectedBomb(tp);
 		}
 	}
@@ -4390,6 +4397,8 @@ public class Board
             // Regenerate suspected rank because if blufferRisk = 5
             // no suspected suspected rank was assigned to piece
             Rank suspRank = getSuspectedRank(p);
+            if (suspRank == null)
+                return;
 
             if (suspRank == Rank.SPY)
                     guess(p.getActualRank() == Rank.SPY);
