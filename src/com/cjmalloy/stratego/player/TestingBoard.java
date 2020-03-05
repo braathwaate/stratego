@@ -465,7 +465,7 @@ public class TestingBoard extends Board
 
 		setUnmovedValues();
 
-		assert flag[Settings.topColor] != null : "AI flag unknown";
+		assert flag[Settings.topColor] != 0 : "AI flag unknown";
 	}
 
     // These high priorities cause piece loss but no more than the lowest piece value (NINE).
@@ -1918,7 +1918,7 @@ public class TestingBoard extends Board
         // TBD: Need to do the same analysis for an attack on an opponent flag
         // as is done for defending the flag to determine the priority.
 
-            int priority = (flag[bombColor].isKnown() ? DEST_PRIORITY_CHASE_ATTACK : DEST_PRIORITY_ATTACK_FLAG);
+            int priority = (getPiece(flag[bombColor]).isKnown() ? DEST_PRIORITY_CHASE_ATTACK : DEST_PRIORITY_ATTACK_FLAG);
             genNeeded(destTmp2, 1-bombColor, 8, priority);
             genPlan(PLANB, destTmp2, 1-bombColor, 8, priority, false);
         }
@@ -2535,7 +2535,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		int color = flagp.getColor();
 
 		if (color == Settings.topColor
-			&& flagi != flag[color].getIndex())
+			&& flagi != flag[color])
 			return;
 
 		// Even when the flag is not completely bombed,
@@ -2985,8 +2985,8 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 
 	private void aiFlagSafety()
 	{
-		Piece pflag = flag[Settings.topColor];
-		int flagi = pflag.getIndex();
+		int flagi = flag[Settings.topColor];
+		Piece pflag = getPiece(flagi);
 		int color = pflag.getColor();
 
 		assert pflag.getRank() == Rank.FLAG : "aiFlag is " + pflag.getRank() + " at " + flagi +"?";
@@ -3045,7 +3045,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// flag is indeed known but if the distance is less than
 		// the maximum search ply, it prevents the horizon effect.
 
-			defendFlag(flag[Settings.topColor], true);
+			defendFlag(pflag, true);
 		}
 
 		// Always protect any remaining bombs in the
@@ -3064,10 +3064,10 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 	{
 		for (int c = RED; c <= BLUE; c++) {
 
-            Piece pflag = flag[c];
-            if (pflag == null)
+            int flagi = flag[c];
+            if (flagi == 0)
                 continue;
-            int flagi = pflag.getIndex();
+            Piece pflag = getPiece(flagi);
 
             int opponentEightsAtLarge = rankAtLarge(1-c, Rank.EIGHT);
             int intactStructures = maybe_count[c] - open_count[c];
@@ -3156,7 +3156,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
             if (c == Settings.bottomColor) {
                 if (sendMiner && isBombedFlag[c])
                     for (int d : dir) {
-                        int j = flag[c].getIndex() + d;
+                        int j = flag[c] + d;
                         if (!Grid.isValid(j))
                             continue;
                         TestPiece p = (TestPiece)getFlagBomb(getPiece(j));
@@ -4326,7 +4326,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
         // direction helps prevent pieces from wandering
         // aimlessly around the board.
 
-			assert flag[1-fpcolor] != null;
+			assert flag[1-fpcolor] != 0;
             if (fp.getTestMoves() == 0) {
                 int fy = Grid.yside(fpcolor, Grid.getY(from));
                 int ty = Grid.yside(fpcolor, Grid.getY(to));
@@ -7359,13 +7359,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 		// pieces from attacking an unknown unmoved piece.
 
         // This risk often increases with rank (i.e. a Five is more
-        // likely than a One to lotto), but fleeing based on rank has its own
-        // dangers.  So if an unmoved One is approached by a Five
-        // and flees, the opponent now knows that the piece is
-        // worth attacking to reveal its rank.
-        // However, if the approaching piece is expendable,
-        // the AI assumes that the piece will attack and fleeing is
-        // the better of two evils.
+        // likely than a One to lotto).
 
 		if (isPossibleBomb(tp)
 			&& fprank != Rank.EIGHT
@@ -7385,7 +7379,7 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
 			    if (!fp.isKnown())
                     risk += blufferRisk * 2;
                 if (fprank == Rank.FIVE)
-                    risk += 15;
+                    risk += 25;
                 return risk; // 10% chance of attack
             }
 
@@ -8950,7 +8944,9 @@ assert p.getRank() != Rank.UNKNOWN : "Unknown cannot be known or suspected " + p
     public boolean isFlagBombAtRiskFromAttacker(Piece p)
     {
         return p.is(Piece.MAYBE_EIGHT)
-            && flag[1-p.getColor()].isKnown();
+            && flag[1-p.getColor()] != 0
+            && getPiece(flag[1-p.getColor()]) != null
+            && getPiece(flag[1-p.getColor()]).isKnown();
     }
 
     // If the opponent has an unsuspected Spy, it is dangerous for

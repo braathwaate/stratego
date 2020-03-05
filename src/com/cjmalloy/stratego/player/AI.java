@@ -715,10 +715,10 @@ public class AI implements Runnable
 		Rank fprank = fp.getRank();
 
 		assert (fprank == Rank.BOMB || fprank == Rank.FLAG);
-                assert (b.grid.hasAttack(b.bturn, i));
+        assert (b.grid.hasAttack(b.bturn, i));
 
-                if (fp.isKnown())
-                    return;
+        if (fp.isKnown() || fp.is(Piece.FLAG_BOMB))
+            return;
 
 		// We need to generate moves for suspected
 		// bombs because the bomb might actually be
@@ -736,31 +736,31 @@ public class AI implements Runnable
 		// In addition, return false, to prevent the option
 		// of a null move.
 		//
-                // Note that AI bombs are treated identically,
-                // thus limiting their scope of travel to immediate
-                // attack.
+        // Note that AI bombs are treated identically,
+        // thus limiting their scope of travel to immediate
+        // attack.
 
-                for (int d : dir ) {
-                        int t = i + d ;
-                        Piece tp = b.getPiece(t);
+        for (int d : dir ) {
+                int t = i + d ;
+                Piece tp = b.getPiece(t);
 
-                        if (tp != null
-                                && tp.getColor() == 1 - b.bturn
-                                && b.isEffectiveBombBluff(fp, tp)) {
-                                addMove(moveList, i, t);
-                        }
-                } // d
-        }
+                if (tp != null
+                        && tp.getColor() == 1 - b.bturn
+                        && b.isEffectiveBombBluff(fp, tp)) {
+                        addMove(moveList, i, t);
+                }
+        } // d
+    }
 
 	private void getBombFlagMoves(ArrayList<Integer> moveList)
-	{
-                if (b.grid.pieceCount(b.bturn) - (b.rankAtLarge(b.bturn, Rank.BOMB) + 1) == b.grid.movablePieceCount(b.bturn))
-                    return;
+    {
+        if (b.grid.pieceCount(b.bturn) - (b.rankAtLarge(b.bturn, Rank.BOMB) + 1) == b.grid.movablePieceCount(b.bturn))
+            return;
 
 		BitGrid bg = new BitGrid();
 
 		// Find the neighboring bombs and flags
-                // of opponent pieces (1 - b.turn)
+        // of opponent pieces (1 - b.turn)
 		// (In other words, find the player's bombs and flags
 		// that are under direct attack).
 

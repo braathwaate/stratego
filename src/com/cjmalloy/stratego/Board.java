@@ -67,7 +67,7 @@ public class Board
 	protected int[] piecesInTray = new int[2];
 	protected int[] remainingUnmovedUnknownPieces = new int[2];
 	protected int[] nUnknownWeakRankAtLarge = new int[2];
-	protected Piece[] flag = new Piece[2];  // flags
+	protected int[] flag = new int[2];  // flags
 	protected static final int expendableRank[] = { 6, 7, 9 };
 	protected static final int BLUFFER_RANK_MIN = 2;
 	protected static final int BLUFFER_RANK_MAX = 5;
@@ -222,7 +222,7 @@ public class Board
 			if (p.getColor() == Settings.bottomColor)
 			 	p.setRank(Rank.UNKNOWN);
             else if (p.getRank() == Rank.FLAG)
-                flag[Settings.topColor] = p;
+                flag[Settings.topColor] = Grid.getIndex(s.getX(), s.getY());
 			setPiece(p, s);
 			tray.remove(p);
 			setup[Grid.getIndex(s.getX(), s.getY())] = p;
@@ -283,10 +283,8 @@ public class Board
 				else
 					setPiece(tp, m.getFrom());
 			}
-            if (tp.getRank() != Rank.FLAG) {
-                genChaseRank(fp.getColor());
-                genFleeRank(fp, tp);	// depends on suspected rank
-            }
+            genChaseRank(fp.getColor());
+            genFleeRank(fp, tp);	// depends on suspected rank
             lock.unlock();
 			return true;
 		}
@@ -409,16 +407,7 @@ public class Board
 		for (int i=0;i<10;i++)
 		for (int j=0;j<10;j++)
 			if (grid.getPiece(i, j) != null)
-
 				grid.getPiece(i,j).setShown(false);
-
-		hideTray();
-	}
-	
-	public void hideTray()
-	{
-		for (Piece p: tray)
-			p.setShown(false);
 	}
 	
 	public void clearPiece(int i)
@@ -2426,7 +2415,7 @@ public class Board
 			}
 
 		} // c
-        flag[Settings.bottomColor] = null;
+        flag[Settings.bottomColor] = 0;
 
 		// subtract the tray pieces from allRank[]
 		for (int i=0;i<getTraySize();i++) {
@@ -2566,8 +2555,8 @@ public class Board
 					continue;
 
 		// The remaining unmoved pieces must be bombs (or the flag)
-                // Make the piece a bomb for now and immobile.
-                // possibleFlag() will morph one of them into a flag.
+        // Make the piece a bomb for now and immobile.
+        // possibleFlag() will morph one of them into a flag.
 
 				Rank rank = p.getRank();
 
@@ -2579,7 +2568,7 @@ public class Board
 				} else {
 					p.setRank(Rank.FLAG);
                     p.makeKnown();
-					flag[c] = p;
+					flag[c] = p.getIndex();
                     grid.clearMovable(p);
 				}
 
@@ -2959,7 +2948,7 @@ public class Board
 	// If the flag is already known (perhaps it is the last piece
 	// on the board), skip this code.
 
-            Piece flagp = flag[c];
+            Piece flagp = getPiece(flag[c]);
             if (flagp != null
                 && flagp.isKnown()
                 && !flagp.isSuspectedRank())
@@ -3011,9 +3000,9 @@ public class Board
 
                 int bestGuess = getBestGuess(c, maybe, maybe_count[c]);
                 if (c == Settings.bottomColor) {
-                    flag[c] = getPiece(maybe[bestGuess][0]);
-                    flag[c].setSuspectedRank(Rank.FLAG);
-                    grid.clearMovable(flag[c]);
+                    flag[c] = maybe[bestGuess][0];
+                    getPiece(flag[c]).setSuspectedRank(Rank.FLAG);
+                    grid.clearMovable(getPiece(flag[c]));
                 }
 
             // Mark surrounding pieces in possible flag
@@ -3217,7 +3206,7 @@ public class Board
         // assert flagp != null : "Well, where IS the flag?";
 
 			if (flagp != null) {
-				flag[c] = flagp;
+				flag[c] = flagp.getIndex();
 				flagp.setSuspectedRank(Rank.FLAG);
 				grid.clearMovable(flagp);
                 for (int d : dir) {
@@ -3247,7 +3236,7 @@ public class Board
         // ensure isBombedFlag is set correctly for AI
 
             if (color == Settings.topColor
-                && maybe[i][0] == flag[Settings.topColor].getIndex())
+                && maybe[i][0] == flag[Settings.topColor])
                 return i;
 
             int prob = 1;
@@ -3414,7 +3403,7 @@ public class Board
 
 		// If there is only 1 pattern left, the AI goes out
 		// on a limb and decides that the pieces in the
-		// bomb pattern are known bombs.  This means
+		// bomb pattern are flag bombs.  This means
 		// they offer no protective value to pieces that
 		// bluff against lower ranked pieces. 
 
@@ -3422,7 +3411,7 @@ public class Board
 
 					if (intactStructures <= 1) {
 						if (suspectedBomb(b))
-                            b.setKnown(true);
+                            b.set(Piece.FLAG_BOMB);
 
 		// If the piece already has a suspected rank, keep it,
 		// otherwise make it a suspected bomb
@@ -3456,7 +3445,7 @@ public class Board
 		// of the last potential bomb structure, clear isBombedFlag.
 
         if (color == Settings.topColor
-            && flagi != flag[color].getIndex())
+            && flagi != flag[color])
             isBombedFlag[color] = false;
 	}
 	// ********* end of suspected ranks
@@ -3513,6 +3502,7 @@ public class Board
 
 	public void remove(Piece p)
 	{
+        p.setShown(true);
 		tray.add(p);
 		Collections.sort(tray,new Comparator<Piece>(){
 				     public int compare(Piece p1,Piece p2){
@@ -4342,8 +4332,8 @@ public class Board
 
     public boolean isNearOpponentFlag(int to)
     {
-        return flag[Settings.bottomColor] != null &&
-            Grid.steps(to, flag[Settings.bottomColor].getIndex()) <= 3;
+        return flag[Settings.bottomColor] != 0 &&
+            Grid.steps(to, flag[Settings.bottomColor]) <= 3;
     }
 
     public boolean isNearOpponentFlag(Piece p)
@@ -4397,8 +4387,6 @@ public class Board
             // Regenerate suspected rank because if blufferRisk = 5
             // no suspected suspected rank was assigned to piece
             Rank suspRank = getSuspectedRank(p);
-            if (suspRank == null)
-                return;
 
             if (suspRank == Rank.SPY)
                     guess(p.getActualRank() == Rank.SPY);
@@ -4416,7 +4404,7 @@ public class Board
 
         // On the other hand, a Three is bluffing as a One by chasing a Two.
 
-            else if (suspRank.ordinal() <= 4)
+            else if (suspRank != null && suspRank.ordinal() <= 4)
                 guess(p.getActualRank().ordinal() <= suspRank.ordinal() + 1
                     || p.getActualRank() == Rank.SPY
                         && p.getActingRankChaseLow() == Rank.NIL);
